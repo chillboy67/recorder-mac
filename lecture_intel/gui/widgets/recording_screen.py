@@ -130,10 +130,10 @@ class RecordingScreen(QWidget):
         self._pending_mix = (source == "both")
 
         # Pausing needs every active capture path to support it. The mic
-        # (QMediaRecorder) always does; system audio only if the native helper
-        # exposes pause/resume.
-        can_pause = source == "mic" or all(
-            hasattr(self._sys_rec, m) for m in ("pause", "resume"))
+        # (QMediaRecorder) always does; system audio only if the compiled
+        # native helper handles the pause signals (old builds would die on
+        # SIGUSR1 instead).
+        can_pause = source == "mic" or self._sys_rec.can_pause()
         self._pause_btn.setVisible(can_pause)
 
         if device is not None:

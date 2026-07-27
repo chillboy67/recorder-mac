@@ -96,11 +96,21 @@ class MainWindow(QMainWindow):
         docs_act.triggered.connect(self._open_readme)
         help_menu.addAction(docs_act)
 
+    _APPEARANCE_LABELS = {"auto": "◐ 外观 · 跟随系统",
+                          "dark": "● 外观 · 深色",
+                          "light": "○ 外观 · 浅色"}
+
     def _set_appearance(self, mode: str) -> None:
         self._prefs.setValue("appearance", mode)
         theme.apply(QApplication.instance(), mode)
+        self._update_theme_btn()
         self._rail.set_stage(self._stage_for(self._stack.currentIndex()))
         self.update()
+
+    def _update_theme_btn(self) -> None:
+        cur = self._prefs.value("appearance", "auto")
+        self._btn_theme.setText(
+            self._APPEARANCE_LABELS.get(cur, self._APPEARANCE_LABELS["auto"]))
 
     # ── central UI ──────────────────────────────────────────
 
@@ -123,16 +133,18 @@ class MainWindow(QMainWindow):
         btn_folder.setObjectName("quiet")
         btn_folder.setCursor(Qt.PointingHandCursor)
         btn_folder.clicked.connect(self._reveal_output)
-        btn_theme = QPushButton("外观")
-        btn_theme.setObjectName("quiet")
-        btn_theme.setCursor(Qt.PointingHandCursor)
-        btn_theme.clicked.connect(self._cycle_appearance)
+        self._btn_theme = QPushButton()
+        self._btn_theme.setObjectName("quiet")
+        self._btn_theme.setCursor(Qt.PointingHandCursor)
+        self._btn_theme.setToolTip("点击切换：跟随系统 → 深色 → 浅色")
+        self._btn_theme.clicked.connect(self._cycle_appearance)
+        self._update_theme_btn()
         sl.addWidget(wordmark)
         sl.addStretch()
         sl.addWidget(self._state_lbl)
         sl.addStretch()
         sl.addWidget(btn_folder)
-        sl.addWidget(btn_theme)
+        sl.addWidget(self._btn_theme)
         outer.addWidget(strip)
 
         # rail + stage
@@ -253,7 +265,7 @@ class MainWindow(QMainWindow):
 
     def _cycle_appearance(self) -> None:
         cur = self._prefs.value("appearance", "auto")
-        nxt = {"auto": "dark", "dark": "light", "light": "auto"}[cur]
+        nxt = {"auto": "dark", "dark": "light", "light": "auto"}.get(cur, "auto")
         for act in self._appearance_group.actions():
             act.setChecked(
                 act.text() == {"auto": "跟随系统", "dark": "深色",

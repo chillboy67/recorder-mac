@@ -54,9 +54,25 @@ class SystemAudioRecorder:
         self._paused = False
         return self.output_path
 
+    @staticmethod
+    def can_pause() -> bool:
+        """True if the compiled helper handles SIGUSR1/SIGUSR2.
+
+        Older builds don't install handlers, and the default disposition of
+        SIGUSR1 would kill the helper mid-recording — so probe the binary for
+        the "PAUSED" log marker that only pause-capable builds contain.
+        """
+        b = binary_path()
+        if b is None:
+            return False
+        try:
+            return b"PAUSED" in b.read_bytes()
+        except Exception:
+            return False
+
     def pause(self) -> None:
         """Pause capture — the helper drops samples until resume()."""
-        if self.is_running and not self._paused:
+        if self.is_running and not self._paused and self.can_pause():
             self._proc.send_signal(signal.SIGUSR1)
             self._paused = True
 
