@@ -1,0 +1,54 @@
+# Lecture Intelligence System — Complete Dependencies
+# macOS 26.4 · Apple Silicon · faster-whisper · Phi-4 / Llama 3.1 / Gemma 3
+# All free & open-source, completely offline after initial model download
+
+# ── Audio Processing ──────────────────────────────────────────
+pydub>=0.25.1
+soundfile>=0.12.1
+librosa>=0.10.1
+numpy>=1.24.0
+
+# ── P1-A: Audio Enhancement ──────────────────────────────────
+deepfilternet>=0.5.6
+torch>=2.1.0
+torchaudio>=2.1.0
+
+# ── VAD ──────────────────────────────────────────────────────
+# silero-vad loaded via torch.hub (no separate package needed)
+# torch already installed above
+
+# ── ASR (faster-whisper — mlx-whisper pending macOS 26.4 compat) ──
+faster-whisper>=1.0.0
+ctranslate2>=3.24.0
+
+# ── P1-B: Course Classification ──────────────────────────────
+FlagEmbedding>=1.2.0       # BGE-M3
+sentence-transformers>=2.6.0
+
+# ── P1-C: Terminology Correction ─────────────────────────────
+rapidfuzz>=3.5.0           # fuzzy string matching (10x faster than fuzzywuzzy)
+regex>=2023.10.3
+
+# ── P2-A: Speaker Diarization (optional, needs HuggingFace token) ──
+pyannote.audio>=3.1.0
+
+# ── LLM Correction (via Ollama local runtime) ────────────────
+ollama>=0.2.0              # Ollama Python client
+httpx>=0.28.1
+
+# ── Export ───────────────────────────────────────────────────
+python-docx>=1.1.0
+markdown>=3.5.1
+
+# ── Evaluation ───────────────────────────────────────────────
+jiwer>=3.0.3               # WER / CER calculation
+
+# ── Utilities ────────────────────────────────────────────────
+pyyaml>=6.0.1
+rich>=13.7.0               # terminal progress bars
+click>=8.1.7               # CLI
+tqdm>=4.66.1
+python-magic>=0.4.27       # file type detection
+
+# ── GUI (desktop app) ─────────────────────────────────────────
+pyside6>=6.7.0
