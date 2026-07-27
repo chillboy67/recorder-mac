@@ -5,7 +5,9 @@
 //
 // Usage:  SystemAudioRecorder <output.wav>
 //         records until it receives SIGINT/SIGTERM, then finalizes the file.
-// Prints "RECORDING" / "STOPPED" / "ERROR ..." to stderr for the parent process.
+//         SIGUSR1 pauses (samples are dropped), SIGUSR2 resumes.
+// Prints "RECORDING" / "PAUSED" / "RESUMED" / "STOPPED" / "ERROR ..." to stderr
+// for the parent process.
 import Foundation
 import ScreenCaptureKit
 import AVFoundation
@@ -22,6 +24,7 @@ final class SysAudioRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
     private var channels = 2
     private var totalFrames = 0
     private var logged = false
+    private var paused = false
 
     init(outputPath: String) { self.outURL = URL(fileURLWithPath: outputPath) }
 
@@ -56,9 +59,17 @@ final class SysAudioRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
         log("STOPPED")
     }
 
+    func setPaused(_ p: Bool) {
+        // Flip the flag on the sample-handler queue so the callback never
+        // observes a torn write.
+        q.async { self.paused = p }
+        log(p ? "PAUSED" : "RESUMED")
+    }
+
     func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer,
                 of type: SCStreamOutputType) {
         guard type == .audio, CMSampleBufferDataIsReady(sampleBuffer) else { return }
+        if paused { return }
         guard let pcm = Self.pcmBuffer(from: sampleBuffer),
               let ch = pcm.floatChannelData else { return }
         let frames = Int(pcm.frameLength)
@@ -145,8 +156,11 @@ guard #available(macOS 13.0, *) else { log("ERROR requires macOS 13+"); exit(3) 
 let recorder = SysAudioRecorder(outputPath: args[1])
 
 // Stop cleanly on SIGINT/SIGTERM (the parent app sends these to stop recording).
+// SIGUSR1/SIGUSR2 pause/resume the capture (parent app's pause button).
 signal(SIGINT, SIG_IGN)
 signal(SIGTERM, SIG_IGN)
+signal(SIGUSR1, SIG_IGN)
+signal(SIGUSR2, SIG_IGN)
 let stopHandler: () -> Void = {
     Task { await recorder.stop(); exit(0) }
 }
@@ -154,6 +168,10 @@ let s1 = DispatchSource.makeSignalSource(signal: SIGINT, queue: .main)
 let s2 = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
 s1.setEventHandler(handler: stopHandler); s1.resume()
 s2.setEventHandler(handler: stopHandler); s2.resume()
+let p1 = DispatchSource.makeSignalSource(signal: SIGUSR1, queue: .main)
+let p2 = DispatchSource.makeSignalSource(signal: SIGUSR2, queue: .main)
+p1.setEventHandler { recorder.setPaused(true) }; p1.resume()
+p2.setEventHandler { recorder.setPaused(false) }; p2.resume()
 
 Task {
     do { try await recorder.start() }

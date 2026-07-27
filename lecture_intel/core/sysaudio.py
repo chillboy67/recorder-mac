@@ -38,6 +38,7 @@ class SystemAudioRecorder:
         self._proc: Optional[subprocess.Popen] = None
         self.output_path: Optional[str] = None
         self._err_path: Optional[str] = None
+        self._paused = False
 
     def start(self) -> str:
         b = binary_path()
@@ -50,7 +51,19 @@ class SystemAudioRecorder:
         self._err_path = errf.name
         self._proc = subprocess.Popen([str(b), self.output_path],
                                       stderr=errf, stdout=subprocess.DEVNULL)
+        self._paused = False
         return self.output_path
+
+    def pause(self) -> None:
+        """Pause capture — the helper drops samples until resume()."""
+        if self.is_running and not self._paused:
+            self._proc.send_signal(signal.SIGUSR1)
+            self._paused = True
+
+    def resume(self) -> None:
+        if self.is_running and self._paused:
+            self._proc.send_signal(signal.SIGUSR2)
+            self._paused = False
 
     def stop(self) -> Optional[str]:
         """Stop capture; returns the wav path if it has audio, else None."""
