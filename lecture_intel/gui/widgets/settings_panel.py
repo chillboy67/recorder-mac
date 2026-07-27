@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 )
 
 from core.modes import GENERAL, CLASSROOM, IELTS
+from gui.widgets.common import NoScrollComboBox
 
 MODES = [GENERAL, CLASSROOM, IELTS]
 
@@ -75,7 +76,7 @@ class SettingsPanel(QWidget):
         # -- Model size ------------------------------------------
         model_box = QGroupBox("识别模型")
         model_layout = QVBoxLayout(model_box)
-        self._model_combo = QComboBox()
+        self._model_combo = NoScrollComboBox()
         for value, label in MODELS:
             self._model_combo.addItem(label, userData=value)
         self._model_combo.currentIndexChanged.connect(self._save_prefs)

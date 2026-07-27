@@ -32,6 +32,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from gui.widgets.common import NoScrollComboBox
+
 SUPPORTED_EXTENSIONS: set[str] = {
     ".m4a", ".mp3", ".wav", ".flac", ".aac", ".ogg", ".opus", ".webm",
 }
@@ -97,7 +99,7 @@ class RecordTab(QWidget):
         src_row = QHBoxLayout()
         src_label = QLabel("录音来源：")
         src_label.setFixedWidth(72)
-        self._source_combo = QComboBox()
+        self._source_combo = NoScrollComboBox()
         self._source_combo.addItem("麦克风（外界声音）", userData="mic")
         self._source_combo.addItem("电脑声音（内部播放）", userData="system")
         self._source_combo.addItem("麦克风 + 电脑声音", userData="both")
@@ -116,7 +118,7 @@ class RecordTab(QWidget):
         mic_row.setContentsMargins(0, 0, 0, 0)
         mic_label = QLabel("麦克风：")
         mic_label.setFixedWidth(72)
-        self._mic_combo = QComboBox()
+        self._mic_combo = NoScrollComboBox()
         self._mic_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         # Don't let a long device name force the whole panel wide — cap the
         # width it asks for; it still expands to fill the available space.
