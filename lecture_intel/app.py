@@ -56,7 +56,11 @@ def main() -> None:
     app.setApplicationName("Recorder")
     app.setOrganizationName("LucasLab")
     app.setApplicationVersion("2.0.0")
-    app.setStyle("macos")
+
+    from PySide6.QtCore import QSettings
+    from gui.theme import apply as apply_theme
+    mode = QSettings("LucasLab", "Recorder").value("appearance", "auto")
+    apply_theme(app, mode if mode in ("auto", "light", "dark") else "auto")
 
     missing = _check_dependencies()
     if missing:

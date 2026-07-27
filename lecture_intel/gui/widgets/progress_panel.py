@@ -19,17 +19,12 @@ from PySide6.QtWidgets import (
 )
 
 STEP_LABELS: dict[str, str] = {
-    "load":      "Load Audio",
-    "enhance":   "Enhance Audio",
-    "diarize":   "Speaker Diarization",
-    "vad":       "Voice Detection",
-    "asr":       "Transcription",
-    "merge":     "Merge Segments",
-    "classify":  "Course Classification",
-    "correct":   "Terminology Correction",
-    "llm":       "LLM Correction",
-    "structure": "Structuring",
-    "export":    "Export",
+    "load":     "加载音频",
+    "denoise":  "降噪处理",
+    "asr":      "语音转写",
+    "diarize":  "区分说话人",
+    "analyze":  "分析 / AI 增强",
+    "export":   "导出结果",
 }
 
 STATUS_ICONS: dict[str, str] = {

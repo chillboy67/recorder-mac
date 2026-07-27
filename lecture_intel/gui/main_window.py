@@ -7,8 +7,10 @@ import subprocess
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QSettings
-from PySide6.QtGui import QAction, QKeySequence
+from PySide6.QtGui import QAction, QActionGroup, QKeySequence
 from PySide6.QtWidgets import (
+    QApplication,
+    QGroupBox,
     QMainWindow,
     QMenu,
     QMenuBar,
@@ -21,6 +23,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from gui import theme
+
 from gui.widgets.input_panel import InputPanel
 from gui.widgets.progress_panel import ProgressPanel
 from gui.widgets.results_panel import ResultsPanel
@@ -30,7 +34,7 @@ from gui.workers.pipeline_worker import PipelineWorker
 # The steps the engine emits, per mode.
 _STEPS_BY_MODE: dict[str, list[str]] = {
     "general":   ["load", "asr", "export"],
-    "classroom": ["load", "denoise", "asr", "diarize", "export"],
+    "classroom": ["load", "denoise", "asr", "diarize", "analyze", "export"],
     "ielts":     ["load", "asr", "diarize", "analyze", "export"],
 }
 
@@ -45,10 +49,29 @@ class MainWindow(QMainWindow):
 
         self.setWindowTitle("Recorder · 录音转文字")
         self.setMinimumSize(920, 680)
+        self._sized = False
         self._restore_geometry()
         self._build_menu()
         self._build_ui()
         self._build_status_bar()
+        self._apply_shadows()
+
+    def _apply_shadows(self) -> None:
+        """Soft drop shadows give the cards depth (QSS can't do shadows)."""
+        for gb in self.findChildren(QGroupBox):
+            theme.add_card_shadow(gb)
+        theme.add_glow(self._process_btn)
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        if not self._sized:
+            self._sized = True
+            # Pin the left pane's minimum to its real content width so the divider
+            # can never shrink the viewport below it — that's what caused the
+            # horizontal wiggle. Measured once widgets are realized.
+            inner = self._splitter.widget(0).widget()
+            need = max(inner.minimumSizeHint().width(), inner.sizeHint().width())
+            self._splitter.widget(0).setMinimumWidth(need + 8)
 
     # ── Menu bar ──────────────────────────────────────────────
 
@@ -78,6 +101,17 @@ class MainWindow(QMainWindow):
         reset_act.triggered.connect(self._reset)
         view_menu.addAction(reset_act)
 
+        view_menu.addSeparator()
+        appearance = view_menu.addMenu("外观")
+        self._appearance_group = QActionGroup(self)
+        cur = self._prefs.value("appearance", "auto")
+        for key, label in (("auto", "跟随系统"), ("light", "浅色"), ("dark", "深色")):
+            act = QAction(label, self, checkable=True)
+            act.setChecked(cur == key)
+            act.triggered.connect(lambda _=False, k=key: self._set_appearance(k))
+            self._appearance_group.addAction(act)
+            appearance.addAction(act)
+
         # Help
         help_menu = menu_bar.addMenu("帮助")
 
@@ -85,40 +119,33 @@ class MainWindow(QMainWindow):
         docs_act.triggered.connect(self._open_readme)
         help_menu.addAction(docs_act)
 
+    def _set_appearance(self, mode: str) -> None:
+        self._prefs.setValue("appearance", mode)
+        theme.apply(QApplication.instance(), mode)
+        self._apply_shadows()   # shadow colors depend on the scheme
+
     # ── Central UI ────────────────────────────────────────────
 
     def _build_ui(self) -> None:
         central = QWidget()
         self.setCentralWidget(central)
-        root = QVBoxLayout(central)  # Use VBox for mobile-friendly layout
-        root.setContentsMargins(16, 16, 16, 16)
+        root = QVBoxLayout(central)
+        root.setContentsMargins(18, 16, 18, 14)
         root.setSpacing(0)
 
-        # --- Top bar: process button ---
+        # --- Top bar: process button (styled by the global theme) ---
         self._process_btn = QPushButton("开始转写")
-        self._process_btn.setFixedHeight(40)
+        self._process_btn.setObjectName("primary")
+        self._process_btn.setMinimumHeight(46)
+        self._process_btn.setCursor(Qt.PointingHandCursor)
         self._process_btn.setEnabled(False)
-        self._process_btn.setStyleSheet("""
-            QPushButton {
-                background: #007AFF; color: white;
-                border-radius: 8px; font-size: 14px; font-weight: 500;
-            }
-            QPushButton:hover   { background: #0066DD; }
-            QPushButton:pressed { background: #0055BB; }
-            QPushButton:disabled { background: #C7C7CC; }
-        """)
         self._process_btn.clicked.connect(self._start_processing)
 
         self._cancel_btn = QPushButton("取消")
-        self._cancel_btn.setFixedHeight(32)
+        self._cancel_btn.setObjectName("danger")
+        self._cancel_btn.setMinimumHeight(40)
+        self._cancel_btn.setCursor(Qt.PointingHandCursor)
         self._cancel_btn.setVisible(False)
-        self._cancel_btn.setStyleSheet("""
-            QPushButton {
-                background: #FF3B30; color: white;
-                border-radius: 6px; font-size: 13px;
-            }
-            QPushButton:hover { background: #E02020; }
-        """)
         self._cancel_btn.clicked.connect(self._cancel_processing)
 
         # Horizontal splitter: left (input+settings) | right (progress+results)
@@ -209,7 +236,10 @@ class MainWindow(QMainWindow):
         output_dir = str(Path.home() / "Recorder" / Path(input_path).stem)
         Path(output_dir).mkdir(parents=True, exist_ok=True)
 
-        active_steps = _STEPS_BY_MODE.get(settings["mode"], _STEPS_BY_MODE["general"])
+        active_steps = list(_STEPS_BY_MODE.get(settings["mode"], _STEPS_BY_MODE["general"]))
+        # general mode only runs the analyze step when the LLM is enabled
+        if settings.get("use_llm") and "analyze" not in active_steps:
+            active_steps.insert(active_steps.index("export"), "analyze")
 
         self._progress.reset(active_steps)
         self._results.reset()

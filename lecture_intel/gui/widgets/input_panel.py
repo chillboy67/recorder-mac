@@ -437,17 +437,16 @@ class FileTab(QWidget):
 
         # Independent Browse button (avoids mousePressEvent pitfalls)
         self._browse_btn = QPushButton("选择文件…")
-        self._browse_btn.setFixedHeight(36)
+        self._browse_btn.setFixedHeight(40)
+        self._browse_btn.setCursor(Qt.PointingHandCursor)
         self._browse_btn.setStyleSheet("""
             QPushButton {
-                background: transparent;
-                color: #007AFF;
-                border: 1.5px solid #007AFF;
-                border-radius: 8px;
-                font-size: 13px;
+                background: #EAF3FF; color: #0A84FF;
+                border: 1px solid #CFE4FF; border-radius: 10px;
+                font-size: 13px; font-weight: 600;
             }
-            QPushButton:hover   { background: rgba(0,122,255,0.08); }
-            QPushButton:pressed { background: rgba(0,122,255,0.15); }
+            QPushButton:hover   { background: #DCEBFF; }
+            QPushButton:pressed { background: #CFE4FF; }
         """)
         self._browse_btn.clicked.connect(self._browse)
         layout.addWidget(self._browse_btn)
@@ -456,7 +455,7 @@ class FileTab(QWidget):
         self._file_label = QLabel("")
         self._file_label.setAlignment(Qt.AlignCenter)
         self._file_label.setWordWrap(True)
-        self._file_label.setStyleSheet("color: #007AFF; font-size: 12px;")
+        self._file_label.setStyleSheet("color: #0A84FF; font-size: 12px; font-weight: 600;")
         self._file_label.setVisible(False)
         layout.addWidget(self._file_label)
 
@@ -484,10 +483,10 @@ class FileTab(QWidget):
                     event.acceptProposedAction()
                     self._drop_area.setStyleSheet("""
                         QLabel {
-                            border: 2px dashed #007AFF;
-                            border-radius: 12px;
-                            background: rgba(0,122,255,0.05);
-                            color: #007AFF; font-size: 13px;
+                            border: 2px dashed #0A84FF;
+                            border-radius: 14px;
+                            background: #EAF3FF;
+                            color: #0A84FF; font-size: 13px;
                         }
                     """)
                     return
@@ -506,14 +505,15 @@ class FileTab(QWidget):
 
     def _reset_drop_style(self) -> None:
         selected = self._selected_path is not None
-        color = "#34C759" if selected else "#C7C7CC"
-        bg = "rgba(52,199,89,0.04)" if selected else "rgba(0,0,0,0.02)"
+        color = "#34C759" if selected else "#D2D3D9"
+        bg = "#F0FBF3" if selected else "#FAFBFC"
+        text = "#34C759" if selected else "#9A9AA2"
         self._drop_area.setStyleSheet(f"""
             QLabel {{
                 border: 2px dashed {color};
-                border-radius: 12px;
+                border-radius: 14px;
                 background: {bg};
-                color: #8E8E93; font-size: 13px;
+                color: {text}; font-size: 13px;
             }}
         """)
 
@@ -570,8 +570,8 @@ class InputPanel(QWidget):
         self._record_tab = RecordTab()
         self._file_tab = FileTab()
 
-        self._tabs.addTab(self._record_tab, "🎙 Record")
-        self._tabs.addTab(self._file_tab, "📁 File")
+        self._tabs.addTab(self._record_tab, "🎙 录音")
+        self._tabs.addTab(self._file_tab, "📁 文件")
 
         self._record_tab.recording_ready.connect(self.file_ready)
         self._file_tab.file_selected.connect(self.file_ready)
@@ -601,18 +601,18 @@ def _format_time(s: int) -> str:
 
 _STYLE_IDLE = """
     QPushButton {
-        background: #007AFF; color: white;
-        border-radius: 10px; font-size: 15px; font-weight: 500;
+        background: #0A84FF; color: white; border: none;
+        border-radius: 12px; font-size: 15px; font-weight: 600;
     }
-    QPushButton:hover   { background: #0066DD; }
-    QPushButton:pressed { background: #0055BB; }
+    QPushButton:hover   { background: #0066D6; }
+    QPushButton:pressed { background: #0059BE; }
 """
 
 _STYLE_RECORDING = """
     QPushButton {
-        background: #FF3B30; color: white;
-        border-radius: 10px; font-size: 15px; font-weight: 500;
+        background: #FF3B30; color: white; border: none;
+        border-radius: 12px; font-size: 15px; font-weight: 600;
     }
-    QPushButton:hover   { background: #E02020; }
-    QPushButton:pressed { background: #CC1111; }
+    QPushButton:hover   { background: #E0271D; }
+    QPushButton:pressed { background: #C71F16; }
 """
