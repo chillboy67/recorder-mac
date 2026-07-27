@@ -79,7 +79,7 @@ class ResultsPanel(QWidget):
         self._files = {}
         for f in files:
             name = Path(f).name
-            if name.endswith((".ielts.md", ".summary.md", ".tidy.md")):
+            if name.endswith((".ielts.md", ".summary.md", ".corrected.md")):
                 continue
             ext = Path(f).suffix.lower().lstrip(".")
             self._files[ext] = f
@@ -111,7 +111,7 @@ class ResultsPanel(QWidget):
             self._add_text_tab(title, classroom["markdown"], mono=False)
         tidy = stats.get("tidy_markdown")
         if tidy:
-            self._add_text_tab("📋 整理版（AI）", tidy, mono=False)
+            self._add_text_tab("📋 AI校对版", tidy, mono=False)
 
         # One tab per format
         for ext in ("md", "txt", "srt", "json"):

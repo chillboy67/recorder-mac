@@ -122,6 +122,40 @@ def correct_lecture(text: str, model: str = DEFAULT_MODEL, host: str = DEFAULT_H
     return "\n".join(out)
 
 
+def correct_transcript(text: str, context: str = "", model: str = DEFAULT_MODEL,
+                       host: str = DEFAULT_HOST,
+                       progress: Optional[Callable[[float, str], None]] = None) -> Optional[str]:
+    """Use the LLM to recover what was *actually* said: fix homophone/recognition
+    errors using context. Returns the corrected full transcript (verbatim meaning,
+    nothing added/removed/summarized). Per-chunk fallback keeps the original text
+    if a chunk's output looks wrong (too short), so it never collapses to junk."""
+    sys = (
+        "你是中文语音转写校对员。下面是语音识别的结果，可能有同音字、识别错误、"
+        "缺标点。请根据上下文判断说话人真正说的内容，改正明显的识别错误并补全标点。"
+        "严格要求：只改错别字/同音字/标点，不要增加或删减信息、不要改写语气、"
+        "不要总结、不要解释、不要输出任何额外说明。只输出改正后的文本本身。"
+    )
+    if context:
+        sys += f"\n背景：{context}。可据此判断专业术语的正确写法。"
+
+    chunks = _chunks(text, 1200)
+    out = []
+    for i, ch in enumerate(chunks):
+        # allow enough output tokens to cover a same-length rewrite
+        npred = min(4096, max(256, int(len(ch) * 2.0)))
+        res = _gen(f"识别文本：\n{ch}", sys, model=model, host=host,
+                   temperature=0.1, num_predict=npred)
+        # Fallback: if the model returned almost nothing (the "对" failure mode),
+        # keep the original chunk rather than destroying the transcript.
+        if not res or len(res) < 0.4 * len(ch.strip()):
+            out.append(ch)
+        else:
+            out.append(res)
+        if progress:
+            progress((i + 1) / len(chunks), f"AI 校对 {i+1}/{len(chunks)}")
+    return "\n".join(out)
+
+
 _MAP_SYS = (
     "你是课堂笔记助手。请从这段课堂转写中提取要点，用简洁中文分条列出："
     "老师强调的重点、重要概念与定义、常考/易错提醒。不要复述全文，只列要点。"

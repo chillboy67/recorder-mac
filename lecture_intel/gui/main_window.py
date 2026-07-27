@@ -127,9 +127,9 @@ class MainWindow(QMainWindow):
         # -- Left column (scrollable so nothing clips on small windows) --
         left_col = QWidget()
         left_layout = QVBoxLayout(left_col)
-        # Right margin clears the macOS overlay scrollbar, which otherwise draws
-        # over the buttons' right edge and makes their rounded corner look cut off.
-        left_layout.setContentsMargins(2, 0, 16, 0)
+        # Generous right margin so the macOS overlay scrollbar never draws over
+        # the buttons' right edge / rounded corner.
+        left_layout.setContentsMargins(2, 0, 26, 0)
         left_layout.setSpacing(12)
 
         self._input_panel = InputPanel()
@@ -148,8 +148,12 @@ class MainWindow(QMainWindow):
         left_scroll.setWidgetResizable(True)
         left_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         left_scroll.setFrameShape(QScrollArea.NoFrame)
-        left_scroll.setFixedWidth(316)
+        # Stop the drag right where everything is fully shown with NO horizontal
+        # scroll. Content needs ~315px; 340 leaves comfortable room. widgetResizable
+        # + this minimum means the inner content never exceeds the viewport.
+        left_scroll.setMinimumWidth(340)
         left_scroll.setStyleSheet("QScrollArea { background: transparent; }")
+        self._splitter = splitter
         splitter.addWidget(left_scroll)
 
         # -- Right column --
@@ -163,6 +167,16 @@ class MainWindow(QMainWindow):
 
         right_splitter.setSizes([220, 480])
         splitter.addWidget(right_splitter)
+
+        # Free-drag divider: left keeps its size, right takes extra space; neither
+        # collapses to zero. The handle is a real grabbable divider.
+        splitter.setStretchFactor(0, 0)
+        splitter.setStretchFactor(1, 1)
+        splitter.setCollapsible(0, False)
+        splitter.setCollapsible(1, False)
+        splitter.setChildrenCollapsible(False)
+        splitter.setHandleWidth(8)
+        splitter.setSizes([340, 620])
 
         root.addWidget(splitter)
 

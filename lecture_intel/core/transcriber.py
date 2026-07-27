@@ -50,7 +50,10 @@ _COMPRESSION_RATIO_THRESHOLD = 2.4
 # Whisper's standard temperature fallback ladder: only escalates above 0 when a
 # window looks broken (low logprob / high compression). Keeps clean audio
 # greedy/deterministic while still recovering from hard spots.
-_TEMPERATURE_LADDER = (0.0, 0.2, 0.4, 0.6, 0.8, 1.0)
+# Short ladder: a hard 30s window is retried at most twice instead of 6×. The
+# full 6-step ladder triples-to-sextuples the compute on noisy lectures (lots of
+# heat) for little gain, and runaway loops are cleaned afterwards anyway.
+_TEMPERATURE_LADDER = (0.0, 0.4)
 
 
 class Transcriber:
@@ -441,10 +444,20 @@ def _suppress_repetition(segments):
 
 
 def _collapse_repeats(text: str) -> str:
-    """Collapse an n-gram (n=1..4) repeated ≥4× consecutively down to one copy.
+    """Collapse runaway ASR repetition loops down to a single copy.
 
-    ≥4 (not 3) so genuine emphasis like "no, no, no" is preserved — only runaway
-    loops are caught. Smaller n first so "no no no no" collapses fully."""
+    Two passes, because Chinese has no spaces:
+      1. character/substring level — a 1–8 char unit repeated ≥4× (catches
+         "時時時時…" and "啊啊啊", which word-splitting misses);
+      2. word level — for space-separated languages ("no no no no").
+    ≥4 repeats so genuine emphasis ("no, no, no") is preserved."""
+    if not text:
+        return text
+    # 1) substring-level (handles no-space scripts). Non-greedy 1–8 char unit
+    #    repeated 4+ times → keep one copy.
+    text = re.sub(r"(.{1,8}?)\1{3,}", r"\1", text)
+
+    # 2) word-level
     words = text.split()
     if len(words) < 6:
         return text

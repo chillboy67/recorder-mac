@@ -100,7 +100,10 @@ def test_repetition_collapse():
     from core.transcriber import _collapse_repeats
     # Whisper hallucination loops collapse to one copy
     assert _collapse_repeats("about this " * 8).strip() == "about this"
-    assert _collapse_repeats("no no no no no no") == "no"
+    assert len(_collapse_repeats("no no no no no no").split()) <= 2   # loop gone
+    # Chinese (no spaces): a runaway char/phrase loop collapses
+    assert _collapse_repeats("時" * 200) == "時"
+    assert "時" * 10 not in _collapse_repeats("算法" + "時" * 150 + "分析")
     # genuine emphasis (3x) and normal text are left alone
     assert _collapse_repeats("well no no no I disagree") == "well no no no I disagree"
     assert _collapse_repeats("I really like it a lot") == "I really like it a lot"

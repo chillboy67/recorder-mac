@@ -150,31 +150,35 @@ def run(
                     "\n\n---\n\n# 🤖 AI 考官点评（本地大模型）\n\n" + fb + "\n")
         report("analyze", "分析完成", 94, "done")
 
-    # 5b) Classroom key-point summary ---------------------------------------
+    # 5b) Classroom: AI-corrected transcript (context-aware) + key-point summary
     if mode.summarize:
         from core import classroom as classroom_mod
         classroom_report = classroom_mod.summarize(asr)   # always have a fallback
         if llm_on:
-            report("analyze", "大模型提炼重点…", 90)
-            def _llm_prog(frac, msg):
-                report("analyze", msg, 88 + int(frac * 6))
-            summary_md = llm_mod.summarize_lecture(asr.full_text, model=llm_model,
-                                                   progress=_llm_prog)
+            report("analyze", "AI 根据上课内容校对原文…", 90)
+            def _corr_prog(frac, msg):
+                report("analyze", msg, 88 + int(frac * 4))
+            corrected = llm_mod.correct_transcript(
+                asr.full_text, context="一节课的课堂录音", model=llm_model,
+                progress=_corr_prog)
+            report("analyze", "AI 提炼重点…", 93)
+            summary_md = llm_mod.summarize_lecture(corrected or asr.full_text, model=llm_model)
+            parts = ["# 课堂重点总结（本地大模型）", ""]
             if summary_md:
-                transcript = "\n".join(s.text.strip() for s in asr.segments if s.text.strip())
-                classroom_md = ("# 课堂重点总结（本地大模型）\n\n" + summary_md
-                                + "\n\n## 全文转写\n\n" + transcript + "\n")
+                parts.append(summary_md)
+            parts += ["", "## 校对后全文（AI 据上课内容判断）", "", corrected or asr.full_text]
+            classroom_md = "\n".join(parts)
         if classroom_md is None:
             classroom_md = classroom_report.markdown   # heuristic fallback
         report("analyze", "重点提取完成", 94, "done")
 
-    # 5c) General: optional LLM tidy-up (punctuation/paragraphs, no rewrite) --
+    # 5c) General: AI determines the true transcript (accuracy-focused correction)
     if (not mode.analyze_ielts and not mode.summarize) and llm_on:
-        report("analyze", "大模型整理排版…", 90)
-        def _tidy_prog(frac, msg):
+        report("analyze", "AI 校对全文（提高准确性）…", 90)
+        def _corr_prog(frac, msg):
             report("analyze", msg, 88 + int(frac * 6))
-        general_tidy_md = llm_mod.tidy_transcript(asr.full_text, model=llm_model,
-                                                  progress=_tidy_prog)
+        general_tidy_md = llm_mod.correct_transcript(
+            asr.full_text, model=llm_model, progress=_corr_prog)
         report("analyze", "整理完成", 94, "done")
 
     # 6) Export --------------------------------------------------------------
@@ -185,7 +189,7 @@ def run(
     elif classroom_md:
         extra_md, extra_suffix = classroom_md, "summary"
     elif general_tidy_md:
-        extra_md, extra_suffix = ("# 整理版（本地大模型）\n\n" + general_tidy_md), "tidy"
+        extra_md, extra_suffix = ("# AI 校对版（本地大模型）\n\n" + general_tidy_md), "corrected"
     else:
         extra_md, extra_suffix = None, "report"
     outputs = exporter.export_all(
@@ -212,7 +216,7 @@ def run(
                        "emphasis_count": len(classroom_report.emphasis_points),
                        "definition_count": len(classroom_report.definitions)}
                       if classroom_report else None),
-        "tidy_markdown": ("# 整理版（本地大模型）\n\n" + general_tidy_md) if general_tidy_md else None,
+        "tidy_markdown": ("# AI 校对版（本地大模型）\n\n" + general_tidy_md) if general_tidy_md else None,
         "llm_used": bool(llm_on),
     }
     logger.info("Engine done in %.1fs (%s)", elapsed, mode.key)

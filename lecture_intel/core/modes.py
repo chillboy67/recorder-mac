@@ -43,7 +43,10 @@ class Mode:
     # detect its own language (zh/en code-switching). chunk_sec tunes the size:
     # small for IELTS (finer turn/language split), larger elsewhere (less overhead).
     chunked_language: bool = True
-    chunk_sec: float = 90.0
+    # Larger chunks = far fewer mlx calls = much less per-call overhead and heat
+    # (closer to a single efficient pass), while still giving progress + per-chunk
+    # language detection. IELTS overrides to a smaller value for finer turns.
+    chunk_sec: float = 300.0
     # A short, neutral prompt nudges spelling without biasing content.
     # Keep it EMPTY unless the domain genuinely needs it — a wrong prompt
     # hurts accuracy more than it helps.
@@ -99,7 +102,7 @@ IELTS = Mode(
     label="雅思口语教官",
     description="教官与考生对话练习。尊重原文（绝不纠正），区分教官/考生，标注疑似读音、语法、表达问题，生成反馈。",
     engine="auto",             # GPU (mlx) — code-switching handled by chunking
-    chunk_sec=30.0,            # smaller chunks → finer turn/language separation
+    chunk_sec=60.0,            # smaller chunks → finer turn/language separation
     language=None,
     initial_prompt="",
     condition_on_previous=True,

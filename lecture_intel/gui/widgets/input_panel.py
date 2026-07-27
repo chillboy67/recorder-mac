@@ -93,6 +93,11 @@ class RecordTab(QWidget):
         mic_label.setFixedWidth(90)
         self._mic_combo = QComboBox()
         self._mic_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        # Don't let a long device name force the whole panel wide — cap the
+        # width it asks for; it still expands to fill the available space.
+        self._mic_combo.setMinimumContentsLength(6)
+        self._mic_combo.setSizeAdjustPolicy(
+            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
         self._mic_combo.currentIndexChanged.connect(self._on_mic_changed)
         mic_row.addWidget(mic_label)
         mic_row.addWidget(self._mic_combo)
