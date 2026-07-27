@@ -54,6 +54,12 @@ class RecordTab(QWidget):
         self._is_recording = False
         self._elapsed_s = 0
         self._temp_path: str | None = None
+        # system-audio (loopback) capture via the native ScreenCaptureKit helper
+        from core.sysaudio import SystemAudioRecorder
+        self._sys_rec = SystemAudioRecorder()
+        self._mic_path: str | None = None
+        self._sys_path: str | None = None
+        self._pending_mix = False
 
         # -- Qt Multimedia pipeline --
         self._session = QMediaCaptureSession()
@@ -87,10 +93,29 @@ class RecordTab(QWidget):
         layout = QVBoxLayout(self)
         layout.setSpacing(12)
 
-        # Microphone picker
-        mic_row = QHBoxLayout()
+        # Source picker: mic / system audio / both
+        src_row = QHBoxLayout()
+        src_label = QLabel("录音来源：")
+        src_label.setFixedWidth(72)
+        self._source_combo = QComboBox()
+        self._source_combo.addItem("麦克风（外界声音）", userData="mic")
+        self._source_combo.addItem("电脑声音（内部播放）", userData="system")
+        self._source_combo.addItem("麦克风 + 电脑声音", userData="both")
+        self._source_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self._source_combo.setMinimumContentsLength(6)
+        self._source_combo.setSizeAdjustPolicy(
+            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        self._source_combo.currentIndexChanged.connect(self._on_source_changed)
+        src_row.addWidget(src_label)
+        src_row.addWidget(self._source_combo)
+        layout.addLayout(src_row)
+
+        # Microphone picker (hidden when source is "system")
+        self._mic_widget = QWidget()
+        mic_row = QHBoxLayout(self._mic_widget)
+        mic_row.setContentsMargins(0, 0, 0, 0)
         mic_label = QLabel("麦克风：")
-        mic_label.setFixedWidth(90)
+        mic_label.setFixedWidth(72)
         self._mic_combo = QComboBox()
         self._mic_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         # Don't let a long device name force the whole panel wide — cap the
@@ -101,7 +126,7 @@ class RecordTab(QWidget):
         self._mic_combo.currentIndexChanged.connect(self._on_mic_changed)
         mic_row.addWidget(mic_label)
         mic_row.addWidget(self._mic_combo)
-        layout.addLayout(mic_row)
+        layout.addWidget(self._mic_widget)
 
         # Clock display
         self._time_label = QLabel("00:00:00")
@@ -155,6 +180,13 @@ class RecordTab(QWidget):
         if dev:
             self._audio_in.setDevice(dev)
 
+    def _current_source(self) -> str:
+        return self._source_combo.currentData() or "mic"
+
+    def _on_source_changed(self, *_) -> None:
+        # The mic picker is only relevant when the mic is involved.
+        self._mic_widget.setVisible(self._current_source() in ("mic", "both"))
+
     # ── Recording control ───────────────────────────────────
 
     def _toggle_recording(self) -> None:
@@ -164,50 +196,149 @@ class RecordTab(QWidget):
             self._stop_recording()
 
     def _start_recording(self) -> None:
-        tmp = tempfile.NamedTemporaryFile(
-            suffix=".wav", prefix="lecture_", delete=False,
-        )
-        self._temp_path = tmp.name
-        tmp.close()
+        src = self._current_source()
+        self._mic_path = self._sys_path = None
+        self._pending_mix = (src == "both")
 
-        self._recorder.setOutputLocation(QUrl.fromLocalFile(self._temp_path))
-        self._recorder.record()
+        # System audio (loopback) via the native helper
+        if src in ("system", "both"):
+            from core import sysaudio
+            if not sysaudio.available():
+                self._show_error("系统音频组件缺失，请重新运行 make_app.sh 编译后再试。")
+                return
+            try:
+                self._sys_path = self._sys_rec.start()
+            except Exception as exc:
+                self._show_error(str(exc))
+                return
+            # The helper may be denied Screen Recording permission — it exits
+            # almost immediately in that case. Check shortly after starting.
+            QTimer.singleShot(900, self._check_system_capture)
+
+        # Microphone via Qt (drives the UI via recorderStateChanged)
+        if src in ("mic", "both"):
+            tmp = tempfile.NamedTemporaryFile(suffix=".wav", prefix="lecture_mic_", delete=False)
+            self._mic_path = tmp.name
+            tmp.close()
+            self._recorder.setOutputLocation(QUrl.fromLocalFile(self._mic_path))
+            self._recorder.record()
+        else:
+            self._enter_recording_ui()   # system-only: no Qt recorder event
+
+        self._source_combo.setEnabled(False)
+
+    def _check_system_capture(self) -> None:
+        if not self._is_recording:
+            return
+        if not self._sys_rec.is_running:
+            # helper died — almost always a missing Screen Recording permission
+            err = self._sys_rec.error_text()
+            self._abort_recording()
+            if "TCC" in err or "拒絕" in err or "denied" in err.lower() or not err:
+                self._show_error(
+                    "无法录制电脑声音：需要「屏幕录制」权限。\n\n"
+                    "请到 系统设置 → 隐私与安全性 → 屏幕录制，勾选 Recorder，然后重试。\n"
+                    "（首次使用系统会弹出授权请求。）")
+            else:
+                self._show_error("录制电脑声音失败：\n" + err[:200])
 
     def _stop_recording(self) -> None:
-        self._recorder.stop()
+        src = self._current_source()
+        if src == "system":
+            self._exit_recording_ui()
+            self._source_combo.setEnabled(True)
+            self._finalize(self._sys_rec.stop())
+        else:
+            # mic or both: stopping the Qt recorder triggers _on_state_change,
+            # which finalizes (and mixes in the system track for "both").
+            if src == "both":
+                self._sys_path = self._sys_rec.stop()
+            self._recorder.stop()
+
+    def _enter_recording_ui(self) -> None:
+        self._is_recording = True
+        self._elapsed_s = 0
+        self._timer.start()
+        self._rec_btn.setText("⏹  停止录音")
+        self._rec_btn.setStyleSheet(_STYLE_RECORDING)
+        self._status_label.setText("录音中…")
+        self._status_label.setStyleSheet(
+            "color: #FF3B30; font-size: 12px; font-weight: 500;")
+        self._file_label.setVisible(False)
+
+    def _exit_recording_ui(self) -> None:
+        self._is_recording = False
+        self._timer.stop()
+        self._rec_btn.setText("⏺  开始录音")
+        self._rec_btn.setStyleSheet(_STYLE_IDLE)
+
+    def _abort_recording(self) -> None:
+        try:
+            if self._recorder.recorderState() != QMediaRecorder.RecorderState.StoppedState:
+                self._recorder.stop()
+        except Exception:
+            pass
+        self._sys_rec.stop()
+        self._exit_recording_ui()
+        self._source_combo.setEnabled(True)
 
     def _on_state_change(self, state: QMediaRecorder.RecorderState) -> None:
         if state == QMediaRecorder.RecorderState.RecordingState:
-            self._is_recording = True
-            self._elapsed_s = 0
-            self._timer.start()
-            self._rec_btn.setText("⏹  停止录音")
-            self._rec_btn.setStyleSheet(_STYLE_RECORDING)
-            self._status_label.setText("录音中…")
-            self._status_label.setStyleSheet(
-                "color: #FF3B30; font-size: 12px; font-weight: 500;"
-            )
-            self._file_label.setVisible(False)
-
+            self._enter_recording_ui()
         elif state == QMediaRecorder.RecorderState.StoppedState:
-            self._is_recording = False
-            self._timer.stop()
-            self._rec_btn.setText("⏺  开始录音")
-            self._rec_btn.setStyleSheet(_STYLE_IDLE)
+            if not self._is_recording:
+                return
+            self._exit_recording_ui()
+            self._source_combo.setEnabled(True)
+            if self._pending_mix:
+                self._finalize(self._mix(self._mic_path, self._sys_path))
+            else:
+                self._finalize(self._mic_path)
 
-            if self._temp_path and Path(self._temp_path).exists():
-                self._temp_path = self._maybe_save_recording(self._temp_path)
-                size_mb = Path(self._temp_path).stat().st_size / 1_048_576
-                dur_str = _format_time(self._elapsed_s)
-                self._status_label.setText("录音已就绪")
-                self._status_label.setStyleSheet(
-                    "color: #34C759; font-size: 12px;"
-                )
-                self._file_label.setText(
-                    f"{dur_str}  ·  {size_mb:.1f} MB"
-                )
-                self._file_label.setVisible(True)
-                self.recording_ready.emit(self._temp_path)
+    def _mix(self, mic: str | None, sysp: str | None) -> str | None:
+        """Mix mic + system tracks into one wav via ffmpeg amix; fall back to
+        whichever single track exists."""
+        import shutil
+        import subprocess
+        have = [p for p in (mic, sysp) if p and Path(p).exists() and Path(p).stat().st_size > 1024]
+        if not have:
+            return None
+        if len(have) == 1:
+            return have[0]
+        ffmpeg = shutil.which("ffmpeg") or "/opt/homebrew/bin/ffmpeg"
+        out = tempfile.NamedTemporaryFile(suffix=".wav", prefix="lecture_mix_", delete=False)
+        out.close()
+        cmd = [ffmpeg, "-y", "-i", have[0], "-i", have[1],
+               "-filter_complex", "amix=inputs=2:duration=longest:normalize=0",
+               "-ac", "1", "-ar", "16000", out.name]
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True)
+            if r.returncode == 0 and Path(out.name).stat().st_size > 1024:
+                return out.name
+        except Exception:
+            pass
+        return have[0]   # mixing failed → at least return the mic track
+
+    def _finalize(self, path: str | None) -> None:
+        if not path or not Path(path).exists() or Path(path).stat().st_size <= 1024:
+            self._show_error("没有录到声音。请检查来源或权限后重试。")
+            return
+        self._temp_path = self._maybe_save_recording(path)
+        size_mb = Path(self._temp_path).stat().st_size / 1_048_576
+        dur_str = _format_time(self._elapsed_s)
+        self._status_label.setText("录音已就绪")
+        self._status_label.setStyleSheet("color: #34C759; font-size: 12px;")
+        self._file_label.setText(f"{dur_str}  ·  {size_mb:.1f} MB")
+        self._file_label.setVisible(True)
+        self.recording_ready.emit(self._temp_path)
+
+    def _show_error(self, msg: str) -> None:
+        from PySide6.QtWidgets import QMessageBox
+        self._exit_recording_ui()
+        self._source_combo.setEnabled(True)
+        self._status_label.setText("未开始")
+        self._status_label.setStyleSheet("color: #8E8E93; font-size: 12px;")
+        QMessageBox.warning(self, "录音", msg)
 
     def _maybe_save_recording(self, temp_path: str) -> str:
         """Ask whether to keep this recording; if yes, copy it to ~/Recorder/record/.
@@ -263,7 +394,7 @@ class RecordTab(QWidget):
 
     def reset(self) -> None:
         if self._is_recording:
-            self._stop_recording()
+            self._abort_recording()
         self._temp_path = None
         self._elapsed_s = 0
         self._time_label.setText("00:00:00")
@@ -272,6 +403,7 @@ class RecordTab(QWidget):
         self._file_label.setVisible(False)
         self._rec_btn.setText("⏺  开始录音")
         self._rec_btn.setStyleSheet(_STYLE_IDLE)
+        self._source_combo.setEnabled(True)
 
 
 # ═══════════════════════════════════════════════════════════════

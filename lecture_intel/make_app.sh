@@ -44,6 +44,22 @@ rsync -a --delete \
     done
   }
 
+# --- 1b) Compile + install the native system-audio (ScreenCaptureKit) helper -
+mkdir -p "$APP_HOME/native"
+if command -v swiftc >/dev/null 2>&1; then
+  echo "→ compiling system-audio helper…"
+  if swiftc -O "$SRC_DIR/native/SystemAudioRecorder.swift" \
+       -o "$APP_HOME/native/system_audio_recorder" 2>/dev/null; then
+    echo "  ✓ system_audio_recorder built"
+  else
+    echo "  ! swiftc failed — '电脑声音' capture will be unavailable"
+  fi
+elif [[ -x "$SRC_DIR/native/system_audio_recorder" ]]; then
+  cp "$SRC_DIR/native/system_audio_recorder" "$APP_HOME/native/"
+else
+  echo "  ! no swiftc and no prebuilt helper — '电脑声音' capture unavailable"
+fi
+
 # --- 2) Ensure a venv exists at the install location -------------------------
 if [[ -x "$APP_HOME/.venv/bin/python3" ]]; then
   echo "→ reusing existing install venv"
