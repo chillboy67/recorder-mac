@@ -1,0 +1,46 @@
+{
+  "meta": { "domain": "python_programming", "version": "1.0" },
+  "exact_phrases": {
+    "list comprehension": "list comprehension",
+    "dictionary comprehension": "dictionary comprehension",
+    "lambda function": "lambda function",
+    "virtual environment": "virtual environment",
+    "pip install": "pip install",
+    "pip freeze": "pip freeze",
+    "data frame": "DataFrame",
+    "data frames": "DataFrames",
+    "jupyter notebook": "Jupyter Notebook",
+    "jupyter lab": "JupyterLab",
+    "sci kit learn": "scikit-learn",
+    "sci-kit learn": "scikit-learn",
+    "def function": "def function",
+    "init method": "__init__ method",
+    "dunder method": "dunder method",
+    "magic method": "magic method",
+    "context manager": "context manager",
+    "type hint": "type hint",
+    "type hints": "type hints",
+    "async await": "async/await"
+  },
+  "exact_words": {
+    "numpy": "NumPy",
+    "pandas": "pandas",
+    "matplotlib": "Matplotlib",
+    "seaborn": "Seaborn",
+    "scipy": "SciPy",
+    "sklearn": "scikit-learn",
+    "pytorch": "PyTorch",
+    "tensorflow": "TensorFlow",
+    "keras": "Keras",
+    "fastapi": "FastAPI",
+    "django": "Django",
+    "flask": "Flask"
+  },
+  "regex_patterns": [
+    {"pattern": "\\bimport\\s+([a-z_][a-z0-9_]*)", "replace": "import \\1"},
+    {"pattern": "\\bfrom\\s+([a-z_][a-z0-9_.]+)\\s+import", "replace": "from \\1 import"},
+    {"pattern": "\\bpd\\.([A-Za-z_][A-Za-z0-9_]*)", "replace": "pd.\\1"},
+    {"pattern": "\\bnp\\.([A-Za-z_][A-Za-z0-9_]*)", "replace": "np.\\1"},
+    {"pattern": "\\bplt\\.([A-Za-z_][A-Za-z0-9_]*)", "replace": "plt.\\1"}
+  ]
+}

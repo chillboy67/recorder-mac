@@ -1,0 +1,136 @@
+# ============================================================
+# Lecture Intelligence System — Complete Config
+# macOS 26.4 · Apple Silicon · faster-whisper · Phi-4 / Llama 3.1 / Gemma 3
+# ============================================================
+
+# ====== Pipeline Switches ======
+pipeline:
+  temp_dir: "/tmp/lecture_intel"
+  output_dir: "./output"
+  cleanup_temp: true
+
+  # P0 switches
+  enable_llm_correction: true
+
+  # P1 switches
+  enable_audio_enhancement: true
+  enable_terminology_correction: true
+  enable_transcript_merging: true
+  enable_course_classification: true
+
+  # P2 switches (default off)
+  enable_speaker_diarization: false
+  enable_lecture_structuring: false
+
+# ====== P0: Audio Loading ======
+audio:
+  target_sample_rate: 16000
+  target_channels: 1
+  target_format: "wav"
+  supported_formats: ["mp3", "m4a", "wav", "aac", "flac", "ogg", "opus", "webm"]
+  max_file_size_gb: 2
+
+# ====== P1-A: Audio Enhancement ======
+enhancement:
+  mode: "light"                  # none | light | strong
+  skip_if_snr_above: 30.0        # dB — skip if SNR exceeds this
+  device: "mps"                  # mps (Apple Silicon) | cpu
+  chunk_duration_s: 30           # split long audio into chunks
+  overlap_s: 0.5                 # chunk overlap in seconds
+
+# ====== P0: VAD ======
+vad:
+  threshold: 0.4
+  min_speech_ms: 250
+  min_silence_ms: 500
+  max_segment_sec: 30
+  segment_overlap_sec: 1.0
+
+# ====== P2-A: Speaker Diarization ======
+diarization:
+  enabled: false
+  model: "pyannote/speaker-diarization-3.1"
+  min_speakers: 1
+  max_speakers: 6
+  clustering_threshold: 0.75     # 0.60–0.85; higher = less likely to split same speaker
+  merge_gap_ms: 1500             # short interruptions don't switch speaker
+  min_segment_duration_s: 1.0   # shorter segments get embedding verification
+  embedding_similarity_threshold: 0.82
+  device: "mps"
+
+# ====== P0: ASR ======
+asr:
+  primary_engine: "faster-whisper"    # mlx-whisper not yet compatible with macOS 26.4
+  model: "large-v3"
+  language: null                      # null = auto-detect (supports Chinese/English mixed)
+  task: "transcribe"
+  beam_size: 5
+  word_timestamps: true
+  condition_on_previous: true
+  compute_type: "int8"               # int8 for CPU compatibility
+  device: "auto"                      # auto | cpu
+  initial_prompt: >
+    This is a university lecture transcript. Technical terms may include:
+    machine learning, neural network, attention mechanism, seq2seq, transformer,
+    gradient descent, backpropagation, R language, Python, NumPy, PyTorch,
+    p-value, hypothesis testing, linear regression, Bayesian, MCMC.
+  chinese_threshold: 0.8
+  paraformer_enabled: false
+
+# ====== P1-D: Transcript Merging ======
+merger:
+  max_gap_ms: 800
+  min_segment_words: 3
+  sentence_end_chars: [".", "?", "!", "。", "？", "！", "…", ";", "；"]
+
+# ====== P1-B: Course Classification ======
+classifier:
+  embedding_model: "BAAI/bge-m3"
+  confidence_threshold: 0.70     # below this → general_lecture
+  cache_dir: "./models/bge"
+  use_keyword_precheck: true     # fast keyword check before embedding
+
+# ====== P1-C: Terminology Correction ======
+correction:
+  dictionaries_dir: "./dictionaries"
+  fuzzy_threshold: 2             # max Levenshtein distance
+  min_word_length_for_fuzzy: 5  # ignore short words for fuzzy
+  fuzzy_score_threshold: 85     # rapidfuzz minimum score (0–100)
+  enable_phonetic: false         # experimental phonetic matching
+
+# ====== P0: LLM Correction ======
+llm:
+  enabled: true
+  provider: "ollama"
+  api_base: "http://127.0.0.1:11434"
+  model: "llama3.1:8b"           # llama3.1:8b | phi4 | gemma4:e4b
+  temperature: 0.1
+  top_p: 0.9
+  repeat_penalty: 1.1
+  num_ctx: 4096
+  chunk_tokens: 800
+  overlap_tokens: 100
+  max_output_ratio: 1.2          # safety: warn if output > 120% of input
+  max_retries: 3
+  timeout_s: 120
+  context_window_sentences: 3
+
+# ====== P2-B: Lecture Structuring ======
+structuring:
+  enabled: false
+  highlight_emphasis: true
+  highlight_definitions: true
+  highlight_repetitions: true    # sliding window 5 sentences, ≥3 occurrences
+  highlight_contrasts: true
+  topic_break_threshold: 0.42    # embedding similarity below this → separator
+  min_section_words: 60          # minimum words between separators
+  detect_code_blocks: true
+  generate_titles_from_speech: true   # only extract titles from speaker's words
+
+# ====== P0: Export ======
+export:
+  formats: ["txt", "md", "srt", "json"]
+  include_timestamps: true
+  speaker_labels: false          # enabled when diarization is on
+  docx_enabled: false            # disabled by default
+  output_dir: "./output"

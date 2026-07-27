@@ -1,0 +1,41 @@
+{
+  "meta": { "domain": "mathematics", "version": "1.0" },
+  "exact_phrases": {
+    "linear algebra": "linear algebra",
+    "singular value decomposition": "Singular Value Decomposition (SVD)",
+    "eigen value": "eigenvalue",
+    "eigen values": "eigenvalues",
+    "eigen vector": "eigenvector",
+    "eigen vectors": "eigenvectors",
+    "positive definite": "positive definite",
+    "positive semi definite": "positive semi-definite",
+    "gradient descent": "gradient descent",
+    "convex optimization": "convex optimization",
+    "lagrange multiplier": "Lagrange multiplier",
+    "lagrange multipliers": "Lagrange multipliers",
+    "chain rule": "chain rule",
+    "product rule": "product rule",
+    "taylor series": "Taylor series",
+    "taylor expansion": "Taylor expansion",
+    "fourier transform": "Fourier transform",
+    "fourier series": "Fourier series",
+    "inner product": "inner product",
+    "outer product": "outer product",
+    "dot product": "dot product",
+    "cross product": "cross product",
+    "markov chain": "Markov chain",
+    "stochastic process": "stochastic process",
+    "partial derivative": "partial derivative",
+    "differential equation": "differential equation",
+    "gaussian elimination": "Gaussian elimination"
+  },
+  "exact_words": {
+    "svd": "SVD",
+    "psd": "PSD",
+    "kkt": "KKT",
+    "diag": "diag",
+    "vec": "vec",
+    "tr": "tr"
+  },
+  "regex_patterns": []
+}

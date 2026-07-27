@@ -1,0 +1,50 @@
+{
+  "meta": { "domain": "machine_learning", "version": "1.0" },
+  "exact_phrases": {
+    "support vector machine": "Support Vector Machine (SVM)",
+    "support vector machines": "Support Vector Machines (SVMs)",
+    "random forrest": "random forest",
+    "decision tree": "decision tree",
+    "cross validation": "cross-validation",
+    "k fold": "k-fold",
+    "train test split": "train-test split",
+    "feature importance": "feature importance",
+    "feature engineering": "feature engineering",
+    "principal component analysis": "Principal Component Analysis (PCA)",
+    "k means": "k-means",
+    "k nearest neighbor": "k-Nearest Neighbors (kNN)",
+    "mean squared error": "Mean Squared Error (MSE)",
+    "root mean squared error": "Root Mean Squared Error (RMSE)",
+    "mean absolute error": "Mean Absolute Error (MAE)",
+    "receiver operating characteristic": "Receiver Operating Characteristic (ROC)",
+    "area under the curve": "Area Under the Curve (AUC)",
+    "confusion matrix": "confusion matrix",
+    "precision recall": "precision-recall",
+    "hyper parameter": "hyperparameter",
+    "hyper parameters": "hyperparameters",
+    "grid search": "grid search",
+    "random search": "random search",
+    "bias variance": "bias-variance",
+    "bias variance tradeoff": "bias-variance tradeoff",
+    "gradient boosting": "gradient boosting",
+    "naive bayes": "Naive Bayes",
+    "one hot encoding": "one-hot encoding",
+    "label encoding": "label encoding"
+  },
+  "exact_words": {
+    "svm": "SVM",
+    "knn": "kNN",
+    "pca": "PCA",
+    "mse": "MSE",
+    "rmse": "RMSE",
+    "mae": "MAE",
+    "roc": "ROC",
+    "auc": "AUC",
+    "xgboost": "XGBoost",
+    "lightgbm": "LightGBM",
+    "catboost": "CatBoost"
+  },
+  "regex_patterns": [
+    {"pattern": "\\bsklearn\\.([a-z_]+)", "replace": "sklearn.\\1"}
+  ]
+}
