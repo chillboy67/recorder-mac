@@ -1,0 +1,82 @@
+# Recorder (app code)
+
+This directory holds the actual **Recorder** app — a local, offline speech-to-text
+tool with three modes: 通用 / 课堂 / 雅思. (The folder name `lecture_intel` is
+historical.)
+
+See the top-level [../README.md](../README.md) for the product overview.
+
+## Run
+
+```bash
+uv venv                                  # if .venv doesn't exist
+uv pip install -r requirements.txt
+
+# GUI
+.venv/bin/python3 app.py
+
+# Double-clickable app
+./make_app.sh && open dist/
+
+# CLI
+.venv/bin/python3 transcribe.py audio.m4a -m ielts
+```
+
+## Architecture
+
+```
+app.py            PySide6 GUI entry (double-click target)
+transcribe.py     CLI entry
+make_app.sh        builds dist/Recorder.app (lightweight launcher → venv)
+
+core/             ← the new, focused engine
+  modes.py        general / classroom / ielts presets
+  transcriber.py  whole-file Whisper (mlx-whisper → faster-whisper fallback)
+  denoise.py      ffmpeg cleanup for classroom mode
+  diarize.py      token-free speaker separation (Resemblyzer + clustering)
+  ielts.py        pronunciation (confidence-based) / grammar / phrasing / report
+  export.py       txt / md / srt / json with speaker labels
+  engine.py       the single orchestrator: run(input, output, mode)
+
+gui/              PySide6 widgets (input / settings / progress / results)
+modules/          shared dataclasses + AudioLoader (reused);
+                  the old 11-step pipeline.py lives here but is no longer used.
+tests/            core-logic regression tests (no model needed)
+```
+
+The old `pipeline.py` + course-classifier / LLM-correction / lecture-structuring
+modules are superseded by `core/engine.py` and kept only for reference.
+
+## Models (offline / China-friendly)
+
+Pre-download all models into `~/Library/Application Support/Recorder/models/`
+so the app runs fully offline and never waits on HuggingFace:
+
+```bash
+.venv/bin/python3 download_models.py          # all 4 models, via hf-mirror.com
+.venv/bin/python3 download_models.py small     # just one
+.venv/bin/python3 download_models.py --hf      # use huggingface.co instead
+```
+
+The transcriber loads a local model folder when present (no network call at
+runtime). The downloader uses plain curl through the **hf-mirror.com** mirror —
+this avoids the `huggingface_hub` xet/LFS transfer stalling that happens on
+mainland-China networks. If a model isn't downloaded, the app still falls back
+to fetching it from HuggingFace on first use.
+
+## Notes on accuracy
+
+- Default model is `large-v3` (~3GB). For faster runs choose
+  `large-v3-turbo` in the UI or `--model large-v3-turbo` on the CLI.
+- On Apple Silicon the `mlx-whisper` engine is used automatically; on other
+  machines it falls back to `faster-whisper` (CPU).
+- We feed the **whole file** to Whisper rather than pre-chunking — this is the
+  single biggest accuracy improvement over the old pipeline.
+- Nothing is ever paraphrased. Errors in speech are preserved verbatim.
+
+## Test
+
+```bash
+.venv/bin/python3 -m pytest tests/ -q          # from this dir
+# or from repo root:  python -m pytest
+```

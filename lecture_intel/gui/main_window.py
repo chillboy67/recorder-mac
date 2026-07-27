@@ -180,7 +180,10 @@ class MainWindow(QMainWindow):
             return
 
         settings = self._settings.get_settings()
-        output_dir = str(Path(input_path).parent / "recorder_output")
+        # Write to a non-protected, user-visible folder. Writing next to an
+        # uploaded file in ~/Documents/~/Desktop would be blocked by macOS TCC
+        # for a Finder-launched app, so we default to ~/Recorder.
+        output_dir = str(Path.home() / "Recorder" / Path(input_path).stem)
         Path(output_dir).mkdir(parents=True, exist_ok=True)
 
         active_steps = _STEPS_BY_MODE.get(settings["mode"], _STEPS_BY_MODE["general"])
@@ -253,11 +256,7 @@ class MainWindow(QMainWindow):
         self._status_bar.showMessage("就绪")
 
     def _reveal_output(self) -> None:
-        path = self._input_panel.selected_path
-        if path:
-            output_dir = Path(path).parent / "recorder_output"
-        else:
-            output_dir = Path.home() / "Desktop"
+        output_dir = Path.home() / "Recorder"
         output_dir.mkdir(parents=True, exist_ok=True)
         subprocess.run(["open", str(output_dir)])
 

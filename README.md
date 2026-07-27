@@ -34,6 +34,13 @@ open dist/                       # 把 Recorder.app 拖到 /Applications
 
 首次启动会下载 Whisper 模型（默认 `large-v3`，约 3GB，仅一次）。之后完全离线。
 
+国内网络建议先用镜像把模型全部下好（放进 App 的本地模型目录，运行时不再联网）：
+
+```bash
+cd lecture_intel
+.venv/bin/python3 download_models.py          # 全部模型，走 hf-mirror.com 镜像
+```
+
 ### 命令行（无界面）
 
 ```bash

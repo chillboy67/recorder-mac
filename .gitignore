@@ -1,0 +1,19 @@
+data/
+# User recordings + transcription outputs (see lecture_intel/core/paths.py)
+Recorder/
+backend/.venv/
+backend/__pycache__/
+backend/.pytest_cache/
+frontend/node_modules/
+frontend/dist/
+.DS_Store
+*.pyc
+
+lecture_intel/.venv/
+lecture_intel/models/
+lecture_intel/output/
+lecture_intel/dist/
+lecture_intel/__pycache__/
+lecture_intel/**/__pycache__/
+lecture_intel/**/*.pyc
+.pytest_cache/

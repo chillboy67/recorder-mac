@@ -33,10 +33,20 @@ logger = logging.getLogger(__name__)
 # Whisper word probability below this = "the model wasn't sure it heard this".
 PRON_CONFIDENCE_THRESHOLD = 0.45
 # Don't flag ultra-common function words even if confidence dips — not useful.
+# Common words are excluded: a flagged "the"/"what" is rarely an actionable
+# pronunciation note, and they dominate false positives from boundary artifacts.
 _PRON_STOPWORDS = {
     "a", "an", "the", "and", "or", "but", "so", "of", "to", "in", "on", "at",
-    "is", "am", "are", "was", "were", "be", "i", "you", "he", "she", "it",
-    "we", "they", "uh", "um", "er", "erm", "mm", "hmm", "yeah", "ok", "okay",
+    "is", "am", "are", "was", "were", "be", "been", "being", "do", "does", "did",
+    "have", "has", "had", "i", "you", "he", "she", "it", "we", "they", "me",
+    "him", "her", "them", "my", "your", "his", "its", "our", "their", "this",
+    "that", "these", "those", "here", "there", "what", "when", "where", "who",
+    "why", "how", "which", "all", "some", "any", "more", "most", "much", "many",
+    "one", "two", "well", "like", "just", "now", "then", "than", "as", "if",
+    "for", "with", "from", "by", "about", "can", "will", "would", "could",
+    "should", "may", "might", "not", "no", "yes", "yeah", "okay", "ok", "oh",
+    "uh", "um", "er", "erm", "mm", "hmm", "also", "very", "really", "kind",
+    "sort", "thing", "things", "people", "because", "actually", "maybe",
 }
 _FILLERS = {"um", "uh", "er", "erm", "mm", "like", "you know", "kind of", "sort of"}
 LONG_PAUSE_SEC = 1.2
@@ -127,16 +137,21 @@ def analyze(
 def _pronunciation_issues(segs: list[ASRSegment]) -> list[PronIssue]:
     issues: list[PronIssue] = []
     for seg in segs:
-        for w in seg.words:
+        for i, w in enumerate(seg.words):
+            # The first word of a segment routinely gets a spurious ~0
+            # probability (an ASR boundary artifact, esp. faster-whisper), so
+            # skip it — it's noise, not a real pronunciation signal.
+            if i == 0 and len(seg.words) > 1:
+                continue
             token = re.sub(r"[^\w']", "", w.word).strip().lower()
             if not token or token in _PRON_STOPWORDS:
                 continue
-            # only alphabetic English words (skip Chinese / numbers)
-            if not re.fullmatch(r"[a-z']+", token):
+            # only multi-syllable-ish alphabetic English words (skip Chinese,
+            # numbers, and short fragments like "com"/"per" that ASR over-splits)
+            if not re.fullmatch(r"[a-z']+", token) or len(token) < 4:
                 continue
-            if len(token) < 3:
-                continue
-            if 0.0 < w.confidence < PRON_CONFIDENCE_THRESHOLD:
+            # Exactly-zero = "no probability computed" (artifact), not "unsure".
+            if 0.02 < w.confidence < PRON_CONFIDENCE_THRESHOLD:
                 issues.append(PronIssue(
                     word=w.word.strip().strip(".,!?;:\"')("),
                     start=w.start,
@@ -146,7 +161,7 @@ def _pronunciation_issues(segs: list[ASRSegment]) -> list[PronIssue]:
                 ))
     # most-uncertain first, cap to keep the report focused
     issues.sort(key=lambda x: x.confidence)
-    return issues[:25]
+    return issues[:20]
 
 
 def _pron_note(conf: float) -> str:

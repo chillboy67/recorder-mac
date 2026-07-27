@@ -259,8 +259,8 @@ class FileTab(QWidget):
 
         # Drop zone (display only — no click handling)
         self._drop_area = QLabel(
-            "🎵\n\nDrag & drop your recording here\n\n"
-            "m4a · mp3 · wav · flac · aac"
+            "🎵\n\n把音频拖到这里\n\n"
+            "m4a · mp3 · wav · webm · flac · aac"
         )
         self._drop_area.setAlignment(Qt.AlignCenter)
         self._drop_area.setMinimumHeight(120)
@@ -268,7 +268,7 @@ class FileTab(QWidget):
         layout.addWidget(self._drop_area)
 
         # Independent Browse button (avoids mousePressEvent pitfalls)
-        self._browse_btn = QPushButton("Browse Files...")
+        self._browse_btn = QPushButton("选择文件…")
         self._browse_btn.setFixedHeight(36)
         self._browse_btn.setStyleSheet("""
             QPushButton {
@@ -355,7 +355,7 @@ class FileTab(QWidget):
         size_mb = p.stat().st_size / 1_048_576
         self._file_label.setText(f"✓  {p.name}\n{size_mb:.1f} MB")
         self._file_label.setVisible(True)
-        self._drop_area.setText(f"✓ File ready\n\n{p.name}")
+        self._drop_area.setText(f"✓ 已选择\n\n{p.name}")
         self._reset_drop_style()
         self.file_selected.emit(path)
 
@@ -367,8 +367,8 @@ class FileTab(QWidget):
         self._selected_path = None
         self._file_label.setVisible(False)
         self._drop_area.setText(
-            "🎵\n\nDrag & drop your recording here\n\n"
-            "m4a · mp3 · wav · flac · aac"
+            "🎵\n\n把音频拖到这里\n\n"
+            "m4a · mp3 · wav · webm · flac · aac"
         )
         self._reset_drop_style()
 

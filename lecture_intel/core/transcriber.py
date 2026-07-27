@@ -89,11 +89,26 @@ class Transcriber:
         if progress:
             progress(0.0, f"加载 {self.model} 模型 ({engine})…")
 
+        warnings: list[str] = []
         t0 = time.time()
         if engine == "mlx-whisper":
-            raw_segments, detected_lang = self._transcribe_mlx(
-                audio_path, language, initial_prompt, condition_on_previous, progress
-            )
+            try:
+                raw_segments, detected_lang = self._transcribe_mlx(
+                    audio_path, language, initial_prompt, condition_on_previous, progress
+                )
+            except Exception as exc:
+                # mlx failed mid-run (e.g. model download interrupted) — don't
+                # leave the user stranded; fall back to the CPU engine.
+                logger.warning("mlx-whisper failed (%s); falling back to faster-whisper", exc)
+                if not self._faster_available():
+                    raise
+                warnings.append(f"mlx-whisper 失败，已回退 faster-whisper：{exc}")
+                self._engine = engine = "faster-whisper"
+                if progress:
+                    progress(0.05, "MLX 失败，改用 CPU 引擎…")
+                raw_segments, detected_lang = self._transcribe_faster(
+                    audio_path, language, initial_prompt, condition_on_previous, progress
+                )
         else:
             raw_segments, detected_lang = self._transcribe_faster(
                 audio_path, language, initial_prompt, condition_on_previous, progress
@@ -117,7 +132,7 @@ class Transcriber:
             language=language_label,
             model_used=f"{engine}:{self.model}",
             audio_duration_sec=duration_sec,
-            warnings=[],
+            warnings=warnings,
         )
 
     # ------------------------------------------------------------------
@@ -162,6 +177,13 @@ class Transcriber:
     # ------------------------------------------------------------------
 
     def _mlx_repo(self) -> str:
+        # Prefer a locally downloaded model (via download_models.py). This makes
+        # transcription fully offline and sidesteps networks where HuggingFace
+        # is throttled. Falls back to the HF repo id if no local copy exists.
+        local = _local_model_dir(self.model)
+        if local is not None:
+            logger.info("Using local model: %s", local)
+            return str(local)
         return _MLX_REPOS.get(self.model, f"mlx-community/whisper-{self.model}-mlx")
 
     def _transcribe_mlx(
@@ -281,6 +303,23 @@ class Transcriber:
         if ratio > 0.15:
             return "mixed", ratio
         return "en", ratio
+
+
+def _local_model_dir(model: str):
+    """Return a local mlx model directory for `model` if present, else None.
+
+    Looks in the install dir and the project tree under models/whisper-<name>-mlx
+    (populated by download_models.py)."""
+    from pathlib import Path as _P
+    name = f"whisper-{model}-mlx"
+    candidates = [
+        _P.home() / "Library" / "Application Support" / "Recorder" / "models" / name,
+        _P(__file__).resolve().parent.parent / "models" / name,
+    ]
+    for d in candidates:
+        if (d / "config.json").exists() and any(d.glob("weights.*")):
+            return d
+    return None
 
 
 def _segment_lang(text: str) -> str:

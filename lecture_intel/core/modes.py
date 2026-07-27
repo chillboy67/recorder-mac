@@ -64,7 +64,7 @@ GENERAL = Mode(
     language=None,
     initial_prompt="",
     condition_on_previous=True,
-    formats=["txt", "md", "srt", "json"],
+    formats=["txt", "md", "docx"],
 )
 
 CLASSROOM = Mode(
@@ -77,7 +77,7 @@ CLASSROOM = Mode(
     denoise=True,
     keep_main_speaker_only=True,
     fix_terminology=True,
-    formats=["txt", "md", "srt", "json"],
+    formats=["txt", "md", "docx"],
 )
 
 IELTS = Mode(
@@ -90,7 +90,7 @@ IELTS = Mode(
     diarize=True,
     expected_speakers=2,
     analyze_ielts=True,
-    formats=["txt", "md", "json"],
+    formats=["txt", "md", "docx"],
 )
 
 MODES: dict[str, Mode] = {m.key: m for m in (GENERAL, CLASSROOM, IELTS)}

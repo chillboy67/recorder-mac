@@ -72,14 +72,28 @@ def test_offline_grammar_and_naturalness(labels):
 def test_export_all_formats(tmp_path, labels):
     asr = _sample_asr()
     report = I.analyze(asr, labels, 17.0, 5.0, 0.0, languagetool_url="http://127.0.0.1:1/none")
-    out = E.export_all(asr, tmp_path, "s", ["txt", "md", "srt", "json"],
+    out = E.export_all(asr, tmp_path, "s", ["txt", "md", "doc", "docx"],
                        labels=labels, extra_markdown=report.markdown,
                        extra_markdown_suffix="ielts")
-    for k in ("txt", "md", "srt", "json", "report"):
+    for k in ("txt", "md", "docx", "report"):
         assert out[k].exists() and out[k].stat().st_size > 0
+    # .doc relies on macOS textutil; assert when available
+    import shutil
+    if shutil.which("textutil"):
+        assert out["doc"].exists() and out["doc"].stat().st_size > 0
     txt = out["txt"].read_text(encoding="utf-8")
     assert "考生" in txt and "教官" in txt          # speaker labels rendered
     assert "promary" in txt                          # verbatim in output
+
+
+def test_docx_contains_report_text(tmp_path, labels):
+    asr = _sample_asr()
+    report = I.analyze(asr, labels, 17.0, 5.0, 0.0, languagetool_url="http://127.0.0.1:1/none")
+    out = E.export_all(asr, tmp_path, "s", ["docx"], labels=labels,
+                       extra_markdown=report.markdown)
+    from docx import Document
+    text = "\n".join(p.text for p in Document(str(out["docx"])).paragraphs)
+    assert "promary" in text          # verbatim transcript inside the Word doc
 
 
 def test_modes_present():

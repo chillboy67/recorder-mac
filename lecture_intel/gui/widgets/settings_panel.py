@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QRadioButton,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
@@ -48,19 +49,28 @@ class SettingsPanel(QWidget):
         # -- Mode selection (radio buttons with descriptions) ----
         mode_box = QGroupBox("模式")
         mode_layout = QVBoxLayout(mode_box)
+        mode_layout.setSpacing(2)
         self._mode_group = QButtonGroup(self)
         self._mode_buttons: dict[str, QRadioButton] = {}
         for m in MODES:
             rb = QRadioButton(m.label)
             rb.setStyleSheet("font-size: 13px; font-weight: 500;")
-            desc = QLabel(m.description)
-            desc.setWordWrap(True)
-            desc.setStyleSheet("color: #8E8E93; font-size: 11px; margin-left: 22px; margin-bottom: 6px;")
             self._mode_group.addButton(rb)
             self._mode_buttons[m.key] = rb
             rb.toggled.connect(lambda checked, k=m.key: self._on_mode(k, checked))
             mode_layout.addWidget(rb)
-            mode_layout.addWidget(desc)
+
+            # Description label. A QLabel stylesheet `margin` does NOT reserve
+            # vertical space, so wrapped lines overlapped/clipped. Indent via a
+            # container layout and let the label size to its wrapped content.
+            desc = QLabel(m.description)
+            desc.setWordWrap(True)
+            desc.setStyleSheet("color: #8E8E93; font-size: 11px;")
+            desc.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.MinimumExpanding)
+            row = QHBoxLayout()
+            row.setContentsMargins(22, 0, 4, 6)
+            row.addWidget(desc)
+            mode_layout.addLayout(row)
         layout.addWidget(mode_box)
 
         # -- Model size ------------------------------------------
@@ -78,10 +88,11 @@ class SettingsPanel(QWidget):
         fmt_layout = QHBoxLayout(fmt_box)
         self._cb_txt = QCheckBox(".txt")
         self._cb_md = QCheckBox(".md")
-        self._cb_srt = QCheckBox(".srt")
-        self._cb_json = QCheckBox(".json")
-        for cb in (self._cb_txt, self._cb_md, self._cb_srt, self._cb_json):
+        self._cb_doc = QCheckBox(".doc")
+        self._cb_docx = QCheckBox(".docx")
+        for cb in (self._cb_txt, self._cb_md, self._cb_docx):
             cb.setChecked(True)
+        for cb in (self._cb_txt, self._cb_md, self._cb_doc, self._cb_docx):
             cb.stateChanged.connect(self._save_prefs)
             fmt_layout.addWidget(cb)
         layout.addWidget(fmt_box)
@@ -106,7 +117,7 @@ class SettingsPanel(QWidget):
     def get_settings(self) -> dict:
         formats = [f for f, cb in (
             ("txt", self._cb_txt), ("md", self._cb_md),
-            ("srt", self._cb_srt), ("json", self._cb_json),
+            ("doc", self._cb_doc), ("docx", self._cb_docx),
         ) if cb.isChecked()] or ["txt", "md"]
         return {
             "mode": self.current_mode(),
@@ -132,10 +143,10 @@ class SettingsPanel(QWidget):
                 self._model_combo.setCurrentIndex(i)
                 break
 
-        fmts = self._prefs.value("formats", ["txt", "md", "srt", "json"])
+        fmts = self._prefs.value("formats", ["txt", "md", "docx"])
         if isinstance(fmts, str):
             fmts = [fmts]
         self._cb_txt.setChecked("txt" in fmts)
         self._cb_md.setChecked("md" in fmts)
-        self._cb_srt.setChecked("srt" in fmts)
-        self._cb_json.setChecked("json" in fmts)
+        self._cb_doc.setChecked("doc" in fmts)
+        self._cb_docx.setChecked("docx" in fmts)
