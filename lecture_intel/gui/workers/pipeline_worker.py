@@ -1,13 +1,16 @@
 """
-Background worker: spawns the pipeline in a SEPARATE PROCESS and relays its
-progress/result to the UI via Qt signals.
+Pipeline driver.
 
-The QThread itself does only lightweight queue I/O — all the heavy, crash-prone
-native ML work happens in the child process. So:
-  - a native crash/OOM in the child can't take down the GUI (and the user's
-    recording, already saved to disk, is safe);
-  - there's no deep native recursion on the QThread stack (no SIGBUS);
-  - quitting mid-run just terminates the child (no QThread-destroyed abort).
+The heavy ML runs in a SEPARATE PROCESS (core.runner). The GUI side does NOT use
+a QThread at all — it just polls the result queue from the main thread with a
+QTimer. This deliberately avoids QThread entirely, which removes two whole
+classes of crash we hit:
+  - SIGBUS: deep native recursion (mlx graph compile) overflowing a worker
+    thread's small stack — there's no worker thread now;
+  - SIGABRT "QThread: Destroyed while thread is still running" at shutdown.
+
+A native crash or OOM in the child can't take down the GUI, and the user's
+recording (already on disk) is never lost.
 """
 from __future__ import annotations
 
@@ -16,15 +19,14 @@ import queue as queue_mod
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QThread, Signal
+from PySide6.QtCore import QObject, QTimer, Signal
 
-# Ensure the project root is importable so the child can find core.runner.
 _ROOT = str(Path(__file__).resolve().parent.parent.parent)
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
 
-class PipelineWorker(QThread):
+class PipelineWorker(QObject):
     progress = Signal(dict)
     finished = Signal(dict)
     error = Signal(str)
@@ -34,74 +36,127 @@ class PipelineWorker(QThread):
         self.input_path = input_path
         self.output_dir = output_dir
         self.settings = settings
-        self._cancelled = False
-        self._proc: mp.process.BaseProcess | None = None
+        self._proc = None
+        self._queue = None
+        self._timer = None
+        self._running = False
 
-    def cancel(self) -> None:
-        self._cancelled = True
-        if self._proc is not None and self._proc.is_alive():
-            self._proc.terminate()
+    # -- public API (mirrors the old QThread surface used by MainWindow) --
 
-    def run(self) -> None:
+    def start(self) -> None:
         ctx = mp.get_context("spawn")
-        q = ctx.Queue()
+        self._queue = ctx.Queue()
         from core.runner import run_pipeline_subprocess
         self._proc = ctx.Process(
             target=run_pipeline_subprocess,
-            args=(self.input_path, self.output_dir, self.settings, q),
+            args=(self.input_path, self.output_dir, self.settings, self._queue),
             daemon=True,
         )
         self._proc.start()
+        self._running = True
+        self._timer = QTimer(self)
+        self._timer.setInterval(100)
+        self._timer.timeout.connect(self._poll)
+        self._timer.start()
 
-        while True:
-            if self._cancelled:
-                self._terminate()
-                self.error.emit("已取消。")
-                return
-            try:
-                kind, payload = q.get(timeout=0.2)
-            except queue_mod.Empty:
-                if not self._proc.is_alive():
-                    # Child died without delivering a result → native crash / OOM.
-                    code = self._proc.exitcode
-                    self.error.emit(
-                        "处理进程意外退出"
-                        + (f"（退出码 {code}）" if code is not None else "")
-                        + "，很可能是内存不足或模型过大。\n\n"
-                        "你的录音文件已安全保存，没有丢失。\n"
-                        "建议换更小的模型（识别模型里选「均衡」或「最快」）后重试。"
-                    )
+    def isRunning(self) -> bool:
+        return self._running
+
+    def cancel(self) -> None:
+        """Non-blocking: SIGTERM the child (returns instantly) and reap later.
+        Does NOT block the UI thread and does NOT emit an error dialog."""
+        if not self._running:
+            return
+        self._running = False
+        self._stop_timer()
+        if self._proc is not None and self._proc.is_alive():
+            self._proc.terminate()        # SIGTERM — returns immediately
+        # reap in the background a moment later so the click never freezes
+        QTimer.singleShot(1500, self._reap)
+
+    def _reap(self) -> None:
+        if self._proc is not None:
+            if self._proc.is_alive():
+                self._proc.terminate()
+            self._proc.join(timeout=2)    # already dead → returns at once
+
+    def wait(self, _ms: int = 0) -> bool:
+        """Used on app close: terminate first, then a quick join (no long block)."""
+        self._stop_timer()
+        self._running = False
+        if self._proc is not None:
+            if self._proc.is_alive():
+                self._proc.terminate()
+            self._proc.join(timeout=5)
+        return True
+
+    # -- internals --
+
+    def _poll(self) -> None:
+        if not self._running or self._queue is None:
+            return
+        # drain everything currently available
+        try:
+            while True:
+                kind, payload = self._queue.get_nowait()
+                if kind == "progress":
+                    self.progress.emit(payload)
+                elif kind == "result":
+                    self._finish()
+                    self._emit_result(payload)
                     return
-                continue
+                elif kind == "error":
+                    self._finish()
+                    self.error.emit(payload)
+                    return
+        except queue_mod.Empty:
+            pass
+        # if the child died without delivering anything → crash / OOM
+        if self._proc is not None and not self._proc.is_alive():
+            # give the queue a last chance (race between exit and final put)
+            try:
+                kind, payload = self._queue.get_nowait()
+                if kind == "result":
+                    self._finish(); self._emit_result(payload); return
+                if kind == "error":
+                    self._finish(); self.error.emit(payload); return
+            except queue_mod.Empty:
+                pass
+            code = self._proc.exitcode
+            self._finish()
+            self.error.emit(
+                "处理进程意外退出"
+                + (f"（退出码 {code}）" if code is not None else "")
+                + "，很可能是内存不足或模型过大。\n\n"
+                "你的录音文件已安全保存，没有丢失。\n"
+                "建议在「识别模型」里选「均衡」或「最快」后重试。"
+            )
 
-            if kind == "progress":
-                self.progress.emit(payload)
-            elif kind == "result":
-                stem = Path(self.input_path).stem
-                out_dir = Path(self.output_dir)
-                files = sorted(str(f) for f in out_dir.glob(f"{stem}*.*"))
-                self.finished.emit({
-                    "output_dir": self.output_dir,
-                    "files": files,
-                    "stats": payload,
-                    "mode": payload.get("mode", "general"),
-                    "ielts": payload.get("ielts"),
-                    "classroom": payload.get("classroom"),
-                })
-                self._join()
-                return
-            elif kind == "error":
-                self.error.emit(payload)
-                self._join()
-                return
+    def _emit_result(self, summary: dict) -> None:
+        stem = Path(self.input_path).stem
+        out_dir = Path(self.output_dir)
+        files = sorted(str(f) for f in out_dir.glob(f"{stem}*.*"))
+        self.finished.emit({
+            "output_dir": self.output_dir,
+            "files": files,
+            "stats": summary,
+            "mode": summary.get("mode", "general"),
+            "ielts": summary.get("ielts"),
+            "classroom": summary.get("classroom"),
+        })
 
-    # -- process lifecycle helpers --
+    def _finish(self) -> None:
+        self._stop_timer()
+        self._running = False
+        if self._proc is not None:
+            self._proc.join(timeout=5)
+
+    def _stop_timer(self) -> None:
+        if self._timer is not None:
+            self._timer.stop()
+            self._timer = None
 
     def _terminate(self) -> None:
         if self._proc is not None and self._proc.is_alive():
             self._proc.terminate()
-            self._proc.join(timeout=5)
-
-    def _join(self) -> None:
-        if self._proc is not None:
             self._proc.join(timeout=5)

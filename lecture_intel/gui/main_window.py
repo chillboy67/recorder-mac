@@ -127,7 +127,9 @@ class MainWindow(QMainWindow):
         # -- Left column (scrollable so nothing clips on small windows) --
         left_col = QWidget()
         left_layout = QVBoxLayout(left_col)
-        left_layout.setContentsMargins(0, 0, 8, 0)
+        # Right margin clears the macOS overlay scrollbar, which otherwise draws
+        # over the buttons' right edge and makes their rounded corner look cut off.
+        left_layout.setContentsMargins(2, 0, 16, 0)
         left_layout.setSpacing(12)
 
         self._input_panel = InputPanel()
@@ -245,8 +247,7 @@ class MainWindow(QMainWindow):
 
     def _cancel_processing(self) -> None:
         if self._worker and self._worker.isRunning():
-            self._worker.cancel()
-            self._worker.wait(3000)
+            self._worker.cancel()        # non-blocking
             self._cancel_btn.setVisible(False)
             self._process_btn.setVisible(True)
             self._process_btn.setEnabled(True)
@@ -296,11 +297,7 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event) -> None:
         self._prefs.setValue("geometry", self.saveGeometry())
         if self._worker and self._worker.isRunning():
-            # cancel() terminates the child process; then we MUST wait for the
-            # QThread to actually finish before it's destroyed, or Qt aborts with
-            # "QThread: Destroyed while thread is still running".
-            self._worker.cancel()
-            if not self._worker.wait(8000):
-                self._worker.terminate()
-                self._worker.wait(2000)
+            # Terminates the child process and stops the poll timer. No QThread
+            # is involved, so there's nothing that can abort on destruction.
+            self._worker.wait(8000)
         super().closeEvent(event)

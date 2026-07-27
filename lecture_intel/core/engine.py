@@ -39,6 +39,8 @@ def run(
     initial_prompt: Optional[str] = None,
     formats: Optional[list[str]] = None,
     languagetool_url: str = "http://127.0.0.1:8010/v2/check",
+    use_llm: bool = False,
+    llm_model: str = "llama3.1:8b",
     progress: Optional[ProgressCB] = None,
 ) -> dict:
     """Run the full pipeline for one file. Returns a result summary dict."""
@@ -91,6 +93,21 @@ def run(
     labels: Optional[dict[int, str]] = None
     ielts_report = None
     classroom_report = None
+    classroom_md: Optional[str] = None
+    general_tidy_md: Optional[str] = None
+
+    # Is the local LLM actually usable?
+    llm_on = False
+    if use_llm:
+        from core import llm as llm_mod
+        resolved = llm_mod.resolve_model(llm_model)
+        if resolved:
+            llm_model = resolved          # tolerate ModelScope-mirror names
+            llm_on = True
+            logger.info("LLM enhancement on, model=%s", llm_model)
+        else:
+            warnings.append("已勾选本地大模型，但 Ollama 未运行或模型未安装，已回退离线处理。")
+            logger.warning("use_llm requested but Ollama/model unavailable")
 
     # 4) Speaker handling ----------------------------------------------------
     if mode.diarize:
@@ -124,21 +141,53 @@ def run(
             other_seconds=getattr(dia_obj, "other_seconds", 0.0),
             languagetool_url=languagetool_url,
         )
+        # LLM-enhanced examiner-style feedback on the candidate's English.
+        if llm_on:
+            report("analyze", "大模型点评中…", 91)
+            fb = llm_mod.ielts_feedback(ielts_report.transcript_candidate, model=llm_model)
+            if fb:
+                ielts_report.markdown += (
+                    "\n\n---\n\n# 🤖 AI 考官点评（本地大模型）\n\n" + fb + "\n")
         report("analyze", "分析完成", 94, "done")
 
     # 5b) Classroom key-point summary ---------------------------------------
     if mode.summarize:
-        report("analyze", "提取重点…", 90)
         from core import classroom as classroom_mod
-        classroom_report = classroom_mod.summarize(asr)
+        classroom_report = classroom_mod.summarize(asr)   # always have a fallback
+        if llm_on:
+            report("analyze", "大模型提炼重点…", 90)
+            def _llm_prog(frac, msg):
+                report("analyze", msg, 88 + int(frac * 6))
+            summary_md = llm_mod.summarize_lecture(asr.full_text, model=llm_model,
+                                                   progress=_llm_prog)
+            if summary_md:
+                transcript = "\n".join(s.text.strip() for s in asr.segments if s.text.strip())
+                classroom_md = ("# 课堂重点总结（本地大模型）\n\n" + summary_md
+                                + "\n\n## 全文转写\n\n" + transcript + "\n")
+        if classroom_md is None:
+            classroom_md = classroom_report.markdown   # heuristic fallback
         report("analyze", "重点提取完成", 94, "done")
+
+    # 5c) General: optional LLM tidy-up (punctuation/paragraphs, no rewrite) --
+    if (not mode.analyze_ielts and not mode.summarize) and llm_on:
+        report("analyze", "大模型整理排版…", 90)
+        def _tidy_prog(frac, msg):
+            report("analyze", msg, 88 + int(frac * 6))
+        general_tidy_md = llm_mod.tidy_transcript(asr.full_text, model=llm_model,
+                                                  progress=_tidy_prog)
+        report("analyze", "整理完成", 94, "done")
 
     # 6) Export --------------------------------------------------------------
     report("export", "导出结果…", 96)
     fmts = formats or mode.formats
-    extra_md = ielts_report.markdown if ielts_report else (
-        classroom_report.markdown if classroom_report else None)
-    extra_suffix = "ielts" if ielts_report else "summary"
+    if ielts_report:
+        extra_md, extra_suffix = ielts_report.markdown, "ielts"
+    elif classroom_md:
+        extra_md, extra_suffix = classroom_md, "summary"
+    elif general_tidy_md:
+        extra_md, extra_suffix = ("# 整理版（本地大模型）\n\n" + general_tidy_md), "tidy"
+    else:
+        extra_md, extra_suffix = None, "report"
     outputs = exporter.export_all(
         asr, output_dir, base, fmts,
         labels=labels,
@@ -158,10 +207,13 @@ def run(
         "output_files": {k: str(v) for k, v in outputs.items()},
         "warnings": warnings,
         "ielts": _ielts_summary(ielts_report) if ielts_report else None,
-        "classroom": ({"markdown": classroom_report.markdown,
+        "classroom": ({"markdown": classroom_md,
+                       "llm": bool(llm_on),
                        "emphasis_count": len(classroom_report.emphasis_points),
                        "definition_count": len(classroom_report.definitions)}
                       if classroom_report else None),
+        "tidy_markdown": ("# 整理版（本地大模型）\n\n" + general_tidy_md) if general_tidy_md else None,
+        "llm_used": bool(llm_on),
     }
     logger.info("Engine done in %.1fs (%s)", elapsed, mode.key)
     return summary

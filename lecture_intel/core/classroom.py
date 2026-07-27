@@ -45,6 +45,12 @@ _STOP = set("的 了 是 我 你 他 她 它 们 这 那 个 就 也 都 和 与
             "然后 就是 这种 the a an of to in on and or is are was were be this that "
             "it we you they i he she for with as at by from".split())
 
+# Common Chinese function characters — a bigram containing any of these is
+# almost always filler ("的话/一下/里面/时候/这边"), not a content term.
+_ZH_FUNC = set("的了是我你他她它们这那个就也都和与在有不会要把被让从对到说很"
+               "可以里面时候现在后面前面这边那边一下大家然后还有就是因为所以"
+               "但是如果什么怎么我们你们他们之上下来去")
+
 
 @dataclass
 class ClassroomReport:
@@ -115,8 +121,11 @@ def _frequent_terms(full: str) -> list[tuple[str, int]]:
     for run in zh:
         for i in range(len(run) - 1):
             bi = run[i:i + 2]
-            if bi not in _STOP:
-                counts[bi] += 1
+            # skip bigrams containing a common function character — those are
+            # almost always junk like "的话/一下/里面/时候", not real terms.
+            if bi[0] in _ZH_FUNC or bi[1] in _ZH_FUNC or bi in _STOP:
+                continue
+            counts[bi] += 1
     # keep terms that recur a lot (the lecture's backbone)
     common = [(t, c) for t, c in counts.most_common(40) if c >= 4]
     return common[:15]
@@ -176,8 +185,10 @@ def _render(r: ClassroomReport) -> str:
         L.append("（无）")
     L.append("")
 
-    L.append("> 说明：自动纠正老师口误/事实性错误需要本地大模型（如 Ollama），"
-             "当前离线版本只做要点提取，不改动转写原文。")
+    L.append("## 全文转写")
+    L.append("")
+    L.append(r.transcript or "（无）")
+    L.append("")
     return "\n".join(L)
 
 

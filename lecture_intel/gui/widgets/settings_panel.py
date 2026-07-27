@@ -26,8 +26,8 @@ MODES = [GENERAL, CLASSROOM, IELTS]
 
 MODELS = [
     ("large-v3", "最准（large-v3）"),
-    ("large-v3-turbo", "均衡（速度与准确兼顾）"),
-    ("small", "最快（最省资源）"),
+    ("large-v3-turbo", "均衡（large-v3-turbo）"),
+    ("small", "最快（small）"),
 ]
 
 
@@ -82,6 +82,20 @@ class SettingsPanel(QWidget):
         model_layout.addWidget(self._model_combo)
         layout.addWidget(model_box)
 
+        # -- Local LLM enhancement -------------------------------
+        llm_box = QGroupBox("增强（可选）")
+        llm_layout = QVBoxLayout(llm_box)
+        self._cb_llm = QCheckBox("本地大模型增强（需 Ollama + Llama 3.1）")
+        self._cb_llm.setChecked(False)
+        self._cb_llm.stateChanged.connect(self._save_prefs)
+        llm_hint = QLabel("课堂：纠正+重点总结　雅思：AI考官点评　通用：标点排版整理。\n"
+                          "全程本地离线。未安装 Ollama 时自动跳过。")
+        llm_hint.setWordWrap(True)
+        llm_hint.setStyleSheet("color: #8E8E93; font-size: 11px;")
+        llm_layout.addWidget(self._cb_llm)
+        llm_layout.addWidget(llm_hint)
+        layout.addWidget(llm_box)
+
         # -- Output formats --------------------------------------
         fmt_box = QGroupBox("导出格式")
         fmt_layout = QHBoxLayout(fmt_box)
@@ -122,6 +136,8 @@ class SettingsPanel(QWidget):
             "mode": self.current_mode(),
             "model": self._model_combo.currentData(),
             "formats": formats,
+            "use_llm": self._cb_llm.isChecked(),
+            "llm_model": "llama3.1:8b",
         }
 
     # ── persistence ───────────────────────────────────────────
@@ -131,6 +147,7 @@ class SettingsPanel(QWidget):
         self._prefs.setValue("mode", s["mode"])
         self._prefs.setValue("model", s["model"])
         self._prefs.setValue("formats", s["formats"])
+        self._prefs.setValue("use_llm", s["use_llm"])
 
     def _load_prefs(self) -> None:
         mode = self._prefs.value("mode", "general")
@@ -149,3 +166,5 @@ class SettingsPanel(QWidget):
         self._cb_md.setChecked("md" in fmts)
         self._cb_doc.setChecked("doc" in fmts)
         self._cb_docx.setChecked("docx" in fmts)
+
+        self._cb_llm.setChecked(self._prefs.value("use_llm", False, type=bool))

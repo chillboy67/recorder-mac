@@ -64,6 +64,32 @@ this avoids the `huggingface_hub` xet/LFS transfer stalling that happens on
 mainland-China networks. If a model isn't downloaded, the app still falls back
 to fetching it from HuggingFace on first use.
 
+## Local LLM enhancement (optional, via Ollama)
+
+Tick "本地大模型增强" in the app to enable, after a one-time setup. Everything
+stays on-device.
+
+```bash
+brew install ollama
+brew services start ollama
+# Pull a model. In mainland China the default ollama registry is blocked, so use
+# the ModelScope mirror (just a CDN — the model itself is Meta's Llama), then
+# alias it to the name the app expects:
+ollama pull modelscope.cn/LLM-Research/Meta-Llama-3.1-8B-Instruct-GGUF
+ollama cp modelscope.cn/LLM-Research/Meta-Llama-3.1-8B-Instruct-GGUF llama3.1:8b
+```
+
+What it adds per mode (falls back to offline heuristics if Ollama isn't running):
+- **课堂**: real key-point summary (重点/定义/常考/总结) instead of keyword stats.
+- **雅思**: an AI-examiner critique (grammar / collocation / Chinglish / model
+  rewrite) on top of the confidence-based pronunciation flags. Transcript stays verbatim.
+- **通用**: a tidied, punctuated, paragraphed reading version (words unchanged).
+
+Model: `llama3.1:8b` (Meta, ~4.9GB, ~6GB RAM, runs on the GPU; a non-Chinese
+model, good at English and acceptable at Chinese). The app uses `/api/chat` so the
+instruct template is applied. `resolve_model` also matches the un-aliased
+ModelScope name, so the `ollama cp` alias step is optional.
+
 ## Notes on accuracy
 
 - Default model is `large-v3` (~3GB). For faster runs choose
