@@ -1,0 +1,141 @@
+"""
+Settings panel: pick a processing mode, model size, and output formats.
+
+The mode encapsulates everything else (denoise, diarization, analysis), so the
+UI stays simple — the user just picks what they're transcribing.
+"""
+from __future__ import annotations
+
+from PySide6.QtCore import QSettings, Signal
+from PySide6.QtWidgets import (
+    QButtonGroup,
+    QCheckBox,
+    QComboBox,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QRadioButton,
+    QVBoxLayout,
+    QWidget,
+)
+
+from core.modes import GENERAL, CLASSROOM, IELTS
+
+MODES = [GENERAL, CLASSROOM, IELTS]
+
+MODELS = [
+    ("large-v3", "large-v3（最准，推荐）"),
+    ("large-v3-turbo", "large-v3-turbo（更快，略降）"),
+    ("medium", "medium（更省内存）"),
+    ("small", "small（最快，精度一般）"),
+]
+
+
+class SettingsPanel(QWidget):
+    mode_changed = Signal(str)
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._prefs = QSettings("LucasLab", "Recorder")
+        self._build_ui()
+        self._load_prefs()
+
+    def _build_ui(self) -> None:
+        layout = QVBoxLayout(self)
+        layout.setSpacing(12)
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        # -- Mode selection (radio buttons with descriptions) ----
+        mode_box = QGroupBox("模式")
+        mode_layout = QVBoxLayout(mode_box)
+        self._mode_group = QButtonGroup(self)
+        self._mode_buttons: dict[str, QRadioButton] = {}
+        for m in MODES:
+            rb = QRadioButton(m.label)
+            rb.setStyleSheet("font-size: 13px; font-weight: 500;")
+            desc = QLabel(m.description)
+            desc.setWordWrap(True)
+            desc.setStyleSheet("color: #8E8E93; font-size: 11px; margin-left: 22px; margin-bottom: 6px;")
+            self._mode_group.addButton(rb)
+            self._mode_buttons[m.key] = rb
+            rb.toggled.connect(lambda checked, k=m.key: self._on_mode(k, checked))
+            mode_layout.addWidget(rb)
+            mode_layout.addWidget(desc)
+        layout.addWidget(mode_box)
+
+        # -- Model size ------------------------------------------
+        model_box = QGroupBox("识别模型")
+        model_layout = QVBoxLayout(model_box)
+        self._model_combo = QComboBox()
+        for value, label in MODELS:
+            self._model_combo.addItem(label, userData=value)
+        self._model_combo.currentIndexChanged.connect(self._save_prefs)
+        model_layout.addWidget(self._model_combo)
+        layout.addWidget(model_box)
+
+        # -- Output formats --------------------------------------
+        fmt_box = QGroupBox("导出格式")
+        fmt_layout = QHBoxLayout(fmt_box)
+        self._cb_txt = QCheckBox(".txt")
+        self._cb_md = QCheckBox(".md")
+        self._cb_srt = QCheckBox(".srt")
+        self._cb_json = QCheckBox(".json")
+        for cb in (self._cb_txt, self._cb_md, self._cb_srt, self._cb_json):
+            cb.setChecked(True)
+            cb.stateChanged.connect(self._save_prefs)
+            fmt_layout.addWidget(cb)
+        layout.addWidget(fmt_box)
+
+        layout.addStretch()
+
+    # ── events ────────────────────────────────────────────────
+
+    def _on_mode(self, key: str, checked: bool) -> None:
+        if checked:
+            self._save_prefs()
+            self.mode_changed.emit(key)
+
+    # ── public API ────────────────────────────────────────────
+
+    def current_mode(self) -> str:
+        for key, rb in self._mode_buttons.items():
+            if rb.isChecked():
+                return key
+        return "general"
+
+    def get_settings(self) -> dict:
+        formats = [f for f, cb in (
+            ("txt", self._cb_txt), ("md", self._cb_md),
+            ("srt", self._cb_srt), ("json", self._cb_json),
+        ) if cb.isChecked()] or ["txt", "md"]
+        return {
+            "mode": self.current_mode(),
+            "model": self._model_combo.currentData(),
+            "formats": formats,
+        }
+
+    # ── persistence ───────────────────────────────────────────
+
+    def _save_prefs(self) -> None:
+        s = self.get_settings()
+        self._prefs.setValue("mode", s["mode"])
+        self._prefs.setValue("model", s["model"])
+        self._prefs.setValue("formats", s["formats"])
+
+    def _load_prefs(self) -> None:
+        mode = self._prefs.value("mode", "general")
+        self._mode_buttons.get(mode, self._mode_buttons["general"]).setChecked(True)
+
+        model = self._prefs.value("model", "large-v3")
+        for i in range(self._model_combo.count()):
+            if self._model_combo.itemData(i) == model:
+                self._model_combo.setCurrentIndex(i)
+                break
+
+        fmts = self._prefs.value("formats", ["txt", "md", "srt", "json"])
+        if isinstance(fmts, str):
+            fmts = [fmts]
+        self._cb_txt.setChecked("txt" in fmts)
+        self._cb_md.setChecked("md" in fmts)
+        self._cb_srt.setChecked("srt" in fmts)
+        self._cb_json.setChecked("json" in fmts)
