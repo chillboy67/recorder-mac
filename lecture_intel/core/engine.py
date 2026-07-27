@@ -35,7 +35,7 @@ def run(
     mode_key: str = "general",
     *,
     model: str = "large-v3",
-    engine: str = "auto",
+    engine: Optional[str] = None,   # None → use the mode's preferred engine
     initial_prompt: Optional[str] = None,
     formats: Optional[list[str]] = None,
     languagetool_url: str = "http://127.0.0.1:8010/v2/check",
@@ -74,12 +74,14 @@ def run(
     def asr_progress(frac, msg):
         report("asr", msg, 20 + int(frac * 55))
 
-    transcriber = Transcriber(model=model, engine=engine)
+    transcriber = Transcriber(model=model, engine=engine or mode.engine)
     asr: ASRResult = transcriber.transcribe(
         wav_path,
         language=mode.language,
         initial_prompt=(initial_prompt if initial_prompt is not None else mode.initial_prompt),
         condition_on_previous=mode.condition_on_previous,
+        chunked=mode.chunked_language,
+        chunk_sec=mode.chunk_sec,
         duration_sec=audio.duration_sec,
         progress=asr_progress,
     )
@@ -88,6 +90,7 @@ def run(
 
     labels: Optional[dict[int, str]] = None
     ielts_report = None
+    classroom_report = None
 
     # 4) Speaker handling ----------------------------------------------------
     if mode.diarize:
@@ -123,15 +126,24 @@ def run(
         )
         report("analyze", "分析完成", 94, "done")
 
+    # 5b) Classroom key-point summary ---------------------------------------
+    if mode.summarize:
+        report("analyze", "提取重点…", 90)
+        from core import classroom as classroom_mod
+        classroom_report = classroom_mod.summarize(asr)
+        report("analyze", "重点提取完成", 94, "done")
+
     # 6) Export --------------------------------------------------------------
     report("export", "导出结果…", 96)
     fmts = formats or mode.formats
-    extra_md = ielts_report.markdown if ielts_report else None
+    extra_md = ielts_report.markdown if ielts_report else (
+        classroom_report.markdown if classroom_report else None)
+    extra_suffix = "ielts" if ielts_report else "summary"
     outputs = exporter.export_all(
         asr, output_dir, base, fmts,
         labels=labels,
         extra_markdown=extra_md,
-        extra_markdown_suffix="ielts",
+        extra_markdown_suffix=extra_suffix,
     )
     report("export", "完成", 100, "done")
 
@@ -146,6 +158,10 @@ def run(
         "output_files": {k: str(v) for k, v in outputs.items()},
         "warnings": warnings,
         "ielts": _ielts_summary(ielts_report) if ielts_report else None,
+        "classroom": ({"markdown": classroom_report.markdown,
+                       "emphasis_count": len(classroom_report.emphasis_points),
+                       "definition_count": len(classroom_report.definitions)}
+                      if classroom_report else None),
     }
     logger.info("Engine done in %.1fs (%s)", elapsed, mode.key)
     return summary

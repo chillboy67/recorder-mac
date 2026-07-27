@@ -191,17 +191,48 @@ class RecordTab(QWidget):
             self._rec_btn.setStyleSheet(_STYLE_IDLE)
 
             if self._temp_path and Path(self._temp_path).exists():
+                self._temp_path = self._maybe_save_recording(self._temp_path)
                 size_mb = Path(self._temp_path).stat().st_size / 1_048_576
                 dur_str = _format_time(self._elapsed_s)
-                self._status_label.setText("录音已保存")
+                self._status_label.setText("录音已就绪")
                 self._status_label.setStyleSheet(
                     "color: #34C759; font-size: 12px;"
                 )
                 self._file_label.setText(
-                    f"已保存：{dur_str}  ·  {size_mb:.1f} MB"
+                    f"{dur_str}  ·  {size_mb:.1f} MB"
                 )
                 self._file_label.setVisible(True)
                 self.recording_ready.emit(self._temp_path)
+
+    def _maybe_save_recording(self, temp_path: str) -> str:
+        """Ask whether to keep this recording; if yes, copy it to ~/Recorder/record/.
+
+        Returns the path to use afterwards (the saved copy, or the temp file)."""
+        from PySide6.QtWidgets import QMessageBox
+
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Question)
+        box.setWindowTitle("保存录音")
+        box.setText("要保存这段录音吗？")
+        box.setInformativeText("保存后会存到 “Recorder/record” 文件夹，方便以后再用。")
+        save_btn = box.addButton("保存", QMessageBox.AcceptRole)
+        box.addButton("不保存", QMessageBox.RejectRole)
+        box.setDefaultButton(save_btn)
+        box.exec()
+        if box.clickedButton() is not save_btn:
+            return temp_path
+
+        import shutil
+        from datetime import datetime
+        dest_dir = Path.home() / "Recorder" / "record"
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        name = f"录音_{datetime.now():%Y%m%d_%H%M%S}.wav"
+        dest = dest_dir / name
+        try:
+            shutil.copy2(temp_path, dest)
+            return str(dest)
+        except Exception:
+            return temp_path
 
     def _on_error(self, error: QMediaRecorder.Error, error_string: str) -> None:
         self._status_label.setText(f"错误：{error_string}")

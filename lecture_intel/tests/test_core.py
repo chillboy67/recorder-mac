@@ -96,6 +96,16 @@ def test_docx_contains_report_text(tmp_path, labels):
     assert "promary" in text          # verbatim transcript inside the Word doc
 
 
+def test_repetition_collapse():
+    from core.transcriber import _collapse_repeats
+    # Whisper hallucination loops collapse to one copy
+    assert _collapse_repeats("about this " * 8).strip() == "about this"
+    assert _collapse_repeats("no no no no no no") == "no"
+    # genuine emphasis (3x) and normal text are left alone
+    assert _collapse_repeats("well no no no I disagree") == "well no no no I disagree"
+    assert _collapse_repeats("I really like it a lot") == "I really like it a lot"
+
+
 def test_modes_present():
     assert set(MODES) == {"general", "classroom", "ielts"}
     assert get_mode("ielts").analyze_ielts is True

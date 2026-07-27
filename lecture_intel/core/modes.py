@@ -29,8 +29,21 @@ class Mode:
     description: str
 
     # --- ASR ---
-    # None = let Whisper auto-detect (handles zh/en code-switching).
+    # ASR engine preference. "auto" → mlx-whisper on Apple Silicon (fast), CPU
+    # fallback. IELTS forces "faster-whisper": its VAD-chunked pipeline preserves
+    # zh/en *code-switching* (transcribes Chinese coach turns as Chinese and
+    # English answers as English), whereas mlx's single global language pass
+    # locks to one language and translates the other away.
+    engine: str = "auto"
+    # None = let Whisper auto-detect.
     language: Optional[str] = None
+    # Always split at silences and transcribe chunk-by-chunk. This bounds memory
+    # (a 2-hour recording never builds one giant graph → no OOM/crash on 16 GB),
+    # gives real per-chunk progress (no more "stuck at 22%"), and lets each chunk
+    # detect its own language (zh/en code-switching). chunk_sec tunes the size:
+    # small for IELTS (finer turn/language split), larger elsewhere (less overhead).
+    chunked_language: bool = True
+    chunk_sec: float = 90.0
     # A short, neutral prompt nudges spelling without biasing content.
     # Keep it EMPTY unless the domain genuinely needs it — a wrong prompt
     # hurts accuracy more than it helps.
@@ -50,6 +63,7 @@ class Mode:
 
     # --- analysis ---
     analyze_ielts: bool = False    # pronunciation / grammar / phrasing report
+    summarize: bool = False        # classroom: extract key points / summary
 
     # --- terminology ---
     fix_terminology: bool = False  # classroom only; spelling of domain terms
@@ -70,13 +84,13 @@ GENERAL = Mode(
 CLASSROOM = Mode(
     key="classroom",
     label="课堂录音",
-    description="空旷/有回声的教室。轻度降噪，聚焦主讲人，排除旁人闲聊。术语拼写纠正。不改句子。",
+    description="空旷/有回声的教室：降噪、聚焦主讲人、排除旁人；自动提取重点并生成总结。",
     language=None,
     initial_prompt="",
     condition_on_previous=False,   # noisy → avoid repetition loops
     denoise=True,
     keep_main_speaker_only=True,
-    fix_terminology=True,
+    summarize=True,                # extract key points + summary
     formats=["txt", "md", "docx"],
 )
 
@@ -84,6 +98,8 @@ IELTS = Mode(
     key="ielts",
     label="雅思口语教官",
     description="教官与考生对话练习。尊重原文（绝不纠正），区分教官/考生，标注疑似读音、语法、表达问题，生成反馈。",
+    engine="auto",             # GPU (mlx) — code-switching handled by chunking
+    chunk_sec=30.0,            # smaller chunks → finer turn/language separation
     language=None,
     initial_prompt="",
     condition_on_previous=True,

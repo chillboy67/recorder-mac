@@ -73,6 +73,17 @@ to fetching it from HuggingFace on first use.
 - We feed the **whole file** to Whisper rather than pre-chunking — this is the
   single biggest accuracy improvement over the old pipeline.
 - Nothing is ever paraphrased. Errors in speech are preserved verbatim.
+- **Code-switching (中英混合):** plain mlx does one global language pass and
+  translates the minority language away. IELTS mode keeps the GPU but splits the
+  audio at silences and detects language **per chunk** (`chunked_language`), so
+  Chinese coach feedback stays Chinese and English answers stay English — on the
+  GPU. General/classroom use the fast single-pass (monolingual). faster-whisper
+  (CPU) remains the automatic fallback if mlx is unavailable.
+- **Speaker separation** is frame-level voice embeddings + clustering, with a
+  language fallback: when two same-gender voices are acoustically too close to
+  split, Chinese segments are attributed to the coach (教官) and English to the
+  student (考生). The student's English is what the pronunciation/grammar
+  analysis runs on.
 
 ## Test
 

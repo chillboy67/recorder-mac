@@ -25,10 +25,9 @@ from core.modes import GENERAL, CLASSROOM, IELTS
 MODES = [GENERAL, CLASSROOM, IELTS]
 
 MODELS = [
-    ("large-v3", "large-v3（最准，推荐）"),
-    ("large-v3-turbo", "large-v3-turbo（更快，略降）"),
-    ("medium", "medium（更省内存）"),
-    ("small", "small（最快，精度一般）"),
+    ("large-v3", "最准（large-v3）"),
+    ("large-v3-turbo", "均衡（速度与准确兼顾）"),
+    ("small", "最快（最省资源）"),
 ]
 
 

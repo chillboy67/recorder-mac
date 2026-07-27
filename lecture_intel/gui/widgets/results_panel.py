@@ -72,13 +72,14 @@ class ResultsPanel(QWidget):
         files = result_info.get("files", [])
         stats = result_info.get("stats", {})
         ielts = result_info.get("ielts")
+        classroom = result_info.get("classroom")
         mode = result_info.get("mode", "general")
 
-        # Index files by extension (skip the .ielts.md report — shown specially)
+        # Index files by extension (skip the special report .md, shown in a tab)
         self._files = {}
         for f in files:
             name = Path(f).name
-            if name.endswith(".ielts.md"):
+            if name.endswith(".ielts.md") or name.endswith(".summary.md"):
                 continue
             ext = Path(f).suffix.lower().lstrip(".")
             self._files[ext] = f
@@ -93,15 +94,20 @@ class ResultsPanel(QWidget):
             bits.append(f"发音疑点 {ielts.get('pron_issue_count', 0)} · "
                         f"语法 {ielts.get('grammar_issue_count', 0)} · "
                         f"{ielts.get('wpm', 0):.0f} WPM")
+        if classroom:
+            bits.append(f"重点 {classroom.get('emphasis_count', 0)} · "
+                        f"定义 {classroom.get('definition_count', 0)}")
         self._status_bar.setText("  ·  ".join(bits))
 
         # Clear old tabs
         while self._tabs.count():
             self._tabs.removeTab(0)
 
-        # IELTS feedback report first (rendered markdown)
+        # Special report tab first (rendered markdown)
         if ielts and ielts.get("markdown"):
             self._add_text_tab("📋 雅思反馈", ielts["markdown"], mono=False)
+        if classroom and classroom.get("markdown"):
+            self._add_text_tab("📋 重点总结", classroom["markdown"], mono=False)
 
         # One tab per format
         for ext in ("md", "txt", "srt", "json"):

@@ -25,6 +25,7 @@ Design decisions that matter for accuracy (these fix the old pipeline's
 from __future__ import annotations
 
 import logging
+import re
 import time
 from pathlib import Path
 from typing import Callable, Optional
@@ -80,18 +81,35 @@ class Transcriber:
         language: Optional[str] = None,
         initial_prompt: str = "",
         condition_on_previous: bool = True,
+        chunked: bool = False,
+        chunk_sec: float = 90.0,
         duration_sec: float = 0.0,
         progress: Optional[Callable[[float, str], None]] = None,
     ) -> ASRResult:
-        """Transcribe a (normalized 16k mono wav) file in one pass."""
+        """Transcribe a (normalized 16k mono wav) file.
+
+        chunked=True (used by IELTS): split at silences and detect language per
+        chunk. This keeps zh/en code-switching while still running on the GPU
+        via mlx — mlx's normal single-pass locks to one global language.
+        """
         engine = self._resolve_engine()
-        logger.info("Transcribing with %s (model=%s)", engine, self.model)
+        logger.info("Transcribing with %s (model=%s, chunked=%s)", engine, self.model, chunked)
         if progress:
             progress(0.0, f"加载 {self.model} 模型 ({engine})…")
 
         warnings: list[str] = []
         t0 = time.time()
-        if engine == "mlx-whisper":
+        if engine == "mlx-whisper" and chunked and language is None:
+            try:
+                raw_segments, detected_lang = self._transcribe_mlx_chunked(
+                    audio_path, initial_prompt, progress, chunk_sec
+                )
+            except Exception as exc:
+                logger.warning("chunked mlx failed (%s); falling back to single-pass", exc)
+                raw_segments, detected_lang = self._transcribe_mlx(
+                    audio_path, language, initial_prompt, condition_on_previous, progress
+                )
+        elif engine == "mlx-whisper":
             try:
                 raw_segments, detected_lang = self._transcribe_mlx(
                     audio_path, language, initial_prompt, condition_on_previous, progress
@@ -116,6 +134,7 @@ class Transcriber:
         dt = time.time() - t0
 
         segments = self._to_segments(raw_segments)
+        segments = _suppress_repetition(segments)
         full_text = " ".join(s.text for s in segments).strip()
         language_label, _ = self._language_mix(full_text, detected_lang)
 
@@ -208,6 +227,99 @@ class Transcriber:
         segs = result.get("segments", [])
         lang = result.get("language", language or "en")
         return segs, lang
+
+    def _transcribe_mlx_chunked(self, audio_path, initial_prompt, progress, chunk_sec=90.0):
+        """GPU code-switching: split at silences, detect language per chunk.
+
+        mlx runs on the GPU but does ONE global language pass, so it translates
+        the minority language away on mixed zh/en audio. Splitting at natural
+        pauses and transcribing each chunk with its own language detection keeps
+        both languages — and stays on the GPU (fast). Chunk boundaries are at
+        silences, so accuracy at the seams is preserved.
+        """
+        import mlx_whisper
+        import numpy as np
+        import soundfile as sf
+
+        wav, sr = sf.read(str(audio_path))
+        if wav.ndim > 1:
+            wav = wav.mean(axis=1)
+        wav = wav.astype(np.float32)
+        if sr != 16000:
+            import librosa
+            wav = librosa.resample(wav, orig_sr=sr, target_sr=16000)
+            sr = 16000
+
+        chunks = self._silence_chunks(wav, sr, max_sec=chunk_sec)
+        repo = self._mlx_repo()
+        logger.info("Chunked mlx: %d chunk(s)", len(chunks))
+
+        all_segs: list[dict] = []
+        langs: list[str] = []
+        for i, (a, b) in enumerate(chunks):
+            clip = wav[a:b]
+            if len(clip) < int(0.2 * sr):
+                continue
+            r = mlx_whisper.transcribe(
+                clip, path_or_hf_repo=repo, language=None,
+                initial_prompt=initial_prompt or None, word_timestamps=True,
+                condition_on_previous_text=False, temperature=_TEMPERATURE_LADDER,
+                no_speech_threshold=_NO_SPEECH_THRESHOLD,
+                logprob_threshold=_LOGPROB_THRESHOLD,
+                compression_ratio_threshold=_COMPRESSION_RATIO_THRESHOLD,
+            )
+            offset = a / sr
+            for seg in r.get("segments", []):
+                seg = dict(seg)
+                seg["start"] = seg.get("start", 0.0) + offset
+                seg["end"] = seg.get("end", 0.0) + offset
+                seg["words"] = [
+                    {**w, "start": w.get("start", 0.0) + offset,
+                     "end": w.get("end", 0.0) + offset}
+                    for w in seg.get("words", [])
+                ]
+                all_segs.append(seg)
+            if r.get("language"):
+                langs.append(r["language"])
+            if progress:
+                progress(0.05 + 0.9 * (i + 1) / len(chunks), "转写中（GPU 分块）…")
+
+        # overall language label = most common per-chunk detection
+        lang = max(set(langs), key=langs.count) if langs else "en"
+        return all_segs, lang
+
+    @staticmethod
+    def _silence_chunks(wav, sr, max_sec: float = 28.0, top_db: int = 30):
+        """Return [(start_sample, end_sample)] chunks split on silence.
+
+        Speech regions are merged (absorbing short gaps) up to max_sec, breaking
+        only at silences so no word is cut. Falls back to one chunk if VAD finds
+        nothing."""
+        import librosa
+        import numpy as np
+
+        try:
+            intervals = librosa.effects.split(wav, top_db=top_db,
+                                               frame_length=2048, hop_length=512)
+        except Exception:
+            intervals = np.array([[0, len(wav)]])
+        if len(intervals) == 0:
+            return [(0, len(wav))]
+
+        max_len = int(max_sec * sr)
+        chunks: list[tuple[int, int]] = []
+        cur_a, cur_b = int(intervals[0][0]), int(intervals[0][1])
+        for s, e in intervals[1:]:
+            s, e = int(s), int(e)
+            if e - cur_a <= max_len:
+                cur_b = e               # extend (absorbs the silent gap)
+            else:
+                chunks.append((cur_a, cur_b))
+                cur_a, cur_b = s, e
+        chunks.append((cur_a, cur_b))
+        # small padding so onsets/codas aren't clipped
+        pad = int(0.15 * sr)
+        return [(max(0, a - pad), min(len(wav), b + pad)) for a, b in chunks]
 
     # ------------------------------------------------------------------
     # faster-whisper (CPU fallback)
@@ -303,6 +415,58 @@ class Transcriber:
         if ratio > 0.15:
             return "mixed", ratio
         return "en", ratio
+
+
+def _suppress_repetition(segments):
+    """Collapse Whisper hallucination loops (e.g. "about this about this …" ×30).
+
+    These are ASR artifacts, not speech, so removing them isn't "changing the
+    speaker's words" — the speaker never said the phrase 30 times. We collapse a
+    phrase repeated ≥3× in a row to one copy, then drop consecutive segments that
+    became identical (a loop often spans several segments)."""
+    cleaned = []
+    prev_norm = None
+    for s in segments:
+        s.text = _collapse_repeats(s.text)
+        norm = re.sub(r"\s+", " ", s.text.strip().lower())
+        if norm and norm == prev_norm and len(norm.split()) <= 8:
+            continue   # consecutive duplicate from a loop
+        cleaned.append(s)
+        if norm:
+            prev_norm = norm
+    # renumber ids so downstream stays consistent
+    for i, s in enumerate(cleaned):
+        s.id = i
+    return cleaned
+
+
+def _collapse_repeats(text: str) -> str:
+    """Collapse an n-gram (n=1..4) repeated ≥4× consecutively down to one copy.
+
+    ≥4 (not 3) so genuine emphasis like "no, no, no" is preserved — only runaway
+    loops are caught. Smaller n first so "no no no no" collapses fully."""
+    words = text.split()
+    if len(words) < 6:
+        return text
+    for n in (1, 2, 3, 4):
+        out, i = [], 0
+        while i < len(words):
+            gram = words[i:i + n]
+            if len(gram) < n:
+                out.extend(words[i:])
+                break
+            reps, j = 1, i + n
+            while words[j:j + n] == gram:
+                reps += 1
+                j += n
+            if reps >= 4:
+                out.extend(gram)   # keep a single copy
+                i = j
+            else:
+                out.append(words[i])
+                i += 1
+        words = out
+    return " ".join(words)
 
 
 def _local_model_dir(model: str):

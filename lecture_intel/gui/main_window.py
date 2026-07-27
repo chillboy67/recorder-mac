@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QMenuBar,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QSplitter,
     QStatusBar,
     QVBoxLayout,
@@ -123,11 +124,10 @@ class MainWindow(QMainWindow):
         # Horizontal splitter: left (input+settings) | right (progress+results)
         splitter = QSplitter(Qt.Horizontal)
 
-        # -- Left column --
+        # -- Left column (scrollable so nothing clips on small windows) --
         left_col = QWidget()
-        left_col.setFixedWidth(300)
         left_layout = QVBoxLayout(left_col)
-        left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.setContentsMargins(0, 0, 8, 0)
         left_layout.setSpacing(12)
 
         self._input_panel = InputPanel()
@@ -141,7 +141,14 @@ class MainWindow(QMainWindow):
         left_layout.addWidget(self._cancel_btn)
         left_layout.addStretch()
 
-        splitter.addWidget(left_col)
+        left_scroll = QScrollArea()
+        left_scroll.setWidget(left_col)
+        left_scroll.setWidgetResizable(True)
+        left_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        left_scroll.setFrameShape(QScrollArea.NoFrame)
+        left_scroll.setFixedWidth(316)
+        left_scroll.setStyleSheet("QScrollArea { background: transparent; }")
+        splitter.addWidget(left_scroll)
 
         # -- Right column --
         right_splitter = QSplitter(Qt.Vertical)
@@ -289,6 +296,11 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event) -> None:
         self._prefs.setValue("geometry", self.saveGeometry())
         if self._worker and self._worker.isRunning():
+            # cancel() terminates the child process; then we MUST wait for the
+            # QThread to actually finish before it's destroyed, or Qt aborts with
+            # "QThread: Destroyed while thread is still running".
             self._worker.cancel()
-            self._worker.wait(2000)
+            if not self._worker.wait(8000):
+                self._worker.terminate()
+                self._worker.wait(2000)
         super().closeEvent(event)
