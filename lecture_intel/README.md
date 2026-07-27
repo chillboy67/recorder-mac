@@ -69,26 +69,34 @@ to fetching it from HuggingFace on first use.
 Tick "本地大模型增强" in the app to enable, after a one-time setup. Everything
 stays on-device.
 
+The app uses **two models and picks by the audio's language** automatically:
+English → `llama3.1:8b` (Meta); Chinese → `qwen-zh:7b` (an uncensored community
+Qwen2.5-7B, "abliterated"). Set up both (ModelScope mirror, since the default
+Ollama registry is blocked in China — it's only a CDN):
+
 ```bash
-brew install ollama
-brew services start ollama
-# Pull a model. In mainland China the default ollama registry is blocked, so use
-# the ModelScope mirror (just a CDN — the model itself is Meta's Llama), then
-# alias it to the name the app expects:
+brew install ollama && brew services start ollama
+
+# English model (Meta Llama 3.1)
 ollama pull modelscope.cn/LLM-Research/Meta-Llama-3.1-8B-Instruct-GGUF
 ollama cp modelscope.cn/LLM-Research/Meta-Llama-3.1-8B-Instruct-GGUF llama3.1:8b
+
+# Chinese model (uncensored Qwen2.5-7B) — multi-quant repo, so download the GGUF
+# and import via a Modelfile:
+curl -L -o qwen-zh.gguf \
+  "https://modelscope.cn/models/QuantFactory/Qwen2.5-7B-Instruct-abliterated-v2-GGUF/resolve/master/Qwen2.5-7B-Instruct-abliterated-v2.Q4_K_M.gguf"
+printf 'FROM ./qwen-zh.gguf\n' > Modelfile
+ollama create qwen-zh:7b -f Modelfile
 ```
 
-What it adds per mode (falls back to offline heuristics if Ollama isn't running):
-- **课堂**: real key-point summary (重点/定义/常考/总结) instead of keyword stats.
-- **雅思**: an AI-examiner critique (grammar / collocation / Chinglish / model
-  rewrite) on top of the confidence-based pronunciation flags. Transcript stays verbatim.
-- **通用**: a tidied, punctuated, paragraphed reading version (words unchanged).
+What the LLM adds per mode (falls back to offline heuristics if Ollama is off):
+- **通用**: AI determines the most accurate full transcript (error correction).
+- **课堂**: corrects the transcript using lecture context + a key-point summary.
+- **雅思**: an AI-examiner critique (grammar / collocation / Chinglish / rewrite)
+  on top of the confidence-based pronunciation flags. Transcript stays verbatim.
 
-Model: `llama3.1:8b` (Meta, ~4.9GB, ~6GB RAM, runs on the GPU; a non-Chinese
-model, good at English and acceptable at Chinese). The app uses `/api/chat` so the
-instruct template is applied. `resolve_model` also matches the un-aliased
-ModelScope name, so the `ollama cp` alias step is optional.
+All on the GPU via `/api/chat`. `resolve_model` tolerates the un-aliased ModelScope
+names, so the `cp`/`create` naming is flexible.
 
 ## Notes on accuracy
 

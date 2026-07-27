@@ -85,11 +85,12 @@ class SettingsPanel(QWidget):
         # -- Local LLM enhancement -------------------------------
         llm_box = QGroupBox("增强（可选）")
         llm_layout = QVBoxLayout(llm_box)
-        self._cb_llm = QCheckBox("本地大模型增强（Ollama）")
+        self._cb_llm = QCheckBox("本地大模型增强（Ollama，中/英自动选模型）")
         self._cb_llm.setChecked(False)
         self._cb_llm.stateChanged.connect(self._save_prefs)
-        llm_hint = QLabel("通用：AI校对全文（更准）　课堂：据上课内容校对+重点总结　"
-                          "雅思：AI考官点评。\n全程本地离线。未安装 Ollama 时自动跳过。")
+        llm_hint = QLabel("中文用中文模型、英文用英文模型（自动判断）。通用：AI校对全文　"
+                          "课堂：据内容校对+重点总结　雅思：AI考官点评。\n"
+                          "全程本地离线。未安装 Ollama 时自动跳过。")
         llm_hint.setWordWrap(True)
         llm_hint.setStyleSheet("color: #8E8E93; font-size: 11px;")
         llm_layout.addWidget(self._cb_llm)
@@ -137,7 +138,8 @@ class SettingsPanel(QWidget):
             "model": self._model_combo.currentData(),
             "formats": formats,
             "use_llm": self._cb_llm.isChecked(),
-            "llm_model": "llama3.1:8b",
+            "llm_model": "llama3.1:8b",      # English
+            "chinese_model": "qwen-zh:7b",   # Chinese (auto-selected for zh audio)
         }
 
     # ── persistence ───────────────────────────────────────────

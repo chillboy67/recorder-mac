@@ -40,6 +40,7 @@ def run_pipeline_subprocess(input_path, output_dir, settings, queue):
             formats=settings.get("formats"),
             use_llm=settings.get("use_llm", False),
             llm_model=settings.get("llm_model", "llama3.1:8b"),
+            chinese_model=settings.get("chinese_model", "qwen-zh:7b"),
             progress=on_progress,
         )
         queue.put(("result", summary))

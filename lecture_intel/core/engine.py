@@ -40,7 +40,8 @@ def run(
     formats: Optional[list[str]] = None,
     languagetool_url: str = "http://127.0.0.1:8010/v2/check",
     use_llm: bool = False,
-    llm_model: str = "llama3.1:8b",
+    llm_model: str = "llama3.1:8b",        # English model
+    chinese_model: str = "qwen-zh:7b",     # Chinese model (uncensored Qwen2.5)
     progress: Optional[ProgressCB] = None,
 ) -> dict:
     """Run the full pipeline for one file. Returns a result summary dict."""
@@ -96,18 +97,23 @@ def run(
     classroom_md: Optional[str] = None
     general_tidy_md: Optional[str] = None
 
-    # Is the local LLM actually usable?
+    # Is the local LLM usable, and which one? Route by the detected language:
+    # Chinese audio → Chinese model; English → English model. Fall back to
+    # whichever is installed if the preferred one isn't.
     llm_on = False
     if use_llm:
         from core import llm as llm_mod
-        resolved = llm_mod.resolve_model(llm_model)
+        prefer = chinese_model if asr.language in ("zh", "mixed") else llm_model
+        alt = llm_model if prefer == chinese_model else chinese_model
+        resolved = (llm_mod.resolve_model(prefer)
+                    or llm_mod.resolve_model(alt))
         if resolved:
-            llm_model = resolved          # tolerate ModelScope-mirror names
+            llm_model = resolved
             llm_on = True
-            logger.info("LLM enhancement on, model=%s", llm_model)
+            logger.info("LLM on: language=%s → model=%s", asr.language, llm_model)
         else:
             warnings.append("已勾选本地大模型，但 Ollama 未运行或模型未安装，已回退离线处理。")
-            logger.warning("use_llm requested but Ollama/model unavailable")
+            logger.warning("use_llm requested but no Ollama model available")
 
     # 4) Speaker handling ----------------------------------------------------
     if mode.diarize:
