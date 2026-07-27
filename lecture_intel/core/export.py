@@ -38,7 +38,8 @@ def export_all(
         probe.write_text("ok", encoding="utf-8")
         probe.unlink()
     except (PermissionError, OSError):
-        fallback = Path.home() / "Recorder" / base
+        from core.paths import data_root
+        fallback = data_root() / base
         fallback.mkdir(parents=True, exist_ok=True)
         out_dir = fallback
 

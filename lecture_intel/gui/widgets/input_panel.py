@@ -360,8 +360,8 @@ class RecordTab(QWidget):
 
         import shutil
         from datetime import datetime
-        dest_dir = Path.home() / "Recorder" / "record"
-        dest_dir.mkdir(parents=True, exist_ok=True)
+        from core.paths import record_dir
+        dest_dir = record_dir()
         name = f"录音_{datetime.now():%Y%m%d_%H%M%S}.wav"
         dest = dest_dir / name
         try:

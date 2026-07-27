@@ -230,10 +230,9 @@ class MainWindow(QMainWindow):
             return
 
         settings = self._settings.get_settings()
-        # Write to a non-protected, user-visible folder. Writing next to an
-        # uploaded file in ~/Documents/~/Desktop would be blocked by macOS TCC
-        # for a Finder-launched app, so we default to ~/Recorder.
-        output_dir = str(Path.home() / "Recorder" / Path(input_path).stem)
+        # All user data lives under ~/Documents/recorder/Recorder (see core.paths).
+        from core.paths import data_root
+        output_dir = str(data_root() / Path(input_path).stem)
         Path(output_dir).mkdir(parents=True, exist_ok=True)
 
         active_steps = list(_STEPS_BY_MODE.get(settings["mode"], _STEPS_BY_MODE["general"]))
@@ -308,9 +307,8 @@ class MainWindow(QMainWindow):
         self._status_bar.showMessage("就绪")
 
     def _reveal_output(self) -> None:
-        output_dir = Path.home() / "Recorder"
-        output_dir.mkdir(parents=True, exist_ok=True)
-        subprocess.run(["open", str(output_dir)])
+        from core.paths import data_root
+        subprocess.run(["open", str(data_root())])
 
     def _open_readme(self) -> None:
         readme = Path(__file__).parent.parent / "README.md"
