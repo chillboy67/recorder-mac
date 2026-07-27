@@ -23,6 +23,7 @@ from PySide6.QtMultimedia import (
 from PySide6.QtWidgets import (
     QComboBox,
     QFileDialog,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QPushButton,
@@ -32,6 +33,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from gui import theme
 from gui.widgets.common import NoScrollComboBox
 
 SUPPORTED_EXTENSIONS: set[str] = {
@@ -130,32 +132,30 @@ class RecordTab(QWidget):
         mic_row.addWidget(self._mic_combo)
         layout.addWidget(self._mic_widget)
 
-        # Clock display
+        # Clock display (theme-styled: big, thin, tabular)
         self._time_label = QLabel("00:00:00")
+        self._time_label.setObjectName("clock")
         self._time_label.setAlignment(Qt.AlignCenter)
-        self._time_label.setStyleSheet(
-            "font-size: 36px; font-weight: 200; color: #1C1C1E;"
-            " letter-spacing: 4px;"
-        )
         layout.addWidget(self._time_label)
 
-        # Status text
+        # Status text (colored via theme tones)
         self._status_label = QLabel("准备就绪")
         self._status_label.setAlignment(Qt.AlignCenter)
-        self._status_label.setStyleSheet("color: #8E8E93; font-size: 12px;")
+        theme.set_tone(self._status_label, "hint")
         layout.addWidget(self._status_label)
 
-        # Record / Stop button
-        self._rec_btn = QPushButton("⏺  开始录音")
+        # Record / Stop button (accent idle → red while recording, via QSS)
+        self._rec_btn = QPushButton("●  开始录音")
+        self._rec_btn.setObjectName("record")
         self._rec_btn.setFixedHeight(48)
-        self._rec_btn.setStyleSheet(_STYLE_IDLE)
+        self._rec_btn.setCursor(Qt.PointingHandCursor)
         self._rec_btn.clicked.connect(self._toggle_recording)
         layout.addWidget(self._rec_btn)
 
         # Saved-file info (hidden until recording stops)
         self._file_label = QLabel("")
         self._file_label.setAlignment(Qt.AlignCenter)
-        self._file_label.setStyleSheet("color: #34C759; font-size: 11px;")
+        theme.set_tone(self._file_label, "ok")
         self._file_label.setVisible(False)
         layout.addWidget(self._file_label)
 
@@ -261,18 +261,19 @@ class RecordTab(QWidget):
         self._is_recording = True
         self._elapsed_s = 0
         self._timer.start()
-        self._rec_btn.setText("⏹  停止录音")
-        self._rec_btn.setStyleSheet(_STYLE_RECORDING)
+        self._rec_btn.setText("■  停止录音")
+        self._rec_btn.setProperty("recording", True)
+        theme.repolish(self._rec_btn)
         self._status_label.setText("录音中…")
-        self._status_label.setStyleSheet(
-            "color: #FF3B30; font-size: 12px; font-weight: 500;")
+        theme.set_tone(self._status_label, "danger")
         self._file_label.setVisible(False)
 
     def _exit_recording_ui(self) -> None:
         self._is_recording = False
         self._timer.stop()
-        self._rec_btn.setText("⏺  开始录音")
-        self._rec_btn.setStyleSheet(_STYLE_IDLE)
+        self._rec_btn.setText("●  开始录音")
+        self._rec_btn.setProperty("recording", False)
+        theme.repolish(self._rec_btn)
 
     def _abort_recording(self) -> None:
         try:
@@ -329,7 +330,7 @@ class RecordTab(QWidget):
         size_mb = Path(self._temp_path).stat().st_size / 1_048_576
         dur_str = _format_time(self._elapsed_s)
         self._status_label.setText("录音已就绪")
-        self._status_label.setStyleSheet("color: #34C759; font-size: 12px;")
+        theme.set_tone(self._status_label, "ok")
         self._file_label.setText(f"{dur_str}  ·  {size_mb:.1f} MB")
         self._file_label.setVisible(True)
         self.recording_ready.emit(self._temp_path)
@@ -339,7 +340,7 @@ class RecordTab(QWidget):
         self._exit_recording_ui()
         self._source_combo.setEnabled(True)
         self._status_label.setText("未开始")
-        self._status_label.setStyleSheet("color: #8E8E93; font-size: 12px;")
+        theme.set_tone(self._status_label, "hint")
         QMessageBox.warning(self, "录音", msg)
 
     def _maybe_save_recording(self, temp_path: str) -> str:
@@ -374,11 +375,12 @@ class RecordTab(QWidget):
 
     def _on_error(self, error: QMediaRecorder.Error, error_string: str) -> None:
         self._status_label.setText(f"错误：{error_string}")
-        self._status_label.setStyleSheet("color: #FF3B30; font-size: 12px;")
+        theme.set_tone(self._status_label, "danger")
         self._is_recording = False
         self._timer.stop()
-        self._rec_btn.setText("⏺  开始录音")
-        self._rec_btn.setStyleSheet(_STYLE_IDLE)
+        self._rec_btn.setText("●  开始录音")
+        self._rec_btn.setProperty("recording", False)
+        theme.repolish(self._rec_btn)
 
     # ── Clock ───────────────────────────────────────────────
 
@@ -401,10 +403,11 @@ class RecordTab(QWidget):
         self._elapsed_s = 0
         self._time_label.setText("00:00:00")
         self._status_label.setText("准备就绪")
-        self._status_label.setStyleSheet("color: #8E8E93; font-size: 12px;")
+        theme.set_tone(self._status_label, "hint")
         self._file_label.setVisible(False)
-        self._rec_btn.setText("⏺  开始录音")
-        self._rec_btn.setStyleSheet(_STYLE_IDLE)
+        self._rec_btn.setText("●  开始录音")
+        self._rec_btn.setProperty("recording", False)
+        theme.repolish(self._rec_btn)
         self._source_combo.setEnabled(True)
 
 
@@ -427,29 +430,40 @@ class FileTab(QWidget):
         layout = QVBoxLayout(self)
         layout.setSpacing(10)
 
-        # Drop zone (display only — no click handling)
-        self._drop_area = QLabel(
-            "🎵\n\n把音频拖到这里\n\n"
-            "m4a · mp3 · wav · webm · flac · aac"
-        )
-        self._drop_area.setAlignment(Qt.AlignCenter)
-        self._drop_area.setMinimumHeight(120)
-        self._reset_drop_style()
+        # Drop zone (display only — no click handling). A frame with a drawn
+        # waveform glyph + two labels; all colors come from the theme QSS via
+        # the "state" property (default / hover / selected).
+        self._drop_area = QFrame()
+        self._drop_area.setObjectName("dropArea")
+        self._drop_area.setMinimumHeight(130)
+        drop_layout = QVBoxLayout(self._drop_area)
+        drop_layout.setAlignment(Qt.AlignCenter)
+        drop_layout.setSpacing(6)
+
+        self._drop_icon = QLabel()
+        self._drop_icon.setAlignment(Qt.AlignCenter)
+        self._drop_icon.setPixmap(theme.wave_pixmap(30))
+        drop_layout.addWidget(self._drop_icon)
+
+        self._drop_title = QLabel("把音频拖到这里")
+        self._drop_title.setObjectName("dropTitle")
+        self._drop_title.setAlignment(Qt.AlignCenter)
+        self._drop_title.setWordWrap(True)
+        drop_layout.addWidget(self._drop_title)
+
+        self._drop_sub = QLabel("m4a · mp3 · wav · webm · flac · aac")
+        self._drop_sub.setObjectName("dropSub")
+        self._drop_sub.setAlignment(Qt.AlignCenter)
+        drop_layout.addWidget(self._drop_sub)
+
+        self._set_drop_state("default")
         layout.addWidget(self._drop_area)
 
         # Independent Browse button (avoids mousePressEvent pitfalls)
         self._browse_btn = QPushButton("选择文件…")
+        self._browse_btn.setObjectName("ghost")
         self._browse_btn.setFixedHeight(40)
         self._browse_btn.setCursor(Qt.PointingHandCursor)
-        self._browse_btn.setStyleSheet("""
-            QPushButton {
-                background: #EAF3FF; color: #0A84FF;
-                border: 1px solid #CFE4FF; border-radius: 10px;
-                font-size: 13px; font-weight: 600;
-            }
-            QPushButton:hover   { background: #DCEBFF; }
-            QPushButton:pressed { background: #CFE4FF; }
-        """)
         self._browse_btn.clicked.connect(self._browse)
         layout.addWidget(self._browse_btn)
 
@@ -457,11 +471,15 @@ class FileTab(QWidget):
         self._file_label = QLabel("")
         self._file_label.setAlignment(Qt.AlignCenter)
         self._file_label.setWordWrap(True)
-        self._file_label.setStyleSheet("color: #0A84FF; font-size: 12px; font-weight: 600;")
+        theme.set_tone(self._file_label, "ok")
         self._file_label.setVisible(False)
         layout.addWidget(self._file_label)
 
         layout.addStretch()
+
+    def refresh_theme(self) -> None:
+        """Redraw the scheme-colored glyph after an appearance switch."""
+        self._drop_icon.setPixmap(theme.wave_pixmap(30))
 
     # ── Browse ──────────────────────────────────────────────
 
@@ -483,14 +501,7 @@ class FileTab(QWidget):
             for url in event.mimeData().urls():
                 if Path(url.toLocalFile()).suffix.lower() in SUPPORTED_EXTENSIONS:
                     event.acceptProposedAction()
-                    self._drop_area.setStyleSheet("""
-                        QLabel {
-                            border: 2px dashed #0A84FF;
-                            border-radius: 14px;
-                            background: #EAF3FF;
-                            color: #0A84FF; font-size: 13px;
-                        }
-                    """)
+                    self._set_drop_state("hover")
                     return
         event.ignore()
 
@@ -505,19 +516,15 @@ class FileTab(QWidget):
                 break
         self._reset_drop_style()
 
+    def _set_drop_state(self, state: str) -> None:
+        self._drop_area.setProperty("state", state)
+        theme.repolish(self._drop_area)
+        for child in (self._drop_title, self._drop_sub):
+            theme.repolish(child)
+
     def _reset_drop_style(self) -> None:
-        selected = self._selected_path is not None
-        color = "#34C759" if selected else "#D2D3D9"
-        bg = "#F0FBF3" if selected else "#FAFBFC"
-        text = "#34C759" if selected else "#9A9AA2"
-        self._drop_area.setStyleSheet(f"""
-            QLabel {{
-                border: 2px dashed {color};
-                border-radius: 14px;
-                background: {bg};
-                color: {text}; font-size: 13px;
-            }}
-        """)
+        self._set_drop_state(
+            "selected" if self._selected_path is not None else "default")
 
     def _set_file(self, path: str) -> None:
         self._selected_path = path
@@ -525,7 +532,8 @@ class FileTab(QWidget):
         size_mb = p.stat().st_size / 1_048_576
         self._file_label.setText(f"✓  {p.name}\n{size_mb:.1f} MB")
         self._file_label.setVisible(True)
-        self._drop_area.setText(f"✓ 已选择\n\n{p.name}")
+        self._drop_title.setText(f"已选择　{p.name}")
+        self._drop_sub.setText(f"{size_mb:.1f} MB · 可以开始转写")
         self._reset_drop_style()
         self.file_selected.emit(path)
 
@@ -536,10 +544,8 @@ class FileTab(QWidget):
     def reset(self) -> None:
         self._selected_path = None
         self._file_label.setVisible(False)
-        self._drop_area.setText(
-            "🎵\n\n把音频拖到这里\n\n"
-            "m4a · mp3 · wav · webm · flac · aac"
-        )
+        self._drop_title.setText("把音频拖到这里")
+        self._drop_sub.setText("m4a · mp3 · wav · webm · flac · aac")
         self._reset_drop_style()
 
 
@@ -572,8 +578,8 @@ class InputPanel(QWidget):
         self._record_tab = RecordTab()
         self._file_tab = FileTab()
 
-        self._tabs.addTab(self._record_tab, "🎙 录音")
-        self._tabs.addTab(self._file_tab, "📁 文件")
+        self._tabs.addTab(self._record_tab, "录 音")
+        self._tabs.addTab(self._file_tab, "文 件")
 
         self._record_tab.recording_ready.connect(self.file_ready)
         self._file_tab.file_selected.connect(self.file_ready)
@@ -590,6 +596,10 @@ class InputPanel(QWidget):
         self._record_tab.reset()
         self._file_tab.reset()
 
+    def refresh_theme(self) -> None:
+        """Redraw scheme-colored glyphs after an appearance switch."""
+        self._file_tab.refresh_theme()
+
 
 # ═══════════════════════════════════════════════════════════════
 # Shared helpers & styles
@@ -599,22 +609,3 @@ def _format_time(s: int) -> str:
     h, rem = divmod(s, 3600)
     m, sec = divmod(rem, 60)
     return f"{h:02d}:{m:02d}:{sec:02d}"
-
-
-_STYLE_IDLE = """
-    QPushButton {
-        background: #0A84FF; color: white; border: none;
-        border-radius: 12px; font-size: 15px; font-weight: 600;
-    }
-    QPushButton:hover   { background: #0066D6; }
-    QPushButton:pressed { background: #0059BE; }
-"""
-
-_STYLE_RECORDING = """
-    QPushButton {
-        background: #FF3B30; color: white; border: none;
-        border-radius: 12px; font-size: 15px; font-weight: 600;
-    }
-    QPushButton:hover   { background: #E0271D; }
-    QPushButton:pressed { background: #C71F16; }
-"""

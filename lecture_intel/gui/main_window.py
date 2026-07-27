@@ -10,7 +10,6 @@ from PySide6.QtCore import Qt, QSettings
 from PySide6.QtGui import QAction, QActionGroup, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
-    QGroupBox,
     QMainWindow,
     QMenu,
     QMenuBar,
@@ -54,13 +53,6 @@ class MainWindow(QMainWindow):
         self._build_menu()
         self._build_ui()
         self._build_status_bar()
-        self._apply_shadows()
-
-    def _apply_shadows(self) -> None:
-        """Soft drop shadows give the cards depth (QSS can't do shadows)."""
-        for gb in self.findChildren(QGroupBox):
-            theme.add_card_shadow(gb)
-        theme.add_glow(self._process_btn)
 
     def showEvent(self, event) -> None:
         super().showEvent(event)
@@ -122,7 +114,7 @@ class MainWindow(QMainWindow):
     def _set_appearance(self, mode: str) -> None:
         self._prefs.setValue("appearance", mode)
         theme.apply(QApplication.instance(), mode)
-        self._apply_shadows()   # shadow colors depend on the scheme
+        self._input_panel.refresh_theme()   # redraw scheme-colored glyphs
 
     # ── Central UI ────────────────────────────────────────────
 
@@ -155,8 +147,9 @@ class MainWindow(QMainWindow):
         left_col = QWidget()
         left_layout = QVBoxLayout(left_col)
         # Generous right margin so the macOS overlay scrollbar never draws over
-        # the buttons' right edge / rounded corner.
-        left_layout.setContentsMargins(2, 0, 26, 0)
+        # the buttons' right edge / rounded corner; a little bottom padding so
+        # the last button never sits flush against the viewport edge.
+        left_layout.setContentsMargins(2, 0, 26, 10)
         left_layout.setSpacing(12)
 
         self._input_panel = InputPanel()

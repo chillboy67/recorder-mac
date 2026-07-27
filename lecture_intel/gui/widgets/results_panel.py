@@ -21,6 +21,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from gui import theme
+
 
 class ResultsPanel(QWidget):
     """Tabbed preview of generated output files."""
@@ -40,7 +42,7 @@ class ResultsPanel(QWidget):
 
         # Status bar
         self._status_bar = QLabel("暂无结果")
-        self._status_bar.setStyleSheet("color: #8E8E93; font-size: 12px;")
+        theme.set_tone(self._status_bar, "hint")
         layout.addWidget(self._status_bar)
 
         # Tab widget for per-format preview
@@ -105,13 +107,13 @@ class ResultsPanel(QWidget):
 
         # Special report tab first (rendered markdown)
         if ielts and ielts.get("markdown"):
-            self._add_text_tab("📋 雅思反馈", ielts["markdown"], mono=False)
+            self._add_text_tab("雅思反馈", ielts["markdown"], mono=False)
         if classroom and classroom.get("markdown"):
-            title = "📋 重点总结" + ("（AI）" if classroom.get("llm") else "")
+            title = "重点总结" + ("（AI）" if classroom.get("llm") else "")
             self._add_text_tab(title, classroom["markdown"], mono=False)
         tidy = stats.get("tidy_markdown")
         if tidy:
-            self._add_text_tab("📋 AI校对版", tidy, mono=False)
+            self._add_text_tab("AI 校对版", tidy, mono=False)
 
         # One tab per format
         for ext in ("md", "txt", "srt", "json"):

@@ -18,6 +18,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from gui import theme
+
 STEP_LABELS: dict[str, str] = {
     "load":     "加载音频",
     "denoise":  "降噪处理",
@@ -34,12 +36,16 @@ STATUS_ICONS: dict[str, str] = {
     "error":   "✗",   # ✗
 }
 
-STATUS_COLORS: dict[str, str] = {
-    "waiting": "#C7C7CC",
-    "running": "#0A84FF",
-    "done":    "#34C759",
-    "error":   "#FF3B30",
-}
+
+def _status_color(status: str) -> str:
+    """Step colors come from the active theme so dark mode stays legible."""
+    c = theme.current_scheme()
+    return {
+        "waiting": c["ink3"],
+        "running": c["accent"],
+        "done":    c["ok"],
+        "error":   c["danger"],
+    }.get(status, c["accent"])
 
 
 class ProgressPanel(QWidget):
@@ -58,32 +64,19 @@ class ProgressPanel(QWidget):
         self._layout.setSpacing(6)
         self._layout.setContentsMargins(0, 10, 0, 0)
 
-        # Overall progress bar
+        # Overall progress bar (colors/gradient come from the global theme)
         self._progress_bar = QProgressBar()
         self._progress_bar.setRange(0, 100)
         self._progress_bar.setValue(0)
-        # The bar is a thin 6px sliver — its built-in % text doesn't fit and
+        # The bar is a thin sliver — its built-in % text doesn't fit and
         # overlaps the label below. Hide it; show the percent in the label.
         self._progress_bar.setTextVisible(False)
-        self._progress_bar.setFixedHeight(6)
-        self._progress_bar.setStyleSheet("""
-            QProgressBar {
-                border: none;
-                background: #E5E5EA;
-                border-radius: 3px;
-            }
-            QProgressBar::chunk {
-                background: #0A84FF;
-                border-radius: 3px;
-            }
-        """)
+        self._progress_bar.setFixedHeight(8)
         self._layout.addWidget(self._progress_bar)
 
         # Current operation label
         self._current_label = QLabel("等待文件…")
-        self._current_label.setStyleSheet(
-            "color: gray; font-size: 12px; margin: 4px 0;"
-        )
+        theme.set_tone(self._current_label, "hint")
         self._layout.addWidget(self._current_label)
 
         # Step list container
@@ -107,27 +100,29 @@ class ProgressPanel(QWidget):
 
         self._progress_bar.setValue(0)
         self._current_label.setText("开始…")
+        theme.set_tone(self._current_label, "hint")
 
+        c = theme.current_scheme()
         # Create a row per step
         for step in enabled_steps:
             label = STEP_LABELS.get(step, step)
 
             row = QWidget()
             row_layout = QHBoxLayout(row)
-            row_layout.setContentsMargins(0, 0, 0, 0)
-            row_layout.setSpacing(8)
+            row_layout.setContentsMargins(0, 2, 0, 2)
+            row_layout.setSpacing(9)
 
             icon_lbl = QLabel(STATUS_ICONS["waiting"])
             icon_lbl.setFixedWidth(16)
             icon_lbl.setStyleSheet(
-                f"color: {STATUS_COLORS['waiting']}; font-size: 13px;"
+                f"color: {_status_color('waiting')}; font-size: 13px;"
             )
 
             name_lbl = QLabel(label)
-            name_lbl.setStyleSheet("color: #8E8E93; font-size: 12px;")
+            name_lbl.setStyleSheet(f"color: {c['ink2']}; font-size: 12px;")
 
             time_lbl = QLabel("")
-            time_lbl.setStyleSheet("color: #C7C7CC; font-size: 11px;")
+            time_lbl.setStyleSheet(f"color: {c['ink3']}; font-size: 11px;")
             time_lbl.setAlignment(Qt.AlignRight)
 
             row_layout.addWidget(icon_lbl)
@@ -157,7 +152,8 @@ class ProgressPanel(QWidget):
 
         w = self._step_widgets[step]
         icon = STATUS_ICONS.get(status, "●")
-        color = STATUS_COLORS.get(status, "#0A84FF")
+        color = _status_color(status)
+        c = theme.current_scheme()
 
         w["icon"].setText(icon)
         w["icon"].setStyleSheet(f"color: {color}; font-size: 13px;")
@@ -165,20 +161,18 @@ class ProgressPanel(QWidget):
         if status == "running":
             self._step_start_times[step] = time.time()
             w["name"].setStyleSheet(
-                "color: #0A84FF; font-size: 12px; font-weight: 500;"
+                f"color: {c['accent']}; font-size: 12px; font-weight: 600;"
             )
         elif status == "done":
             elapsed = time.time() - self._step_start_times.get(step, time.time())
             w["time"].setText(f"{elapsed:.1f}s")
-            w["name"].setStyleSheet("color: #3A3A3C; font-size: 12px;")
+            w["name"].setStyleSheet(f"color: {c['ink']}; font-size: 12px;")
         elif status == "error":
-            w["name"].setStyleSheet("color: #FF3B30; font-size: 12px;")
+            w["name"].setStyleSheet(f"color: {c['danger']}; font-size: 12px;")
 
     def set_total_time(self, seconds: float) -> None:
         """Display final completion message with total elapsed time."""
         self._current_label.setText(
             f"✓ 完成，用时 {seconds:.0f}s"
         )
-        self._current_label.setStyleSheet(
-            "color: #34C759; font-size: 12px; font-weight: 500;"
-        )
+        theme.set_tone(self._current_label, "ok")

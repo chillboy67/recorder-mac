@@ -54,7 +54,6 @@ class SettingsPanel(QWidget):
         self._mode_buttons: dict[str, QRadioButton] = {}
         for m in MODES:
             rb = QRadioButton(m.label)
-            rb.setStyleSheet("font-size: 13px; font-weight: 500;")
             self._mode_group.addButton(rb)
             self._mode_buttons[m.key] = rb
             rb.toggled.connect(lambda checked, k=m.key: self._on_mode(k, checked))
@@ -65,7 +64,7 @@ class SettingsPanel(QWidget):
             # container layout and let the label size to its wrapped content.
             desc = QLabel(m.description)
             desc.setWordWrap(True)
-            desc.setStyleSheet("color: #8E8E93; font-size: 11px;")
+            desc.setProperty("hint", True)
             desc.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.MinimumExpanding)
             row = QHBoxLayout()
             row.setContentsMargins(22, 0, 4, 6)
@@ -93,7 +92,7 @@ class SettingsPanel(QWidget):
                           "课堂：据内容校对+重点总结　雅思：AI考官点评。\n"
                           "全程本地离线。未安装 Ollama 时自动跳过。")
         llm_hint.setWordWrap(True)
-        llm_hint.setStyleSheet("color: #8E8E93; font-size: 11px;")
+        llm_hint.setProperty("hint", True)
         llm_layout.addWidget(self._cb_llm)
         llm_layout.addWidget(llm_hint)
         layout.addWidget(llm_box)

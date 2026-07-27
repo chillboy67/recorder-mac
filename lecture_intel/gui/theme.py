@@ -1,53 +1,58 @@
 """
-Visual theme for Recorder — light + dark, follow-system, with depth.
+Visual theme for Recorder — light + dark, follow-system.
 
-Fusion base (fully stylable) + a hand-tuned palette and stylesheet. Design goals:
-a calm layered canvas, white/elevated cards with soft shadows, a refined indigo
-accent, clear type hierarchy, generous spacing — premium, not flat.
+Fusion base (fully stylable) + a hand-tuned palette and stylesheet, modeled on
+native macOS: flat surfaces, hairline borders, the system blue accent, no
+gradients and no drop shadows (shadow effects clip inside scroll areas and
+look muddy — contrast comes from background layers instead).
+
+All widget colors live HERE. Widgets opt in via objectName / dynamic properties
+(e.g. setProperty("tone", "ok") + theme.repolish(w)) so that switching the
+appearance restyles everything without per-widget code.
 
 Public API:
     theme.apply(app, mode)          mode ∈ {"auto","light","dark"}
-    theme.add_card_shadow(widget)   soft drop shadow for a card/panel
-    theme.add_glow(widget, color)   colored shadow for the primary button
+    theme.set_tone(label, tone)     tone ∈ {"hint","ok","danger","accent"}
+    theme.repolish(widget)          re-evaluate QSS after a property change
+    theme.wave_pixmap(h, color)     waveform glyph (drop zone decoration)
 """
 from __future__ import annotations
 
 import tempfile
 from pathlib import Path
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QPalette
-from PySide6.QtWidgets import QApplication, QGraphicsDropShadowEffect
+from PySide6.QtCore import QPointF, QRectF, Qt
+from PySide6.QtGui import QBrush, QColor, QPainter, QPalette, QPen, QPixmap
+from PySide6.QtWidgets import QApplication
 
-# ── color schemes ───────────────────────────────────────────────────────
+# ── color schemes (zinc neutrals + indigo accent, Linear/Raycast-like) ──
 LIGHT = {
-    "canvas": "#EBEEF3", "canvas2": "#E3E7EF",
-    "card": "#FFFFFF", "border": "#E3E7EE", "divider": "#ECEEF3",
-    "ink": "#15171C", "ink2": "#565D6D", "ink3": "#959CAA",
-    "accent": "#4F6BFF", "accent_dk": "#3F59E8", "accent_soft": "#ECEFFF",
-    "accent_border": "#D5DCFF",
-    "field": "#FFFFFF", "field_border": "#DBDEE8",
-    "danger": "#FF453A", "danger_dk": "#E23B31",
-    "ok": "#2BB673",
-    "tab_bg": "#E1E5EE",
-    "shadow": (20, 28, 56, 38),     # rgba — soft cool shadow
+    "canvas": "#F7F7F8", "canvas2": "#F1F1F3",
+    "card": "#FFFFFF", "border": "#E8E8EC", "divider": "#F0F0F1",
+    "ink": "#18181B", "ink2": "#51525C", "ink3": "#9C9CA5",
+    "accent": "#6366F1", "accent_dk": "#4F46E5", "accent_soft": "#EEF0FE",
+    "accent_border": "#DCE0FB",
+    "field": "#FFFFFF", "field_border": "#E1E1E6",
+    "danger": "#E5484D", "danger_dk": "#D33036", "danger_soft": "#FDEDED",
+    "ok": "#16A34A", "ok_soft": "#EBF7EF",
+    "tab_bg": "#ECECEF",
 }
 DARK = {
-    "canvas": "#131519", "canvas2": "#0F1115",
-    "card": "#1D2027", "border": "#2B313C", "divider": "#262B34",
-    "ink": "#EEF0F5", "ink2": "#A6ADBA", "ink3": "#6C7380",
-    "accent": "#6E86FF", "accent_dk": "#5B79FF", "accent_soft": "#222843",
-    "accent_border": "#33406B",
-    "field": "#242833", "field_border": "#343B47",
-    "danger": "#FF6961", "danger_dk": "#E8554D",
-    "ok": "#32D583",
-    "tab_bg": "#23272F",
-    "shadow": (0, 0, 0, 110),
+    "canvas": "#111113", "canvas2": "#0C0C0E",
+    "card": "#19191C", "border": "#29292E", "divider": "#232327",
+    "ink": "#EEEEF0", "ink2": "#A0A0A8", "ink3": "#64646C",
+    "accent": "#818CF8", "accent_dk": "#6A76F5", "accent_soft": "#232441",
+    "accent_border": "#363868",
+    "field": "#202024", "field_border": "#333338",
+    "danger": "#F2555A", "danger_dk": "#E5484D", "danger_soft": "#3A2224",
+    "ok": "#3DD68C", "ok_soft": "#1B3125",
+    "tab_bg": "#232327",
 }
 
 _state = {"mode": "auto", "app": None, "scheme": LIGHT, "is_dark": False}
 _CHECK_PNG = ""
 _DOT_PNG = ""
+_CHEVRON_PNG = ""
 
 
 def is_dark() -> bool:
@@ -110,6 +115,20 @@ def _on_system_scheme_changed(*_) -> None:
         apply(app, "auto")
 
 
+# ── widget helpers ──────────────────────────────────────────────────────
+
+def repolish(widget) -> None:
+    """Re-evaluate the stylesheet after a dynamic property change."""
+    widget.style().unpolish(widget)
+    widget.style().polish(widget)
+
+
+def set_tone(label, tone: str) -> None:
+    """Color a status QLabel via the [tone=…] QSS rules (theme-aware)."""
+    label.setProperty("tone", tone)
+    repolish(label)
+
+
 # ── palette + qss ───────────────────────────────────────────────────────
 
 def _palette(c: dict) -> QPalette:
@@ -139,94 +158,160 @@ def _qss(c: dict) -> str:
         font-family: -apple-system, "SF Pro Text", "PingFang SC", "Helvetica Neue";
         font-size: 13px; color: {c['ink']}; outline: 0;
     }}
-    QMainWindow, QStatusBar {{ background: {c['canvas']}; }}
-    QStatusBar {{ color: {c['ink3']}; }}
+    QMainWindow {{ background: {c['canvas']}; }}
+    QStatusBar {{ background: transparent; color: {c['ink3']}; font-size: 12px; }}
     QToolTip {{ background: {c['ink']}; color: {c['card']}; border: none;
-               padding: 6px 9px; border-radius: 7px; }}
+               padding: 6px 9px; border-radius: 6px; }}
 
+    /* ── cards ─────────────────────────────────────────────── */
     QGroupBox {{
         background: {c['card']}; border: 1px solid {c['border']};
-        border-radius: 16px; margin-top: 20px; padding: 16px 16px 16px 16px;
+        border-radius: 14px; margin-top: 22px; padding: 16px;
         font-size: 12px; font-weight: 600; color: {c['ink2']};
     }}
     QGroupBox::title {{
         subcontrol-origin: margin; subcontrol-position: top left;
-        left: 16px; top: 3px; padding: 0 3px;
-        color: {c['ink3']}; font-size: 11px; font-weight: 700;
+        left: 4px; top: 2px; padding: 0 2px;
+        color: {c['ink3']}; font-size: 11px; font-weight: 700; letter-spacing: 3px;
     }}
 
+    /* ── status label tones (theme-aware, see theme.set_tone) ─ */
+    QLabel[tone="hint"]   {{ color: {c['ink3']};   font-size: 12px; }}
+    QLabel[tone="ok"]     {{ color: {c['ok']};     font-size: 12px; font-weight: 600; }}
+    QLabel[tone="danger"] {{ color: {c['danger']}; font-size: 12px; font-weight: 600; }}
+    QLabel[tone="accent"] {{ color: {c['accent']}; font-size: 12px; font-weight: 600; }}
+    QLabel[hint="true"]   {{ color: {c['ink3']};   font-size: 11px; }}
+
+    /* ── the recording clock ──────────────────────────────── */
+    QLabel#clock {{
+        font-size: 44px; font-weight: 100; letter-spacing: 1px;
+        font-family: "SF Pro Display", -apple-system, "Helvetica Neue";
+        color: {c['ink']};
+    }}
+
+    /* ── inputs ────────────────────────────────────────────── */
     QComboBox {{
         background: {c['field']}; border: 1px solid {c['field_border']};
-        border-radius: 10px; padding: 8px 12px; min-height: 18px; color: {c['ink']};
+        border-radius: 9px; padding: 7px 11px; min-height: 18px; color: {c['ink']};
     }}
-    QComboBox:hover {{ border-color: {c['accent']}; }}
+    QComboBox:hover {{ border-color: {c['ink3']}; }}
     QComboBox:focus {{ border-color: {c['accent']}; }}
     QComboBox::drop-down {{ border: none; width: 24px; }}
+    QComboBox::down-arrow {{ image: url({_CHEVRON_PNG}); width: 11px; height: 11px; }}
     QComboBox QAbstractItemView {{
-        background: {c['card']}; border: 1px solid {c['border']}; border-radius: 12px;
-        padding: 6px; selection-background-color: {c['accent']}; selection-color: #fff;
+        background: {c['card']}; border: 1px solid {c['border']}; border-radius: 10px;
+        padding: 5px; selection-background-color: {c['accent']}; selection-color: #fff;
         outline: 0;
     }}
 
-    QRadioButton, QCheckBox {{ spacing: 9px; color: {c['ink']};
+    QRadioButton, QCheckBox {{ spacing: 8px; color: {c['ink2']};
                                background: transparent; font-size: 13px; font-weight: 500; }}
-    QRadioButton::indicator, QCheckBox::indicator {{ width: 18px; height: 18px; }}
-    QRadioButton::indicator {{ border: 1.5px solid {c['field_border']};
-                               border-radius: 9px; background: {c['field']}; }}
-    QRadioButton::indicator:checked {{ border: 1.5px solid {c['accent']};
-        border-radius: 9px; background: {c['accent']}; image: url({_DOT_PNG}); }}
+    QRadioButton:checked, QCheckBox:checked {{ color: {c['ink']}; font-weight: 600; }}
+    QRadioButton::indicator, QCheckBox::indicator {{ width: 17px; height: 17px; }}
+    QRadioButton::indicator {{ border: 1px solid {c['field_border']};
+                               border-radius: 8px; background: {c['field']}; }}
+    QRadioButton::indicator:checked {{ border: 1px solid {c['accent']};
+        border-radius: 8px; background: {c['accent']}; image: url({_DOT_PNG}); }}
     QRadioButton::indicator:hover, QCheckBox::indicator:hover {{ border-color: {c['accent']}; }}
-    QCheckBox::indicator {{ border: 1.5px solid {c['field_border']}; border-radius: 6px;
+    QCheckBox::indicator {{ border: 1px solid {c['field_border']}; border-radius: 5px;
                             background: {c['field']}; }}
     QCheckBox::indicator:checked {{ background: {c['accent']}; border-color: {c['accent']};
                                     image: url({_CHECK_PNG}); }}
 
+    /* ── buttons ───────────────────────────────────────────── */
     QPushButton {{
         background: {c['card']}; border: 1px solid {c['field_border']};
-        border-radius: 10px; padding: 8px 16px; color: {c['ink']}; font-weight: 500;
+        border-radius: 9px; padding: 7px 14px; color: {c['ink']}; font-weight: 500;
     }}
-    QPushButton:hover {{ border-color: {c['accent']}; color: {c['accent']}; }}
-    QPushButton:pressed {{ background: {c['accent_soft']}; }}
-    QPushButton:disabled {{ color: {c['ink3']}; border-color: {c['border']}; }}
+    QPushButton:hover {{ background: {c['canvas']}; border-color: {c['ink3']}; }}
+    QPushButton:pressed {{ background: {c['tab_bg']}; }}
+    QPushButton:disabled {{ color: {c['ink3']}; border-color: {c['border']};
+                            background: {c['card']}; }}
 
     QPushButton#primary {{
         background: qlineargradient(x1:0,y1:0,x2:0,y2:1,
                     stop:0 {c['accent']}, stop:1 {c['accent_dk']});
-        color: #fff; border: none; border-radius: 13px;
-        padding: 13px 18px; font-size: 14px; font-weight: 700;
+        color: #fff; border: 1px solid {c['accent_dk']}; border-radius: 10px;
+        padding: 12px 16px; font-size: 14px; font-weight: 600; letter-spacing: 4px;
     }}
-    QPushButton#primary:hover {{ background: {c['accent_dk']}; }}
-    QPushButton#primary:disabled {{ background: {c['field_border']}; color: {c['ink3']}; }}
+    QPushButton#primary:hover {{ background: {c['accent_dk']}; color: #fff; }}
+    QPushButton#primary:pressed {{ background: {c['accent_dk']}; }}
+    QPushButton#primary:disabled {{ background: {c['tab_bg']}; color: {c['ink3']};
+                                    border-color: {c['border']}; }}
 
     QPushButton#danger {{
         background: {c['danger']}; color: #fff; border: none;
-        border-radius: 11px; padding: 10px 16px; font-weight: 700;
+        border-radius: 10px; padding: 10px 16px; font-weight: 600; letter-spacing: 2px;
     }}
     QPushButton#danger:hover {{ background: {c['danger_dk']}; color: #fff; }}
 
-    QTabWidget::pane {{ border: none; top: 2px; }}
+    /* record button — accent when idle, red while recording */
+    QPushButton#record {{
+        background: qlineargradient(x1:0,y1:0,x2:0,y2:1,
+                    stop:0 {c['accent']}, stop:1 {c['accent_dk']});
+        color: #fff; border: 1px solid {c['accent_dk']}; border-radius: 10px;
+        font-size: 14px; font-weight: 600; letter-spacing: 2px;
+    }}
+    QPushButton#record:hover {{ background: {c['accent_dk']}; color: #fff; }}
+    QPushButton#record[recording="true"] {{
+        background: qlineargradient(x1:0,y1:0,x2:0,y2:1,
+                    stop:0 {c['danger']}, stop:1 {c['danger_dk']});
+        border-color: {c['danger_dk']};
+    }}
+    QPushButton#record[recording="true"]:hover {{ background: {c['danger_dk']}; }}
+
+    /* ghost button — quiet accent action (选择文件…) */
+    QPushButton#ghost {{
+        background: transparent; color: {c['accent']};
+        border: 1px solid {c['accent_border']}; border-radius: 9px;
+        font-size: 13px; font-weight: 600; padding: 9px 14px;
+    }}
+    QPushButton#ghost:hover {{ background: {c['accent_soft']};
+                               border-color: {c['accent']}; }}
+
+    /* ── drop zone ─────────────────────────────────────────── */
+    QFrame#dropArea {{
+        border: 1.5px dashed {c['field_border']};
+        border-radius: 12px;
+        background: {c['canvas']};
+    }}
+    QFrame#dropArea QLabel {{ background: transparent; border: none; }}
+    QFrame#dropArea QLabel#dropTitle {{ color: {c['ink2']}; font-size: 13px; font-weight: 600; }}
+    QFrame#dropArea QLabel#dropSub   {{ color: {c['ink3']}; font-size: 11px; }}
+    QFrame#dropArea[state="hover"] {{
+        border: 1.5px dashed {c['accent']}; background: {c['accent_soft']};
+    }}
+    QFrame#dropArea[state="hover"] QLabel#dropTitle {{ color: {c['accent']}; }}
+    QFrame#dropArea[state="selected"] {{
+        border: 1.5px solid {c['ok']}; background: {c['ok_soft']};
+    }}
+    QFrame#dropArea[state="selected"] QLabel#dropTitle {{ color: {c['ok']}; }}
+
+    /* ── tabs (editorial underline style) ──────────────────── */
+    QTabWidget::pane {{ border: none; top: 6px; }}
     QTabBar {{ qproperty-drawBase: 0; }}
     QTabBar::tab {{
-        background: {c['tab_bg']}; color: {c['ink2']}; border: none;
-        padding: 8px 18px; margin-right: 5px; border-radius: 9px;
-        font-weight: 600; min-width: 64px;
+        background: transparent; color: {c['ink3']};
+        border: none; border-bottom: 2px solid transparent; border-radius: 0;
+        padding: 7px 2px 9px 2px; margin-right: 22px;
+        font-weight: 600; min-width: 40px;
     }}
-    QTabBar::tab:selected {{ background: {c['card']}; color: {c['accent']};
-                             border: 1px solid {c['border']}; }}
-    QTabBar::tab:hover:!selected {{ color: {c['ink']}; }}
+    QTabBar::tab:selected {{ color: {c['ink']};
+                             border-bottom: 2px solid {c['accent']}; }}
+    QTabBar::tab:hover:!selected {{ color: {c['ink2']}; }}
 
-    QProgressBar {{ background: {c['tab_bg']}; border: none; border-radius: 4px; height: 7px; }}
-    QProgressBar::chunk {{ border-radius: 4px;
-        background: qlineargradient(x1:0,y1:0,x2:1,y2:0,
-                    stop:0 {c['accent']}, stop:1 {c['accent_dk']}); }}
+    /* ── progress ──────────────────────────────────────────── */
+    QProgressBar {{ background: {c['tab_bg']}; border: none; border-radius: 3px; }}
+    QProgressBar::chunk {{ background: {c['accent']}; border-radius: 3px; }}
 
+    /* ── text areas ────────────────────────────────────────── */
     QPlainTextEdit, QTextEdit {{
-        background: {c['card']}; border: 1px solid {c['border']}; border-radius: 14px;
-        padding: 14px; selection-background-color: {c['accent_soft']}; selection-color: {c['ink']};
+        background: {c['card']}; border: 1px solid {c['border']}; border-radius: 12px;
+        padding: 13px; selection-background-color: {c['accent_soft']}; selection-color: {c['ink']};
     }}
 
-    QScrollBar:vertical {{ background: transparent; width: 11px; margin: 3px; }}
-    QScrollBar::handle:vertical {{ background: {c['field_border']}; border-radius: 5px;
+    QScrollBar:vertical {{ background: transparent; width: 10px; margin: 3px; }}
+    QScrollBar::handle:vertical {{ background: {c['field_border']}; border-radius: 4px;
                                    min-height: 32px; }}
     QScrollBar::handle:vertical:hover {{ background: {c['ink3']}; }}
     QScrollBar::add-line, QScrollBar::sub-line {{ height: 0; }}
@@ -234,46 +319,53 @@ def _qss(c: dict) -> str:
     QScrollBar:horizontal {{ height: 0px; }}
 
     QSplitter::handle {{ background: transparent; }}
-    QSplitter::handle:hover {{ background: {c['accent_soft']}; }}
-    QMenuBar {{ background: {c['canvas']}; }}
-    QMenuBar::item:selected {{ background: {c['accent_soft']}; border-radius: 6px; }}
+    QSplitter::handle:hover {{ background: {c['border']}; }}
+    QMenuBar {{ background: transparent; }}
+    QMenuBar::item:selected {{ background: {c['tab_bg']}; border-radius: 5px; }}
     QMenu {{ background: {c['card']}; border: 1px solid {c['border']};
-             border-radius: 12px; padding: 6px; }}
-    QMenu::item {{ padding: 7px 24px; border-radius: 7px; }}
+             border-radius: 10px; padding: 5px; }}
+    QMenu::item {{ padding: 6px 22px; border-radius: 6px; }}
     QMenu::item:selected {{ background: {c['accent']}; color: #fff; }}
     QMessageBox, QFileDialog {{ background: {c['canvas']}; }}
     """
 
 
-# ── shadows (QSS can't do these) ────────────────────────────────────────
+# ── drawn glyphs (crisper than emoji, theme-aware) ──────────────────────
 
-def add_card_shadow(widget) -> None:
-    c = _state["scheme"]
-    r, g, b, a = c["shadow"]
-    eff = QGraphicsDropShadowEffect(widget)
-    eff.setBlurRadius(34)
-    eff.setColor(QColor(r, g, b, a))
-    eff.setOffset(0, 7)
-    widget.setGraphicsEffect(eff)
+# waveform bar heights as fractions of the glyph height
+_WAVE_BARS = (0.42, 0.72, 1.0, 0.58, 0.82, 0.36)
 
 
-def add_glow(widget, color: str | None = None) -> None:
+def wave_pixmap(height: int = 30, color: str | None = None) -> QPixmap:
+    """A rounded-bar waveform glyph in the accent color (for the drop zone)."""
     c = _state["scheme"]
     col = QColor(color or c["accent"])
-    col.setAlpha(120)
-    eff = QGraphicsDropShadowEffect(widget)
-    eff.setBlurRadius(26)
-    eff.setColor(col)
-    eff.setOffset(0, 6)
-    widget.setGraphicsEffect(eff)
+    dpr = 2.0
+    w = int(height * 1.5)
+    pm = QPixmap(int(w * dpr), int(height * dpr))
+    pm.setDevicePixelRatio(dpr)
+    pm.fill(Qt.transparent)
+    p = QPainter(pm)
+    p.setRenderHint(QPainter.Antialiasing)
+    p.setPen(Qt.NoPen)
+    p.setBrush(QBrush(col))
+    n = len(_WAVE_BARS)
+    bar_w = w / 11
+    gap = (w - n * bar_w) / (n - 1)
+    x = 0.0
+    for frac in _WAVE_BARS:
+        h = height * frac
+        y = (height - h) / 2
+        p.drawRoundedRect(QRectF(x, y, bar_w, h), bar_w / 2, bar_w / 2)
+        x += bar_w + gap
+    p.end()
+    return pm
 
 
 # ── indicator images ────────────────────────────────────────────────────
 
 def _make_indicator_pngs(c: dict) -> None:
-    global _CHECK_PNG, _DOT_PNG
-    from PySide6.QtGui import QPixmap, QPainter, QPen, QBrush
-    from PySide6.QtCore import QPointF
+    global _CHECK_PNG, _DOT_PNG, _CHEVRON_PNG
     tmp = Path(tempfile.gettempdir())
 
     pm = QPixmap(28, 28); pm.fill(Qt.transparent)
@@ -290,3 +382,14 @@ def _make_indicator_pngs(c: dict) -> None:
     p2.drawEllipse(QPointF(14, 14), 5, 5); p2.end()
     dpath = tmp / "recorder_dot.png"; pm2.save(str(dpath), "PNG")
     _DOT_PNG = str(dpath).replace("\\", "/")
+
+    # chevron for combo boxes — ink3 so it reads in both schemes
+    pm3 = QPixmap(24, 24); pm3.fill(Qt.transparent)
+    p3 = QPainter(pm3); p3.setRenderHint(QPainter.Antialiasing)
+    pen3 = QPen(QColor(c["ink3"])); pen3.setWidth(3)
+    pen3.setCapStyle(Qt.RoundCap); pen3.setJoinStyle(Qt.RoundJoin); p3.setPen(pen3)
+    p3.drawPolyline([QPointF(6, 10), QPointF(12, 16), QPointF(18, 10)]); p3.end()
+    # name varies per scheme so Qt's pixmap cache doesn't serve a stale arrow
+    vpath = tmp / f"recorder_chevron_{'d' if c is DARK else 'l'}.png"
+    pm3.save(str(vpath), "PNG")
+    _CHEVRON_PNG = str(vpath).replace("\\", "/")
