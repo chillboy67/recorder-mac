@@ -1,5 +1,7 @@
 # Recorder — 本地离线录音转文字（macOS）
 
+中文 | [English](README.en.md)
+
 一个跑在 MacBook 本地、**双击即开**的录音转文字桌面 App。
 全程离线，不调用任何云 API，音频与文字都不出本机。
 
