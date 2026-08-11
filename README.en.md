@@ -130,8 +130,16 @@ Supports m4a / mp3 / wav / webm / flac / aac / ogg / opus.
 
 With [Ollama](https://ollama.com) installed, "AI enhancement" can be enabled in the UI to fix transcription
 errors caused by unclear audio, generate classroom summaries, and add extra IELTS coach-style commentary.
-Routed by language: English goes through `llama3.1:8b`, Chinese/mixed content goes through a local Qwen2.5-7B.
-When disabled, everything falls back to offline heuristic rules. The model also runs entirely on-device.
+Language routing picks an on-device model; when disabled, everything falls back to offline heuristics.
+**Do not** commit model weights to Git.
+
+- **Current code defaults:** English `llama3.1:8b`, Chinese/mixed `qwen-zh:7b`
+- **Recommended dual strategy (Qwen for Asian / Mistral for European)** and
+  **RAM tier tables** (8GB–64GB, co-existence with Whisper): see
+  [lecture_intel/docs/LLM_MODELS.md](lecture_intel/docs/LLM_MODELS.md)
+  (Chinese; pull commands are language-agnostic)
+
+**16GB Apple Silicon default pull pair:** `qwen2.5:7b` + `mistral` (7B); load one at a time, after ASR.
 
 ---
 
@@ -142,7 +150,8 @@ lecture_intel/
 ├── app.py                GUI entry point (the double-click target)
 ├── transcribe.py         CLI entry point
 ├── make_app.sh           Builds and installs /Applications/Recorder.app
-├── download_models.py    Model pre-download (direct mirror)
+├── download_models.py    Whisper model pre-download (direct mirror)
+├── docs/LLM_MODELS.md    Hardware tiers × Ollama (Qwen/Mistral) guide
 │
 ├── core/                 The engine
 │   ├── engine.py         Single orchestration entry point: run(input, output, mode)
