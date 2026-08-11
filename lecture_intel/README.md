@@ -66,51 +66,19 @@ to fetching it from HuggingFace on first use.
 
 ## Local LLM enhancement (optional, via Ollama)
 
-Tick "本地大模型增强" in the app to enable, after a one-time setup. Everything
-stays on-device. **Model weights are never part of this repo** — each machine
-runs `ollama pull` locally.
+Tick "本地大模型增强" after installing [Ollama](https://ollama.com). Everything
+stays on-device; **weights are never part of this repo**.
 
-### Current code defaults (language auto-route)
+What it adds (falls back to offline heuristics if Ollama is off):
+- **通用**: light punctuation / recognition-error tidy (no paraphrase)
+- **课堂**: lecture-context correction + key-point summary
+- **雅思**: examiner-style critique; candidate transcript stays verbatim
 
-| Audio language | Setting key | Default tag |
-|----------------|-------------|-------------|
-| Chinese / mixed | `chinese_model` | `qwen-zh:7b` |
-| Otherwise (e.g. English) | `llm_model` | `llama3.1:8b` |
+Code defaults today: Chinese/mixed → `qwen-zh:7b`, else → `llama3.1:8b`.
+Recommended upgrade path is **Qwen (Asian) / Mistral (European)**, sized by RAM.
 
-If the preferred model is missing, the other installed one is used; if neither
-is available, offline heuristics run.
-
-### Recommended dual strategy (upgrade path)
-
-| Role | Family | 16GB Apple Silicon default | 24GB+ |
-|------|--------|----------------------------|--------|
-| Asian (zh/ja/ko, Chinese reports) | **Qwen** | `qwen2.5:7b` | `qwen2.5:14b` |
-| European (en/fr/es/de, …) | **Mistral** | `mistral` (7B) | `mistral-nemo` |
-
-```bash
-brew install ollama && brew services start ollama
-
-# 16GB-friendly pair (official registry)
-ollama pull qwen2.5:7b
-ollama pull mistral
-
-# Optional: alias so current code names still resolve
-# ollama cp qwen2.5:7b qwen-zh:7b
-# ollama cp mistral llama3.1:8b   # only if you want Mistral under the old key
-```
-
-**Full guide** (hardware tiers 8GB–64GB, Whisper co-existence, China mirrors,
-legacy ModelScope `qwen-zh` / Llama install, what not to run on 16GB):
-
+**Install, hardware tiers, China mirrors, pull commands:**  
 → **[docs/LLM_MODELS.md](docs/LLM_MODELS.md)**
-
-What the LLM adds per mode (falls back to offline heuristics if Ollama is off):
-- **通用**: light punctuation / recognition-error tidy (no paraphrase).
-- **课堂**: lecture-context correction + key-point summary.
-- **雅思**: examiner-style critique on top of confidence-based pronunciation
-  flags. Candidate transcript stays verbatim.
-
-All via local `/api/chat`. `resolve_model` tolerates ModelScope-style names.
 
 ## Notes on accuracy
 
