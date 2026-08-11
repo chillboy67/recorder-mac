@@ -15,6 +15,25 @@
 
 > 代码主体在 [`lecture_intel/`](lecture_intel/)（历史目录名，App 名为 Recorder）。
 
+### 本地 AI 增强（可选 · 一眼看懂）
+
+| | |
+|--|--|
+| **做什么** | 听不清导致的错字校对、课堂重点总结、雅思口语点评（**不改写**考生/说话人原意） |
+| **跑在哪** | 本机 [Ollama](https://ollama.com)，音频与文字**不出机** |
+| **怎么选模型** | **亚洲语**（中/日/韩 + 中文报告）→ **Qwen**；**欧洲语**（英/法/西/德…）→ **Mistral** |
+| **16GB Mac 默认** | `qwen2.5:7b` + `mistral`（7B）· 磁盘约 9GB · **一次只加载一只**，建议转写完成后再开 AI |
+| **8 / 24 / 32 / 64GB** | 完整档位表 → [lecture_intel/docs/LLM_MODELS.md](lecture_intel/docs/LLM_MODELS.md) |
+
+```bash
+brew install ollama && brew services start ollama
+ollama pull qwen2.5:7b    # 亚洲 / 中文报告
+ollama pull mistral       # 欧洲 / 英文
+```
+
+当前 App 代码默认名仍是 `qwen-zh:7b`（中）与 `llama3.1:8b`（英），装好后即可勾选「AI 增强」；  
+上表是**推荐升级选型**（与硬件匹配）。详情与国内镜像步骤见专文。
+
 ---
 
 ## 为什么再做一个转写 App
@@ -47,6 +66,7 @@ Recorder 的第一原则是：
   已录下的音频不会丢。
 - **导出** txt / md / doc / docx，带时间戳与说话人标签。
 - **深浅色主题**，跟随系统。
+- **可选本地大模型（Ollama）**。亚洲向 **Qwen**、欧洲向 **Mistral**；按内存选型，不上传仓库。见上方「本地 AI 增强」与 [LLM 选型指南](lecture_intel/docs/LLM_MODELS.md)。
 
 ---
 
@@ -121,19 +141,34 @@ cd lecture_intel
 
 支持 m4a / mp3 / wav / webm / flac / aac / ogg / opus。
 
-### 可选：本地大模型增强
+### 可选：本地大模型增强（安装）
 
-装了 [Ollama](https://ollama.com) 之后可在界面里打开"AI 增强"，用于修正
-听不清导致的错字、生成课堂总结、补充雅思考官点评。按语言路由选用本机模型；
-关掉则全部走离线启发式规则。模型同样跑在本机，**不要**把权重提交进 Git。
+界面勾选「AI 增强」即可。未装 Ollama / 未 pull 模型时自动回退离线规则。
 
-- **现状代码默认**：英文 `llama3.1:8b`，中文/混合 `qwen-zh:7b`
-- **推荐升级（亚洲 Qwen / 欧洲 Mistral）** 与 **按内存选型表**（8GB～64GB、
-  与 Whisper 能否同机）：见
-  [lecture_intel/docs/LLM_MODELS.md](lecture_intel/docs/LLM_MODELS.md)
+**一键安装（16GB 推荐组合）** 与选型总表见文首 [本地 AI 增强](#本地-ai-增强可选--一眼看懂)；  
+完整硬件档位、与 Whisper 同机注意、国内镜像：  
+**[lecture_intel/docs/LLM_MODELS.md](lecture_intel/docs/LLM_MODELS.md)**。
 
-**16GB Apple Silicon（如 M 系列）默认建议**：`qwen2.5:7b`（亚洲）+
-`mistral` 7B（欧洲）；运行时只加载一只，转写完成后再调 LLM。
+| 内存 | 亚洲（Qwen） | 欧洲（Mistral） |
+|------|--------------|-----------------|
+| 16GB | `qwen2.5:7b` | `mistral`（7B） |
+| 24GB+ | `qwen2.5:14b` | `mistral-nemo` |
+| 64GB+ | `qwen2.5:32b` 级 | `mistral-small:24b` |
+
+模型权重 **只存在你电脑**，请勿 `git add` 进仓库。
+
+---
+
+## 多语种（规划中）
+
+当前转写以 **中英** 为主；可选 LLM 已按 **亚洲 Qwen / 欧洲 Mistral** 选型。  
+完整多语（日/韩/欧语教官会话等）下一步是：
+
+1. **教官语言配置**（`coach_language`）+ 语言工具层——不是单独做一个「检测 App」，而是让后续分离角色、报告、模型路由有统一参数；
+2. 说话人分离去掉写死中文假设；
+3. 转写语言标签真正多语；再接分析与（可选）教官话对照翻译。
+
+详见开发讨论与 [LLM 指南](lecture_intel/docs/LLM_MODELS.md) 中的路由说明。
 
 ---
 
