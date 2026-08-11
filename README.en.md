@@ -15,25 +15,6 @@ Built on **transcription accuracy** as the foundation, with three purpose-built 
 
 > The main codebase lives in [`lecture_intel/`](lecture_intel/) (a legacy directory name — the app itself is called Recorder).
 
-### Local AI enhancement (optional · at a glance)
-
-| | |
-|--|--|
-| **What it does** | Fix recognition typos from unclear audio, classroom summaries, IELTS-style notes — **never rewrites** the speaker’s meaning |
-| **Where it runs** | On-device [Ollama](https://ollama.com); audio/text **stay on your Mac** |
-| **Which model** | **Asian** (zh/ja/ko + Chinese reports) → **Qwen**; **European** (en/fr/es/de/…) → **Mistral** |
-| **16GB Mac default** | `qwen2.5:7b` + `mistral` (7B) · ~9GB disk · **load one at a time**, ideally after ASR |
-| **8 / 24 / 32 / 64GB** | Full tier table → [lecture_intel/docs/LLM_MODELS.md](lecture_intel/docs/LLM_MODELS.md) |
-
-```bash
-brew install ollama && brew services start ollama
-ollama pull qwen2.5:7b    # Asian / Chinese reports
-ollama pull mistral       # European / English
-```
-
-App code still defaults to `qwen-zh:7b` (zh) and `llama3.1:8b` (en) — those work today.  
-The table above is the **recommended hardware-matched upgrade**. Details & China mirrors in the guide.
-
 ---
 
 ## Why another transcription app
@@ -69,7 +50,8 @@ errors caused by unclear audio — it never polishes or rewrites.
   system, the UI stays up and the recorded audio is never lost.
 - **Export** to txt / md / doc / docx, with timestamps and speaker labels.
 - **Light/dark theme**, follows the system setting.
-- **Optional local LLM (Ollama).** **Qwen** for Asian languages, **Mistral** for European; sized by RAM, weights never committed. See [Local AI enhancement](#local-ai-enhancement-optional--at-a-glance) and the [LLM guide](lecture_intel/docs/LLM_MODELS.md).
+- **Optional local LLM (Ollama)** for tidy-up / classroom summary / IELTS notes.  
+  Model picks and install: [lecture_intel/docs/LLM_MODELS.md](lecture_intel/docs/LLM_MODELS.md).
 
 ---
 
@@ -146,35 +128,13 @@ Three model tiers are selectable in the UI: **most accurate** `large-v3` / **bal
 
 Supports m4a / mp3 / wav / webm / flac / aac / ogg / opus.
 
-### Optional: local LLM enhancement (install)
+### Optional: local LLM enhancement
 
-Enable “AI enhancement” in the UI. If Ollama or models are missing, the app falls back to offline rules.
+With [Ollama](https://ollama.com), enable “AI enhancement” in the UI to fix recognition typos, generate classroom summaries, and add IELTS-style notes. When off, offline rules apply. Models run on-device — do not commit weights to Git.
 
-**16GB pull pair** and the at-a-glance table are at the top under
-[Local AI enhancement](#local-ai-enhancement-optional--at-a-glance).  
-Full RAM tiers, Whisper co-existence, China mirrors:
-**[lecture_intel/docs/LLM_MODELS.md](lecture_intel/docs/LLM_MODELS.md)** (Chinese; commands are universal).
+Recommended by language family: **Asian (zh/ja/ko/…) → Qwen**, **European (en/fr/es/de/…) → Mistral**. Sizing by RAM, install steps, and co-existence with Whisper:
 
-| RAM | Asian (Qwen) | European (Mistral) |
-|-----|--------------|--------------------|
-| 16GB | `qwen2.5:7b` | `mistral` (7B) |
-| 24GB+ | `qwen2.5:14b` | `mistral-nemo` |
-| 64GB+ | `qwen2.5:32b` class | `mistral-small:24b` |
-
-Model weights live **only on your machine** — do not `git add` them.
-
----
-
-## Multilingual (roadmap)
-
-Transcription today is **zh/en-first**; optional LLM sizing already follows **Qwen (Asian) / Mistral (European)**.  
-Full multilingual (e.g. ja/ko/EU coach sessions) next steps:
-
-1. **`coach_language` + language helpers** — not a standalone “detector app”, but one setting every later stage shares;
-2. Diarization without hard-coded Chinese assumptions;
-3. True multi-language ASR labels; then analysis and optional coach-side translation.
-
-See the [LLM guide](lecture_intel/docs/LLM_MODELS.md) for routing notes.
+**[lecture_intel/docs/LLM_MODELS.md](lecture_intel/docs/LLM_MODELS.md)**
 
 ---
 
