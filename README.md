@@ -124,9 +124,16 @@ cd lecture_intel
 ### 可选：本地大模型增强
 
 装了 [Ollama](https://ollama.com) 之后可在界面里打开"AI 增强"，用于修正
-听不清导致的错字、生成课堂总结、补充雅思考官点评。按语言路由：英文走
-`llama3.1:8b`，中文/混合走本地 Qwen2.5-7B。关掉则全部走离线启发式规则。
-模型同样跑在本机。
+听不清导致的错字、生成课堂总结、补充雅思考官点评。按语言路由选用本机模型；
+关掉则全部走离线启发式规则。模型同样跑在本机，**不要**把权重提交进 Git。
+
+- **现状代码默认**：英文 `llama3.1:8b`，中文/混合 `qwen-zh:7b`
+- **推荐升级（亚洲 Qwen / 欧洲 Mistral）** 与 **按内存选型表**（8GB～64GB、
+  与 Whisper 能否同机）：见
+  [lecture_intel/docs/LLM_MODELS.md](lecture_intel/docs/LLM_MODELS.md)
+
+**16GB Apple Silicon（如 M 系列）默认建议**：`qwen2.5:7b`（亚洲）+
+`mistral` 7B（欧洲）；运行时只加载一只，转写完成后再调 LLM。
 
 ---
 
@@ -137,7 +144,8 @@ lecture_intel/
 ├── app.py                GUI 入口（双击目标）
 ├── transcribe.py         CLI 入口
 ├── make_app.sh           构建并安装 /Applications/Recorder.app
-├── download_models.py    模型预下载（镜像直连）
+├── download_models.py    Whisper 模型预下载（镜像直连）
+├── docs/LLM_MODELS.md    硬件档位 × Ollama（Qwen/Mistral）选型
 │
 ├── core/                 引擎
 │   ├── engine.py         唯一编排入口：run(input, output, mode)

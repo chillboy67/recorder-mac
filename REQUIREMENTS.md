@@ -65,6 +65,9 @@
 - 处理中显示分步进度，可取消。
 - M5 / 16GB 内存的 MacBook 上流畅运行：ASR 用 Apple Silicon 加速
   （mlx-whisper），1 小时课堂录音 ≤ 10 分钟左右处理完。
+- 可选 Ollama 大模型增强：16GB 上默认 7B 级（亚洲 Qwen / 欧洲 Mistral），
+  与 Whisper **串行**；完整档位表见
+  [lecture_intel/docs/LLM_MODELS.md](lecture_intel/docs/LLM_MODELS.md)。
 
 ## 技术决策（实现者笔记）
 

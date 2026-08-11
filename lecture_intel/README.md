@@ -67,36 +67,50 @@ to fetching it from HuggingFace on first use.
 ## Local LLM enhancement (optional, via Ollama)
 
 Tick "本地大模型增强" in the app to enable, after a one-time setup. Everything
-stays on-device.
+stays on-device. **Model weights are never part of this repo** — each machine
+runs `ollama pull` locally.
 
-The app uses **two models and picks by the audio's language** automatically:
-English → `llama3.1:8b` (Meta); Chinese → `qwen-zh:7b` (an uncensored community
-Qwen2.5-7B, "abliterated"). Set up both (ModelScope mirror, since the default
-Ollama registry is blocked in China — it's only a CDN):
+### Current code defaults (language auto-route)
+
+| Audio language | Setting key | Default tag |
+|----------------|-------------|-------------|
+| Chinese / mixed | `chinese_model` | `qwen-zh:7b` |
+| Otherwise (e.g. English) | `llm_model` | `llama3.1:8b` |
+
+If the preferred model is missing, the other installed one is used; if neither
+is available, offline heuristics run.
+
+### Recommended dual strategy (upgrade path)
+
+| Role | Family | 16GB Apple Silicon default | 24GB+ |
+|------|--------|----------------------------|--------|
+| Asian (zh/ja/ko, Chinese reports) | **Qwen** | `qwen2.5:7b` | `qwen2.5:14b` |
+| European (en/fr/es/de, …) | **Mistral** | `mistral` (7B) | `mistral-nemo` |
 
 ```bash
 brew install ollama && brew services start ollama
 
-# English model (Meta Llama 3.1)
-ollama pull modelscope.cn/LLM-Research/Meta-Llama-3.1-8B-Instruct-GGUF
-ollama cp modelscope.cn/LLM-Research/Meta-Llama-3.1-8B-Instruct-GGUF llama3.1:8b
+# 16GB-friendly pair (official registry)
+ollama pull qwen2.5:7b
+ollama pull mistral
 
-# Chinese model (uncensored Qwen2.5-7B) — multi-quant repo, so download the GGUF
-# and import via a Modelfile:
-curl -L -o qwen-zh.gguf \
-  "https://modelscope.cn/models/QuantFactory/Qwen2.5-7B-Instruct-abliterated-v2-GGUF/resolve/master/Qwen2.5-7B-Instruct-abliterated-v2.Q4_K_M.gguf"
-printf 'FROM ./qwen-zh.gguf\n' > Modelfile
-ollama create qwen-zh:7b -f Modelfile
+# Optional: alias so current code names still resolve
+# ollama cp qwen2.5:7b qwen-zh:7b
+# ollama cp mistral llama3.1:8b   # only if you want Mistral under the old key
 ```
 
-What the LLM adds per mode (falls back to offline heuristics if Ollama is off):
-- **通用**: AI determines the most accurate full transcript (error correction).
-- **课堂**: corrects the transcript using lecture context + a key-point summary.
-- **雅思**: an AI-examiner critique (grammar / collocation / Chinglish / rewrite)
-  on top of the confidence-based pronunciation flags. Transcript stays verbatim.
+**Full guide** (hardware tiers 8GB–64GB, Whisper co-existence, China mirrors,
+legacy ModelScope `qwen-zh` / Llama install, what not to run on 16GB):
 
-All on the GPU via `/api/chat`. `resolve_model` tolerates the un-aliased ModelScope
-names, so the `cp`/`create` naming is flexible.
+→ **[docs/LLM_MODELS.md](docs/LLM_MODELS.md)**
+
+What the LLM adds per mode (falls back to offline heuristics if Ollama is off):
+- **通用**: light punctuation / recognition-error tidy (no paraphrase).
+- **课堂**: lecture-context correction + key-point summary.
+- **雅思**: examiner-style critique on top of confidence-based pronunciation
+  flags. Candidate transcript stays verbatim.
+
+All via local `/api/chat`. `resolve_model` tolerates ModelScope-style names.
 
 ## Notes on accuracy
 
