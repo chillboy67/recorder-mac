@@ -238,6 +238,24 @@ The project wasn't under git for most of its life — it was only imported into 
 Because of that, every commit's date is the import date; commits were organized into 23 commits matching the
 phases above, with each commit's body noting the actual original development period it corresponds to.
 
+## Multilingual (in progress)
+
+Transcription today is **zh/en-first**; optional LLM sizing already follows **Qwen (Asian) / Mistral (European)**.
+Full multilingual (e.g. ja/ko/EU coach sessions) lands in three steps:
+
+1. **`coach_language` + language helpers** — not a standalone "detector app", but one setting every later
+   stage shares (role separation, reports, model routing);
+2. Diarization without hard-coded Chinese assumptions;
+3. True multi-language ASR labels; then analysis and optional coach-side translation.
+
+Progress: the language helper layer now lives in `core/languages.py` and labels by Unicode script
+(kana → Japanese, Hangul → Korean, Han → Chinese; scripts shared by several languages — Latin, Cyrillic,
+Arabic — defer to Whisper's own detection). Step 3's transcription labels are done: Japanese is no longer
+reported as Chinese, Korean is no longer reported as English, and Latin-script languages no longer collapse
+to English. The zh/en code-switching thresholds are unchanged. Step 1's shared setting and step 2 remain.
+
+See the [LLM guide](lecture_intel/docs/LLM_MODELS.md) for routing notes.
+
 ## Privacy
 
 - The model and all processing run on-device — **no network requests at all** (aside from the initial model download).
