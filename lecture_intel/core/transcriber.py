@@ -32,6 +32,8 @@ from typing import Callable, Optional
 
 from modules import ASRResult, ASRSegment, ASRWord
 
+from core.languages import detect_language
+
 logger = logging.getLogger(__name__)
 
 # mlx model repos keyed by the whisper model name
@@ -136,10 +138,10 @@ class Transcriber:
             )
         dt = time.time() - t0
 
-        segments = self._to_segments(raw_segments)
+        segments = self._to_segments(raw_segments, detected_lang)
         segments = _suppress_repetition(segments)
         full_text = " ".join(s.text for s in segments).strip()
-        language_label, _ = self._language_mix(full_text, detected_lang)
+        language_label = detect_language(full_text, detected_lang)
 
         logger.info(
             "ASR done: engine=%s lang=%s segs=%d chars=%d in %.1fs",
@@ -379,7 +381,11 @@ class Transcriber:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _to_segments(raw_segments: list[dict]) -> list[ASRSegment]:
+    def _to_segments(raw_segments: list[dict],
+                     detected: Optional[str] = None) -> list[ASRSegment]:
+        """`detected` is Whisper's file-level language code. Per-segment labels
+        are derived from script, but Latin script cannot tell en/fr/de/es apart,
+        so the segment labeller needs Whisper's opinion to break the tie."""
         segments: list[ASRSegment] = []
         for i, s in enumerate(raw_segments):
             words = [
@@ -397,27 +403,11 @@ class Transcriber:
                 start=float(s.get("start", 0.0) or 0.0),
                 end=float(s.get("end", 0.0) or 0.0),
                 text=text,
-                language=_segment_lang(text),
+                language=detect_language(text, detected),
                 confidence=float(s.get("avg_logprob", 0.0) or 0.0),
                 words=words,
             ))
         return segments
-
-    @staticmethod
-    def _language_mix(text: str, detected: str) -> tuple[str, float]:
-        import re
-        stripped = re.sub(r"\s+", "", text or "")
-        if not stripped:
-            return detected or "en", 0.0
-        cjk = len(re.findall(r"[一-鿿]", stripped))
-        latin = len(re.findall(r"[a-zA-Z]", stripped))
-        meaningful = max(cjk + latin, 1)
-        ratio = cjk / meaningful
-        if ratio > 0.8:
-            return "zh", ratio
-        if ratio > 0.15:
-            return "mixed", ratio
-        return "en", ratio
 
 
 def _suppress_repetition(segments):
@@ -497,18 +487,3 @@ def _local_model_dir(model: str):
         if (d / "config.json").exists() and any(d.glob("weights.*")):
             return d
     return None
-
-
-def _segment_lang(text: str) -> str:
-    import re
-    if not text:
-        return "en"
-    cjk = len(re.findall(r"[一-鿿]", text))
-    latin = len(re.findall(r"[a-zA-Z]", text))
-    meaningful = max(cjk + latin, 1)
-    ratio = cjk / meaningful
-    if ratio > 0.8:
-        return "zh"
-    if ratio > 0.15:
-        return "mixed"
-    return "en"

@@ -98,12 +98,13 @@ def run(
     general_tidy_md: Optional[str] = None
 
     # Is the local LLM usable, and which one? Route by the detected language:
-    # Chinese audio → Chinese model; English → English model. Fall back to
-    # whichever is installed if the preferred one isn't.
+    # CJK audio → the Asian model; everything else → the European/English one.
+    # Falls back to whichever is installed if the preferred one isn't.
     llm_on = False
     if use_llm:
         from core import llm as llm_mod
-        prefer = chinese_model if asr.language in ("zh", "mixed") else llm_model
+        from core.languages import prefers_asian_model
+        prefer = chinese_model if prefers_asian_model(asr.language) else llm_model
         alt = llm_model if prefer == chinese_model else chinese_model
         resolved = (llm_mod.resolve_model(prefer)
                     or llm_mod.resolve_model(alt))
