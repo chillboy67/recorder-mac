@@ -57,7 +57,7 @@ class ASRSegment:
     start: float
     end: float
     text: str
-    language: str              # "en", "zh", "mixed"
+    language: str              # Whisper code ("en"/"zh"/"ja"/"fr"…) or "mixed"
     confidence: float
     words: list[ASRWord] = field(default_factory=list)
     speaker_id: Optional[str] = None
