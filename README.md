@@ -239,7 +239,8 @@ App 读取 `~/Documents`，安装脚本会把可运行副本与虚拟环境放�
 ## 开发
 
 ```bash
-python -m pytest          # 仓库根目录运行，测试不依赖模型
+python -m pytest          # 仓库根目录运行，仅覆盖 lecture_intel/（默认验证层）
+                          # backend/tests 为存档代码，不计入默认验证
 ```
 
 改完代码后重新运行 `lecture_intel/make_app.sh` 同步到已安装的 App。
