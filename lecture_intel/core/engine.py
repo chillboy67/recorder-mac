@@ -21,6 +21,7 @@ from modules import ASRResult
 from modules.audio_loader import AudioLoader
 
 from core import export as exporter
+from core.languages import normalize_language, prefers_asian_model
 from core.modes import Mode, get_mode
 from core.transcriber import Transcriber
 
@@ -36,6 +37,7 @@ def run(
     *,
     model: str = "large-v3",
     engine: Optional[str] = None,   # None → use the mode's preferred engine
+    language: Optional[str] = None,  # None → mode default; "auto"/"" → detect per chunk
     initial_prompt: Optional[str] = None,
     formats: Optional[list[str]] = None,
     languagetool_url: str = "http://127.0.0.1:8010/v2/check",
@@ -74,13 +76,20 @@ def run(
     # 3) Transcribe (whole file) --------------------------------------------
     report("asr", "转写中（首次会下载模型，请耐心等待）…", 20)
 
+    # A caller-supplied language overrides the mode preset; "auto"/"" normalize
+    # to None, which re-enables per-chunk detection on mixed-language audio.
+    # `is not None` (not `or`) so an explicit "auto" wins over a mode preset.
+    lang = normalize_language(language) if language is not None else mode.language
+    if lang is not None:
+        logger.info("Language pinned to %s; per-chunk language detection disabled", lang)
+
     def asr_progress(frac, msg):
         report("asr", msg, 20 + int(frac * 55))
 
     transcriber = Transcriber(model=model, engine=engine or mode.engine)
     asr: ASRResult = transcriber.transcribe(
         wav_path,
-        language=mode.language,
+        language=lang,
         initial_prompt=(initial_prompt if initial_prompt is not None else mode.initial_prompt),
         condition_on_previous=mode.condition_on_previous,
         chunked=mode.chunked_language,
@@ -103,7 +112,6 @@ def run(
     llm_on = False
     if use_llm:
         from core import llm as llm_mod
-        from core.languages import prefers_asian_model
         prefer = chinese_model if prefers_asian_model(asr.language) else llm_model
         alt = llm_model if prefer == chinese_model else chinese_model
         resolved = (llm_mod.resolve_model(prefer)

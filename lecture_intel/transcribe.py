@@ -6,6 +6,7 @@ Recorder CLI — headless transcription.
     python transcribe.py lecture.mp3 -m classroom  # classroom (denoise + main speaker)
     python transcribe.py ielts.webm -m ielts       # IELTS analysis report
     python transcribe.py a.wav --model large-v3-turbo -f txt -f srt -o ./out
+    python transcribe.py talk.m4a -l ja                           # pin the language
 """
 from __future__ import annotations
 
@@ -27,6 +28,10 @@ def main() -> int:
                     help="large-v3 | large-v3-turbo | medium | small")
     ap.add_argument("--engine", default="auto",
                     choices=["auto", "mlx-whisper", "faster-whisper"])
+    ap.add_argument("-l", "--language", default=None, metavar="CODE",
+                    help="pin the spoken language (zh en ja ko fr de es…). "
+                         "Default: auto-detect, which also enables per-chunk "
+                         "code-switching; pinning trades that away")
     ap.add_argument("-f", "--format", action="append", dest="formats",
                     help="txt|md|srt|json (repeatable)")
     ap.add_argument("-v", "--verbose", action="store_true")
@@ -52,7 +57,8 @@ def main() -> int:
 
     summary = run(
         input_path=inp, output_dir=out, mode_key=args.mode,
-        model=args.model, engine=args.engine, formats=args.formats, progress=show,
+        model=args.model, engine=args.engine, language=args.language,
+        formats=args.formats, progress=show,
     )
     print()
     print("=" * 60)

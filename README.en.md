@@ -124,6 +124,7 @@ Three model tiers are selectable in the UI: **most accurate** `large-v3` / **bal
 .venv/bin/python3 transcribe.py class.mp3  -m classroom        # classroom
 .venv/bin/python3 transcribe.py ielts.webm -m ielts            # IELTS feedback
 .venv/bin/python3 transcribe.py a.wav --model large-v3-turbo -f txt -f docx
+.venv/bin/python3 transcribe.py talk.m4a -l ja                 # pin the language (default: auto-detect)
 ```
 
 Supports m4a / mp3 / wav / webm / flac / aac / ogg / opus.
@@ -243,7 +244,7 @@ phases above, with each commit's body noting the actual original development per
 Transcription today is **zh/en-first**; optional LLM sizing already follows **Qwen (Asian) / Mistral (European)**.
 Full multilingual (e.g. ja/ko/EU coach sessions) lands in three steps:
 
-1. **`coach_language` + language helpers** — not a standalone "detector app", but one setting every later
+1. **A shared `language` setting** + language helpers — not a standalone "detector app", but one setting every later
    stage shares (role separation, reports, model routing);
 2. Diarization without hard-coded Chinese assumptions;
 3. True multi-language ASR labels; then analysis and optional coach-side translation.
@@ -252,7 +253,8 @@ Progress: the language helper layer now lives in `core/languages.py` and labels 
 (kana → Japanese, Hangul → Korean, Han → Chinese; scripts shared by several languages — Latin, Cyrillic,
 Arabic — defer to Whisper's own detection). Step 3's transcription labels are done: Japanese is no longer
 reported as Chinese, Korean is no longer reported as English, and Latin-script languages no longer collapse
-to English. The zh/en code-switching thresholds are unchanged. Step 1's shared setting and step 2 remain.
+to English. The zh/en code-switching thresholds are unchanged. Step 1's setting now reaches the engine and
+the CLI (`transcribe.py -l ja`); the UI picker is still to come, as is step 2.
 
 See the [LLM guide](lecture_intel/docs/LLM_MODELS.md) for routing notes.
 

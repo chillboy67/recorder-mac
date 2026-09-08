@@ -93,9 +93,11 @@ class Transcriber:
     ) -> ASRResult:
         """Transcribe a (normalized 16k mono wav) file.
 
-        chunked=True (used by IELTS): split at silences and detect language per
-        chunk. This keeps zh/en code-switching while still running on the GPU
-        via mlx — mlx's normal single-pass locks to one global language.
+        chunked=True (every mode uses it): split at silences and transcribe
+        chunk by chunk, each with its own language — detected when `language`
+        is None (keeps zh/en code-switching), or the caller's pinned language
+        otherwise. Either way chunking bounds memory on long recordings and
+        stays on the GPU (mlx's single pass locks to one global language).
         """
         engine = self._resolve_engine()
         logger.info("Transcribing with %s (model=%s, chunked=%s)", engine, self.model, chunked)
@@ -104,10 +106,13 @@ class Transcriber:
 
         warnings: list[str] = []
         t0 = time.time()
-        if engine == "mlx-whisper" and chunked and language is None:
+        if engine == "mlx-whisper" and chunked:
+            # Chunking stays on even for a pinned language: it is what bounds
+            # memory on long recordings. Only per-chunk *detection* needs the
+            # language to be unset.
             try:
                 raw_segments, detected_lang = self._transcribe_mlx_chunked(
-                    audio_path, initial_prompt, progress, chunk_sec
+                    audio_path, initial_prompt, progress, chunk_sec, language
                 )
             except Exception as exc:
                 logger.warning("chunked mlx failed (%s); falling back to single-pass", exc)
@@ -233,14 +238,19 @@ class Transcriber:
         lang = result.get("language", language or "en")
         return segs, lang
 
-    def _transcribe_mlx_chunked(self, audio_path, initial_prompt, progress, chunk_sec=90.0):
-        """GPU code-switching: split at silences, detect language per chunk.
+    def _transcribe_mlx_chunked(self, audio_path, initial_prompt, progress,
+                                chunk_sec=90.0, language: Optional[str] = None):
+        """GPU code-switching: split at silences, transcribe chunk by chunk.
 
         mlx runs on the GPU but does ONE global language pass, so it translates
         the minority language away on mixed zh/en audio. Splitting at natural
         pauses and transcribing each chunk with its own language detection keeps
         both languages — and stays on the GPU (fast). Chunk boundaries are at
         silences, so accuracy at the seams is preserved.
+
+        When the caller pins `language`, every chunk is transcribed in that
+        language instead (no per-chunk detection); chunking then serves memory
+        bounding rather than code-switching.
         """
         import mlx_whisper
         import numpy as np
@@ -266,7 +276,7 @@ class Transcriber:
             if len(clip) < int(0.2 * sr):
                 continue
             r = mlx_whisper.transcribe(
-                clip, path_or_hf_repo=repo, language=None,
+                clip, path_or_hf_repo=repo, language=language,
                 initial_prompt=initial_prompt or None, word_timestamps=True,
                 condition_on_previous_text=False, temperature=_TEMPERATURE_LADDER,
                 no_speech_threshold=_NO_SPEECH_THRESHOLD,

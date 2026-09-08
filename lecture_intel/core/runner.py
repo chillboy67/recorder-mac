@@ -37,6 +37,7 @@ def run_pipeline_subprocess(input_path, output_dir, settings, queue):
             output_dir=output_dir,
             mode_key=settings.get("mode", "general"),
             model=settings.get("model", "large-v3"),
+            language=settings.get("language"),
             formats=settings.get("formats"),
             use_llm=settings.get("use_llm", False),
             llm_model=settings.get("llm_model", "llama3.1:8b"),
