@@ -119,6 +119,7 @@ cd lecture_intel
 .venv/bin/python3 transcribe.py 课堂.mp3  -m classroom       # 课堂
 .venv/bin/python3 transcribe.py 雅思.webm -m ielts           # 雅思反馈
 .venv/bin/python3 transcribe.py a.wav --model large-v3-turbo -f txt -f docx
+.venv/bin/python3 transcribe.py 讲座.m4a -l ja               # 指定语言（默认自动检测）
 ```
 
 支持 m4a / mp3 / wav / webm / flac / aac / ogg / opus。
@@ -233,7 +234,7 @@ App 读取 `~/Documents`，安装脚本会把可运行副本与虚拟环境放�
 当前转写以 **中英** 为主；可选 LLM 已按 **亚洲 Qwen / 欧洲 Mistral** 选型。
 完整多语（日/韩/欧语教官会话等）分三步：
 
-1. **教官语言配置**（`coach_language`）+ 语言工具层——不是单独做一个「检测 App」，
+1. **统一语言设置**（`language`）+ 语言工具层——不是单独做一个「检测 App」，
    而是让后续分离角色、报告、模型路由有统一参数；
 2. 说话人分离去掉写死中文假设；
 3. 转写语言标签真正多语；再接分析与（可选）教官话对照翻译。
@@ -242,7 +243,8 @@ App 读取 `~/Documents`，安装脚本会把可运行副本与虚拟环境放�
 （假名→日语、谚文→韩语、汉字→中文；拉丁、西里尔、阿拉伯等被多种语言共用的文字
 交给 Whisper 自己的检测结果区分）。第 3 步的转写标签已完成——日语不再被标成中文，
 韩语不再被标成英文，法德西等拉丁语系也不再一律退回英文；中英混说的判定阈值保持
-不变。第 1 步的统一配置项与第 2 步待做。
+不变。第 1 步的设置已接入引擎与命令行（`transcribe.py -l ja`），界面选择器待做；
+第 2 步待做。
 
 模型路由说明见 [LLM 指南](lecture_intel/docs/LLM_MODELS.md)。
 

@@ -189,3 +189,46 @@ def test_picker_languages_are_well_formed():
     assert len(codes) == len(set(codes)), "duplicate language in the picker"
     for code in codes[1:]:
         assert code in LANGUAGE_NAMES, f"{code} has no display name"
+
+
+# ── forced-language plumbing through the transcriber ─────────────────
+
+@pytest.fixture
+def mlx_spy(monkeypatch):
+    """Route Transcriber to a fake mlx engine and record which path runs."""
+    calls = {"chunked": None, "single": False}
+
+    def fake_chunked(self, audio_path, initial_prompt, progress, chunk_sec, language):
+        calls["chunked"] = language
+        return [], language or "en"
+
+    def fake_single(self, *args):
+        calls["single"] = True
+        return [], "en"
+
+    monkeypatch.setattr(Transcriber, "_resolve_engine", lambda self: "mlx-whisper")
+    monkeypatch.setattr(Transcriber, "_transcribe_mlx_chunked", fake_chunked)
+    monkeypatch.setattr(Transcriber, "_transcribe_mlx", fake_single)
+    return calls
+
+
+def test_pinned_language_still_chunks(tmp_path, mlx_spy):
+    """Chunking is what bounds memory on a 2-hour recording; pinning a language
+    disables per-chunk detection, not chunking itself."""
+    result = Transcriber(model="large-v3").transcribe(
+        tmp_path / "a.wav", language="ja", chunked=True)
+    assert mlx_spy["chunked"] == "ja"
+    assert not mlx_spy["single"], "a pinned language must not fall back to one mlx pass"
+    assert result.language == "ja"
+
+
+def test_auto_language_chunks_with_detection(tmp_path, mlx_spy):
+    Transcriber(model="large-v3").transcribe(tmp_path / "a.wav", chunked=True)
+    assert mlx_spy["chunked"] is None
+    assert not mlx_spy["single"]
+
+
+def test_chunking_off_uses_single_pass(tmp_path, mlx_spy):
+    Transcriber(model="large-v3").transcribe(tmp_path / "a.wav", chunked=False)
+    assert mlx_spy["chunked"] is None
+    assert mlx_spy["single"]
