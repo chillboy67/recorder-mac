@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from core.languages import PICKER_LANGUAGES
 from core.modes import GENERAL, CLASSROOM, IELTS
 from gui import theme
 from gui.widgets.common import NoScrollComboBox
@@ -238,6 +239,20 @@ class HomeScreen(QWidget):
 
         srow.addWidget(self._divider())
 
+        lbl_lang = QLabel("语言")
+        lbl_lang.setProperty("tone", "hint")
+        self._lang_combo = NoScrollComboBox()
+        for value, label in PICKER_LANGUAGES:
+            self._lang_combo.addItem(label, userData=value)
+        self._lang_combo.setToolTip(
+            "默认自动检测：中英等混说按静音分块逐块识别。指定语言可纠正识别"
+            "不稳的音频，但会关闭逐块语种切换。")
+        self._lang_combo.currentIndexChanged.connect(self._save_prefs)
+        srow.addWidget(lbl_lang)
+        srow.addWidget(self._lang_combo)
+
+        srow.addWidget(self._divider())
+
         lbl_fmt = QLabel("导出")
         lbl_fmt.setProperty("tone", "hint")
         srow.addWidget(lbl_fmt)
@@ -319,6 +334,7 @@ class HomeScreen(QWidget):
         return {
             "mode": self.current_mode(),
             "model": self._model_combo.currentData(),
+            "language": self._lang_combo.currentData(),
             "formats": formats,
             "use_llm": self._cb_llm.isChecked(),
             "llm_model": "llama3.1:8b",
@@ -329,27 +345,40 @@ class HomeScreen(QWidget):
         s = self.get_settings()
         self._prefs.setValue("mode", s["mode"])
         self._prefs.setValue("model", s["model"])
+        self._prefs.setValue("language", s["language"])
         self._prefs.setValue("formats", s["formats"])
         self._prefs.setValue("use_llm", s["use_llm"])
 
     def _load_prefs(self) -> None:
+        # Read everything before applying any of it: applying the mode card
+        # fires _save_prefs with the not-yet-restored widget state, which used
+        # to overwrite the stored model/language/formats/LLM prefs with
+        # defaults before they were read back — resetting them every launch.
         mode = self._prefs.value("mode", "general")
+        model = self._prefs.value("model", "large-v3")
+        lang = self._prefs.value("language", "auto")
+        fmts = self._prefs.value("formats", ["txt", "md", "docx"])
+        if isinstance(fmts, str):
+            fmts = [fmts]
+        use_llm = self._prefs.value("use_llm", False, type=bool)
+
         self._on_mode(mode if mode in self._mode_cards else "general")
 
-        model = self._prefs.value("model", "large-v3")
         for i in range(self._model_combo.count()):
             if self._model_combo.itemData(i) == model:
                 self._model_combo.setCurrentIndex(i)
                 break
 
-        fmts = self._prefs.value("formats", ["txt", "md", "docx"])
-        if isinstance(fmts, str):
-            fmts = [fmts]
+        for i in range(self._lang_combo.count()):
+            if self._lang_combo.itemData(i) == lang:
+                self._lang_combo.setCurrentIndex(i)
+                break
+
         for ext, chip in self._chips.items():
             chip.setChecked(ext in fmts)
         self._on_chip(False)
 
-        self._cb_llm.setChecked(self._prefs.value("use_llm", False, type=bool))
+        self._cb_llm.setChecked(use_llm)
         self._on_source(self._current_source())
 
     # ── file selection ──────────────────────────────────────

@@ -253,8 +253,9 @@ Progress: the language helper layer now lives in `core/languages.py` and labels 
 (kana → Japanese, Hangul → Korean, Han → Chinese; scripts shared by several languages — Latin, Cyrillic,
 Arabic — defer to Whisper's own detection). Step 3's transcription labels are done: Japanese is no longer
 reported as Chinese, Korean is no longer reported as English, and Latin-script languages no longer collapse
-to English. The zh/en code-switching thresholds are unchanged. Step 1's setting now reaches the engine and
-the CLI (`transcribe.py -l ja`); the UI picker is still to come, as is step 2.
+to English. The zh/en code-switching thresholds are unchanged. Step 1 is complete: the setting
+reaches the engine, the CLI (`transcribe.py -l ja`) and a 语言 picker in the UI (auto-detect by
+default, 15 common languages); only step 2 remains.
 
 See the [LLM guide](lecture_intel/docs/LLM_MODELS.md) for routing notes.
 

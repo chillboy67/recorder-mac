@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from core.languages import display_name
 from gui import theme
 
 
@@ -152,7 +153,7 @@ class ResultsScreen(QWidget):
         # left pane header + tabs
         self._left.title_lbl.setText(
             "逐字转写 · 教官 / 考生" if mode == "ielts" else "逐字转写")
-        lang = stats.get("language", "?")
+        lang = display_name(stats.get("language", "?"))
         dur = stats.get("duration_sec", 0)
         meta = f"{lang} · {dur / 60:.0f}:{dur % 60:02.0f}"
         if ielts:
