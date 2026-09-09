@@ -207,8 +207,10 @@ audio stays safe, and quitting just terminates the subprocess.
 **Speaker separation avoids anything requiring an auth token.**
 Voiceprint embeddings + hierarchical clustering are enough for the two-speaker case. Same-gender voices are often
 acoustically hard to separate, so there's a **language-based fallback**: when acoustic separation is clearly
-unbalanced and the content contains Chinese, roles are assigned by language (the Chinese speaker is the coach,
-the English speaker is the student) — this is what makes coach/student separation actually reliable.
+unbalanced and a turn is written in a script foreign to the candidate's language, roles are assigned by language
+(an IELTS candidate always answers in English, so whoever else is speaking is the coach — Chinese, Japanese,
+Korean, Russian, Thai alike) — this is what makes coach/student separation actually reliable. Known gap: a
+Latin-script coach (fr/de/es) shares the candidate's script and needs per-segment language detection to tell apart.
 
 **System audio capture writes its own WAV file.**
 ScreenCaptureKit hands back non-interleaved Float32 audio that neither AVAudioFile nor its converters will accept,
@@ -253,9 +255,12 @@ Progress: the language helper layer now lives in `core/languages.py` and labels 
 (kana → Japanese, Hangul → Korean, Han → Chinese; scripts shared by several languages — Latin, Cyrillic,
 Arabic — defer to Whisper's own detection). Step 3's transcription labels are done: Japanese is no longer
 reported as Chinese, Korean is no longer reported as English, and Latin-script languages no longer collapse
-to English. The zh/en code-switching thresholds are unchanged. Step 1 is complete: the setting
-reaches the engine, the CLI (`transcribe.py -l ja`) and a 语言 picker in the UI (auto-detect by
-default, 15 common languages); only step 2 remains.
+to English. The zh/en code-switching thresholds are unchanged. Steps 1 and 2 are complete: the
+setting reaches the engine, the CLI (`transcribe.py -l ja`) and a 语言 picker in the UI, and the
+coach/student split no longer assumes a Chinese-speaking coach — Japanese, Korean, Russian and
+Thai coaches are attributed by script. Known gap: a Latin-script coach (fr/de/es) shares the
+candidate's script and needs per-segment language detection. What remains is step 3's analysis
+and optional translation.
 
 See the [LLM guide](lecture_intel/docs/LLM_MODELS.md) for routing notes.
 

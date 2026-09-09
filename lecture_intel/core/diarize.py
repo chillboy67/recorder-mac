@@ -35,11 +35,20 @@ import numpy as np
 
 from modules import ASRResult, ASRSegment
 
+from core.languages import foreign_script_count
+
 logger = logging.getLogger(__name__)
 
 CANDIDATE = "candidate"   # 考生
 EXAMINER = "examiner"     # 教官
 OTHER = "other"           # 背景人声
+
+# IELTS: the candidate always answers in English, whoever the coach is and
+# whatever language the coach instructs in. So "not the candidate's script"
+# identifies the coach's turns.
+CANDIDATE_LANGUAGE = "en"
+# Two characters, so a stray letter or a single loanword doesn't flip a turn.
+MIN_FOREIGN_CHARS = 2
 
 # A second cluster smaller than this is treated as noise / mis-split, not a
 # real second speaker — prevents a monologue from showing a phantom examiner.
@@ -110,22 +119,24 @@ def diarize(
     acoustic_minority = _dur(main[1][1]) if len(main) == 2 else 0.0
     acoustic_quality = acoustic_minority / max(total_speech, 1e-9)
 
-    # In a bilingual IELTS coaching session the student answers in English and
-    # the coach corrects/instructs in Chinese — so any Chinese in a segment is a
-    # very strong "this is the coach" signal. Two same-gender voices are often
-    # acoustically too similar for the embedder to split (it collapses ~everything
-    # into one cluster). When that happens AND there's meaningful Chinese, the
-    # language signal is far more reliable than the degenerate acoustic split.
-    zh_dur = sum(s.end - s.start for s in segments if _has_chinese(s.text))
-    zh_share = zh_dur / max(total_speech, 1e-9)
-    use_language = zh_share >= 0.10 and acoustic_quality < 0.18
+    # In a bilingual coaching session the candidate answers in the exam language
+    # while the coach corrects and instructs in their own — so a turn written in
+    # another script is a very strong "this is the coach" signal, whatever that
+    # other language is. Two same-gender voices are often acoustically too
+    # similar for the embedder to split (it collapses ~everything into one
+    # cluster). When that happens AND there's meaningful coach-language speech,
+    # the language signal is far more reliable than the degenerate acoustic
+    # split.
+    coach_dur = sum(s.end - s.start for s in segments if _is_coach_segment(s.text))
+    coach_share = coach_dur / max(total_speech, 1e-9)
+    use_language = coach_share >= 0.10 and acoustic_quality < 0.18
 
     labels: dict[int, str] = {}
 
     if use_language:
         cand_s = exam_s = 0.0
         for s in asr.segments:
-            if _has_chinese(s.text):
+            if _is_coach_segment(s.text):
                 labels[s.id] = EXAMINER
                 exam_s += s.end - s.start
             else:
@@ -136,8 +147,8 @@ def diarize(
         method = "language"
         logger.info(
             "Diarization (language split): candidate=%.0fs examiner=%.0fs "
-            "(zh_share=%.0f%%, acoustic split too weak %.0f%%)",
-            cand_s, exam_s, zh_share * 100, acoustic_quality * 100,
+            "(coach-lang share=%.0f%%, acoustic split too weak %.0f%%)",
+            cand_s, exam_s, coach_share * 100, acoustic_quality * 100,
         )
     else:
         method = "resemblyzer"
@@ -334,9 +345,15 @@ def _nearest_label(seg, all_segs, labels) -> str:
     return best
 
 
-def _has_chinese(text: str) -> bool:
-    """True if the segment contains a meaningful amount of Chinese (≥2 chars)."""
-    return len(re.findall(r"[一-鿿]", text)) >= 2
+def _is_coach_segment(text: str) -> bool:
+    """True when a turn is written in a script foreign to the candidate's
+    language, i.e. it is the coach instructing in their own tongue.
+
+    Replaces a `_has_chinese` test that only recognised Chinese coaches: a
+    Japanese, Korean, Russian or Thai coach is now attributed the same way. A
+    Latin-script coach (fr/de/es) is still not spotted — see
+    `languages.foreign_script_count`."""
+    return foreign_script_count(text, CANDIDATE_LANGUAGE) >= MIN_FOREIGN_CHARS
 
 
 def _dur(segs) -> float:

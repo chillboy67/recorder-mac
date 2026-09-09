@@ -114,3 +114,52 @@ def test_modes_present():
     assert get_mode("ielts").analyze_ielts is True
     assert get_mode("classroom").denoise is True
     assert get_mode("general").diarize is False
+
+
+# ── language-based examiner / candidate split ────────────────────────
+
+def test_coach_split_matches_old_chinese_test_on_zh_en():
+    """This split is what makes examiner/candidate separation usable, so the
+    zh/en case must be bit-for-bit what the old hard-coded `_has_chinese`
+    test produced."""
+    import re
+    from core.diarize import _is_coach_segment
+
+    old_has_chinese = lambda t: len(re.findall(r"[一-鿿]", t)) >= 2
+    for text in [
+        "Can you describe a folk tale you know?",
+        "Well, I would talk about Bluebeard, I heard it at promary school.",
+        "这里要注意时态，你用了过去式。",
+        "这个 very good",
+        "我 said something",          # one stray char is not a turn
+        "What happens next?",
+        "",
+    ]:
+        assert _is_coach_segment(text) == old_has_chinese(text), text
+
+
+@pytest.mark.parametrize("text", [
+    "すみません、時制が間違っています",        # Japanese coach
+    "시제를 잘못 쓰셨어요",                    # Korean coach
+    "Обратите внимание на время глагола",      # Russian coach
+    "คุณใช้ไวยากรณ์ผิดตรงนี้",                 # Thai coach
+])
+def test_coach_split_recognises_any_coach_language(text):
+    """Roadmap step 2: the coach no longer has to be Chinese-speaking."""
+    from core.diarize import _is_coach_segment
+    assert _is_coach_segment(text)
+
+
+def test_latin_script_coach_is_a_declared_gap():
+    """French/German share the candidate's script, so script alone can't spot
+    them. Pinned so the limitation is visible rather than silent."""
+    from core.diarize import _is_coach_segment
+    assert not _is_coach_segment("Attention, vous avez utilisé le passé.")
+
+
+def test_foreign_script_count_respects_the_reference_language():
+    from core.languages import foreign_script_count
+    assert foreign_script_count("日本語です", "en") >= 2       # foreign to English
+    assert foreign_script_count("日本語です", "ja") == 0       # native to Japanese
+    assert foreign_script_count("한국어입니다", "ja") >= 2     # Hangul is not Japanese
+    assert foreign_script_count("hello there", "en") == 0

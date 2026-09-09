@@ -142,6 +142,44 @@ def script_counts(text: str) -> dict[str, int]:
     return counts
 
 
+# Scripts each language is normally written in; anything outside them is
+# foreign to that language. Languages not listed are treated as Latin-script.
+_NATIVE_SCRIPTS: dict[str, frozenset[str]] = {
+    "zh": frozenset({"han"}),
+    "ja": frozenset({"han", "kana"}),
+    "ko": frozenset({"hangul"}),
+    "ru": frozenset({"cyrillic"}), "uk": frozenset({"cyrillic"}),
+    "bg": frozenset({"cyrillic"}), "sr": frozenset({"cyrillic"}),
+    "mk": frozenset({"cyrillic"}), "be": frozenset({"cyrillic"}),
+    "el": frozenset({"greek"}),
+    "he": frozenset({"hebrew"}),
+    "ar": frozenset({"arabic"}), "fa": frozenset({"arabic"}),
+    "ur": frozenset({"arabic"}),
+    "hi": frozenset({"devanagari"}), "mr": frozenset({"devanagari"}),
+    "ne": frozenset({"devanagari"}),
+    "th": frozenset({"thai"}),
+    "ka": frozenset({"georgian"}),
+    "hy": frozenset({"armenian"}),
+}
+
+
+def foreign_script_count(text: str, lang: str = "en") -> int:
+    """Count characters written in a script `lang` is not normally written in.
+
+    This is how a turn is recognised as having left a language: in a coaching
+    session the coach instructs in their own language while the candidate
+    answers in the exam language, so non-native script characters mark the
+    coach's turns — for any coach language, not just Chinese.
+
+    Known limit: Latin-script languages share a script, so a French or German
+    turn scores 0 against English and cannot be spotted this way. That needs
+    per-segment language detection (Whisper only reports one language per
+    pass/chunk), which the diarizer does not have yet.
+    """
+    native = _NATIVE_SCRIPTS.get(lang, frozenset({"latin"}))
+    return sum(n for script, n in script_counts(text).items() if script not in native)
+
+
 def _family_member(script: str, detected: Optional[str]) -> Optional[str]:
     if detected and detected in _SCRIPT_FAMILY.get(script, frozenset()):
         return detected
