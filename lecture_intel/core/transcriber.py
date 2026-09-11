@@ -284,6 +284,11 @@ class Transcriber:
                 compression_ratio_threshold=_COMPRESSION_RATIO_THRESHOLD,
             )
             offset = a / sr
+            # The chunk's own detected language, carried onto each of its
+            # segments. A French turn and an English turn sit in different
+            # chunks but share a script, so this is the only thing that can
+            # tell them apart downstream (see _to_segments).
+            chunk_lang = r.get("language")
             for seg in r.get("segments", []):
                 seg = dict(seg)
                 seg["start"] = seg.get("start", 0.0) + offset
@@ -293,9 +298,10 @@ class Transcriber:
                      "end": w.get("end", 0.0) + offset}
                     for w in seg.get("words", [])
                 ]
+                seg["chunk_language"] = chunk_lang
                 all_segs.append(seg)
-            if r.get("language"):
-                langs.append(r["language"])
+            if chunk_lang:
+                langs.append(chunk_lang)
             if progress:
                 progress(0.05 + 0.9 * (i + 1) / len(chunks), "转写中（GPU 分块）…")
 
@@ -395,7 +401,9 @@ class Transcriber:
                      detected: Optional[str] = None) -> list[ASRSegment]:
         """`detected` is Whisper's file-level language code. Per-segment labels
         are derived from script, but Latin script cannot tell en/fr/de/es apart,
-        so the segment labeller needs Whisper's opinion to break the tie."""
+        so the labeller needs a language to break the tie — the segment's own
+        chunk language when the chunked path supplied one, otherwise the
+        file-level `detected`."""
         segments: list[ASRSegment] = []
         for i, s in enumerate(raw_segments):
             words = [
@@ -413,7 +421,7 @@ class Transcriber:
                 start=float(s.get("start", 0.0) or 0.0),
                 end=float(s.get("end", 0.0) or 0.0),
                 text=text,
-                language=detect_language(text, detected),
+                language=detect_language(text, s.get("chunk_language") or detected),
                 confidence=float(s.get("avg_logprob", 0.0) or 0.0),
                 words=words,
             ))

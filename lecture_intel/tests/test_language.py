@@ -158,6 +158,33 @@ def test_segments_label_japanese_and_english_separately():
     assert [s.language for s in segs] == ["ja", "en"]
 
 
+def test_segments_use_their_own_chunk_language():
+    """Two Latin-script languages in one file share a script, so the file-level
+    code can only pick one of them. The per-chunk language carried on each
+    segment is what labels both correctly."""
+    raw = [
+        {**_raw("Attention, vous avez utilisé le passé."), "chunk_language": "fr"},
+        {**_raw("I have been studying English for years."), "chunk_language": "en"},
+    ]
+    segs = Transcriber._to_segments(raw, detected="en")   # file level says English
+    assert [s.language for s in segs] == ["fr", "en"]
+
+
+def test_chunk_language_falls_back_to_the_file_level_code():
+    assert Transcriber._to_segments(
+        [_raw("Bonjour tout le monde")], detected="fr")[0].language == "fr"
+    # Neither signal available: Latin text still defaults to English.
+    assert Transcriber._to_segments([_raw("Bonjour tout le monde")])[0].language == "en"
+
+
+def test_zh_en_code_switching_unaffected_by_chunk_language():
+    raw = [
+        {**_raw("我们用中文交流"), "chunk_language": "zh"},
+        {**_raw("and then we switch to English"), "chunk_language": "en"},
+    ]
+    assert [s.language for s in Transcriber._to_segments(raw, detected="zh")] == ["zh", "en"]
+
+
 # ── routing + UI helpers ─────────────────────────────────────────────
 
 @pytest.mark.parametrize("code,expected", [

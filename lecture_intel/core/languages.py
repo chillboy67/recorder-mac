@@ -172,9 +172,10 @@ def foreign_script_count(text: str, lang: str = "en") -> int:
     coach's turns — for any coach language, not just Chinese.
 
     Known limit: Latin-script languages share a script, so a French or German
-    turn scores 0 against English and cannot be spotted this way. That needs
-    per-segment language detection (Whisper only reports one language per
-    pass/chunk), which the diarizer does not have yet.
+    turn scores 0 against English and cannot be spotted this way. Callers that
+    need that distinction must check the segment's own language instead — see
+    the per-chunk `chunk_language` the chunked ASR path attaches in
+    `core.transcriber`.
     """
     native = _NATIVE_SCRIPTS.get(lang, frozenset({"latin"}))
     return sum(n for script, n in script_counts(text).items() if script not in native)
