@@ -97,11 +97,12 @@ Recommended upgrade path is **Qwen (Asian) / Mistral (European)**, sized by RAM.
   (CPU) remains the automatic fallback if mlx is unavailable.
 - **Speaker separation** is frame-level voice embeddings + clustering, with a
   language fallback: when two same-gender voices are acoustically too close to
-  split, turns written in a script foreign to the candidate's English are
-  attributed to the coach (教官) and the rest to the student (考生) — so a
-  Chinese, Japanese, Korean, Russian or Thai coach all work. The student's
-  English is what the pronunciation/grammar analysis runs on. Latin-script
-  coaches (fr/de/es) share the candidate's script and are not yet separable.
+  split, turns that are not in the candidate's English are attributed to the
+  coach (教官) and the rest to the student (考生). A Chinese, Japanese, Korean,
+  Russian or Thai coach is caught by script; a French/German/Spanish coach —
+  whose letters match English — by the per-chunk language the chunked ASR path
+  attaches to each segment. The student's English is what the
+  pronunciation/grammar analysis runs on.
 
 ## Test
 

@@ -120,14 +120,14 @@ def diarize(
     acoustic_quality = acoustic_minority / max(total_speech, 1e-9)
 
     # In a bilingual coaching session the candidate answers in the exam language
-    # while the coach corrects and instructs in their own — so a turn written in
-    # another script is a very strong "this is the coach" signal, whatever that
-    # other language is. Two same-gender voices are often acoustically too
-    # similar for the embedder to split (it collapses ~everything into one
-    # cluster). When that happens AND there's meaningful coach-language speech,
-    # the language signal is far more reliable than the degenerate acoustic
-    # split.
-    coach_dur = sum(s.end - s.start for s in segments if _is_coach_segment(s.text))
+    # while the coach corrects and instructs in their own. Two same-gender voices
+    # are often acoustically too similar for the embedder to split (it collapses
+    # ~everything into one cluster); when that happens AND a meaningful share of
+    # the speech is not in the candidate's language, that signal is far more
+    # reliable than the degenerate acoustic split. The per-segment language that
+    # the chunked ASR path carries is what makes this work for a coach whose
+    # language shares the candidate's script.
+    coach_dur = sum(s.end - s.start for s in segments if _is_coach_segment(s))
     coach_share = coach_dur / max(total_speech, 1e-9)
     use_language = coach_share >= 0.10 and acoustic_quality < 0.18
 
@@ -136,7 +136,7 @@ def diarize(
     if use_language:
         cand_s = exam_s = 0.0
         for s in asr.segments:
-            if _is_coach_segment(s.text):
+            if _is_coach_segment(s):
                 labels[s.id] = EXAMINER
                 exam_s += s.end - s.start
             else:
@@ -345,15 +345,23 @@ def _nearest_label(seg, all_segs, labels) -> str:
     return best
 
 
-def _is_coach_segment(text: str) -> bool:
-    """True when a turn is written in a script foreign to the candidate's
-    language, i.e. it is the coach instructing in their own tongue.
+def _is_coach_segment(seg: ASRSegment) -> bool:
+    """True when a turn belongs to the coach rather than the candidate.
 
-    Replaces a `_has_chinese` test that only recognised Chinese coaches: a
-    Japanese, Korean, Russian or Thai coach is now attributed the same way. A
-    Latin-script coach (fr/de/es) is still not spotted — see
-    `languages.foreign_script_count`."""
-    return foreign_script_count(text, CANDIDATE_LANGUAGE) >= MIN_FOREIGN_CHARS
+    Two signals, either is enough:
+
+    * the segment's own detected language differs from the candidate's language
+      — this is what catches a Latin-script coach (fr/de/es), whose letters look
+      exactly like English and which no script test can separate;
+    * the segment is written in a script foreign to the candidate's language —
+      the fallback for short turns, and for the single-pass / faster-whisper
+      paths, which carry no per-segment language.
+
+    "mixed" is left to the script check, so a zh/en code-switched turn is
+    attributed exactly as it was under the old `_has_chinese` rule."""
+    if seg.language and seg.language not in (CANDIDATE_LANGUAGE, "mixed"):
+        return True
+    return foreign_script_count(seg.text, CANDIDATE_LANGUAGE) >= MIN_FOREIGN_CHARS
 
 
 def _dur(segs) -> float:

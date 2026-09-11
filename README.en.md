@@ -207,10 +207,11 @@ audio stays safe, and quitting just terminates the subprocess.
 **Speaker separation avoids anything requiring an auth token.**
 Voiceprint embeddings + hierarchical clustering are enough for the two-speaker case. Same-gender voices are often
 acoustically hard to separate, so there's a **language-based fallback**: when acoustic separation is clearly
-unbalanced and a turn is written in a script foreign to the candidate's language, roles are assigned by language
-(an IELTS candidate always answers in English, so whoever else is speaking is the coach — Chinese, Japanese,
-Korean, Russian, Thai alike) — this is what makes coach/student separation actually reliable. Known gap: a
-Latin-script coach (fr/de/es) shares the candidate's script and needs per-segment language detection to tell apart.
+unbalanced and a turn is not in the candidate's language, roles are assigned by language (an IELTS candidate
+always answers in English, so whoever else is speaking is the coach) — this is what makes coach/student
+separation actually reliable. It covers Chinese, Japanese, Korean, Russian and Thai coaches, and also
+French/German/Spanish ones whose letters are indistinguishable from English: those are told apart by the
+per-chunk language the chunked ASR path attaches to each segment, not by script.
 
 **System audio capture writes its own WAV file.**
 ScreenCaptureKit hands back non-interleaved Float32 audio that neither AVAudioFile nor its converters will accept,
@@ -258,9 +259,8 @@ reported as Chinese, Korean is no longer reported as English, and Latin-script l
 to English. The zh/en code-switching thresholds are unchanged. Steps 1 and 2 are complete: the
 setting reaches the engine, the CLI (`transcribe.py -l ja`) and a 语言 picker in the UI, and the
 coach/student split no longer assumes a Chinese-speaking coach — Japanese, Korean, Russian and
-Thai coaches are attributed by script. Known gap: a Latin-script coach (fr/de/es) shares the
-candidate's script and needs per-segment language detection. What remains is step 3's analysis
-and optional translation.
+Thai coaches are attributed by script, and French/German/Spanish coaches by the per-chunk
+language carried on each segment. What remains is step 3's analysis and optional translation.
 
 See the [LLM guide](lecture_intel/docs/LLM_MODELS.md) for routing notes.
 

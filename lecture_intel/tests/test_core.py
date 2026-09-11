@@ -118,10 +118,16 @@ def test_modes_present():
 
 # ── language-based examiner / candidate split ────────────────────────
 
+def _seg(text: str, language: str = "en") -> ASRSegment:
+    return ASRSegment(id=0, start=0.0, end=1.0, text=text,
+                      language=language, confidence=-0.2)
+
+
 def test_coach_split_matches_old_chinese_test_on_zh_en():
     """This split is what makes examiner/candidate separation usable, so the
-    zh/en case must be bit-for-bit what the old hard-coded `_has_chinese`
-    test produced."""
+    zh/en case must be bit-for-bit what the old hard-coded `_has_chinese` test
+    produced. These segments carry the candidate's language, so the script check
+    decides — exactly as it did before."""
     import re
     from core.diarize import _is_coach_segment
 
@@ -135,7 +141,7 @@ def test_coach_split_matches_old_chinese_test_on_zh_en():
         "What happens next?",
         "",
     ]:
-        assert _is_coach_segment(text) == old_has_chinese(text), text
+        assert _is_coach_segment(_seg(text)) == old_has_chinese(text), text
 
 
 @pytest.mark.parametrize("text", [
@@ -145,16 +151,38 @@ def test_coach_split_matches_old_chinese_test_on_zh_en():
     "คุณใช้ไวยากรณ์ผิดตรงนี้",                 # Thai coach
 ])
 def test_coach_split_recognises_any_coach_language(text):
-    """Roadmap step 2: the coach no longer has to be Chinese-speaking."""
+    """The coach no longer has to be Chinese-speaking."""
     from core.diarize import _is_coach_segment
-    assert _is_coach_segment(text)
+    assert _is_coach_segment(_seg(text))
 
 
-def test_latin_script_coach_is_a_declared_gap():
-    """French/German share the candidate's script, so script alone can't spot
-    them. Pinned so the limitation is visible rather than silent."""
+def test_latin_script_coach_needs_the_segment_language():
+    """A Latin-script coach writes the same letters as the English candidate, so
+    no script test can separate them — the per-chunk language the chunked ASR
+    path attaches to each segment is the signal that does."""
     from core.diarize import _is_coach_segment
-    assert not _is_coach_segment("Attention, vous avez utilisé le passé.")
+
+    french = "Attention, vous avez utilisé le passé composé."
+    assert _is_coach_segment(_seg(french, "fr"))
+    assert _is_coach_segment(_seg(french, "de"))
+    # Without a per-segment language it is indistinguishable from the candidate.
+    assert not _is_coach_segment(_seg(french, "en"))
+
+
+def test_script_fallback_still_covers_what_language_cannot():
+    """Short turns, and the single-pass / faster-whisper paths, carry no usable
+    per-segment language — the script test has to keep doing the work there."""
+    from core.diarize import _is_coach_segment
+    assert _is_coach_segment(_seg("这里要注意时态"))              # language defaults to en
+    assert not _is_coach_segment(_seg("a perfectly normal English answer"))
+
+
+def test_mixed_segments_defer_to_the_script_check():
+    """A zh/en code-switched turn is labelled "mixed"; it must not be swept to
+    the coach's side merely for not being "en"."""
+    from core.diarize import _is_coach_segment
+    assert _is_coach_segment(_seg("这个 very good", "mixed"))
+    assert not _is_coach_segment(_seg("we switched to English here", "mixed"))
 
 
 def test_foreign_script_count_respects_the_reference_language():
