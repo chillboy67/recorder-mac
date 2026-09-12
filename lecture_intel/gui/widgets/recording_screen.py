@@ -28,10 +28,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from core.i18n import t
 from gui import theme
 from gui.widgets.visuals import GlowRing, PulseDot, WaveBars
 
-_SOURCE_LABELS = {"mic": "麦克风", "system": "电脑声音", "both": "麦克风＋电脑声音"}
+_SOURCE_LABELS = {"mic": "source_mic", "system": "source_system",
+                  "both": "source_both"}
 
 
 def _format_time(s: int) -> str:
@@ -88,7 +90,7 @@ class RecordingScreen(QWidget):
         status_row.setSpacing(10)
         status_row.setAlignment(Qt.AlignHCenter)
         self._dot = PulseDot("danger")
-        self._status = QLabel("录音中 · 麦克风")
+        self._status = QLabel(t("rec_status_recording", source=t("source_mic")))
         theme.set_tone(self._status, "danger")
         status_row.addWidget(self._dot)
         status_row.addWidget(self._status)
@@ -103,11 +105,11 @@ class RecordingScreen(QWidget):
         btn_row = QHBoxLayout()
         btn_row.setSpacing(12)
         btn_row.setAlignment(Qt.AlignHCenter)
-        self._pause_btn = QPushButton("❚❚  暂停")
+        self._pause_btn = QPushButton(t("rec_pause"))
         self._pause_btn.setObjectName("ghostPill")
         self._pause_btn.setCursor(Qt.PointingHandCursor)
         self._pause_btn.clicked.connect(self._toggle_pause)
-        self._stop_btn = QPushButton("■  停止录音")
+        self._stop_btn = QPushButton(t("rec_stop"))
         self._stop_btn.setObjectName("dangerPill")
         self._stop_btn.setCursor(Qt.PointingHandCursor)
         self._stop_btn.clicked.connect(self.stop)
@@ -115,7 +117,7 @@ class RecordingScreen(QWidget):
         btn_row.addWidget(self._stop_btn)
         root.addLayout(btn_row)
 
-        self._hint = QLabel("停止后可直接转写")
+        self._hint = QLabel(t("rec_hint_idle"))
         self._hint.setProperty("mono", True)
         self._hint.setAlignment(Qt.AlignCenter)
         root.addWidget(self._hint, alignment=Qt.AlignHCenter)
@@ -124,7 +126,8 @@ class RecordingScreen(QWidget):
 
     def start_capture(self, source: str, device: QAudioDevice | None) -> None:
         self._source = source
-        self._status.setText("录音中 · " + _SOURCE_LABELS.get(source, source))
+        self._status.setText(
+            t("rec_status_recording", source=t(_SOURCE_LABELS.get(source, source))))
         theme.set_tone(self._status, "danger")
         self._mic_path = self._sys_path = None
         self._pending_mix = (source == "both")
@@ -142,7 +145,7 @@ class RecordingScreen(QWidget):
         if source in ("system", "both"):
             from core import sysaudio
             if not sysaudio.available():
-                self._fail("系统音频组件缺失，请重新运行 make_app.sh 编译后再试。")
+                self._fail(t("rec_sys_missing"))
                 return
             try:
                 self._sys_path = self._sys_rec.start()
@@ -164,7 +167,7 @@ class RecordingScreen(QWidget):
     def _toggle_pause(self) -> None:
         if not self._is_recording:
             return
-        label = _SOURCE_LABELS.get(self._source, self._source)
+        label = t(_SOURCE_LABELS.get(self._source, self._source))
         if not self._paused:
             self._paused = True
             if self._source in ("mic", "both"):
@@ -174,10 +177,11 @@ class RecordingScreen(QWidget):
             self._timer.stop()
             self._dot.stop()
             self._bars.stop()
-            self._pause_btn.setText("▶  继续录音")
-            self._status.setText("已暂停 · " + label)
+            self._pause_btn.setText(t("rec_resume"))
+            self._status.setText(t("rec_status_paused", source=label))
             theme.set_tone(self._status, "hint")
-            self._hint.setText(f"已暂停 · 已写入 {self._elapsed_s * 0.031:.1f} MB")
+            self._hint.setText(
+                t("rec_hint_paused", mb=f"{self._elapsed_s * 0.031:.1f}"))
         else:
             self._paused = False
             if self._source in ("mic", "both"):
@@ -187,8 +191,8 @@ class RecordingScreen(QWidget):
             self._timer.start()
             self._dot.start()
             self._bars.start()
-            self._pause_btn.setText("❚❚  暂停")
-            self._status.setText("录音中 · " + label)
+            self._pause_btn.setText(t("rec_pause"))
+            self._status.setText(t("rec_status_recording", source=label))
             theme.set_tone(self._status, "danger")
 
     def stop(self) -> None:
@@ -211,12 +215,9 @@ class RecordingScreen(QWidget):
             err = self._sys_rec.error_text()
             self._abort()
             if "TCC" in err or "拒絕" in err or "denied" in err.lower() or not err:
-                self._fail(
-                    "无法录制电脑声音：需要「屏幕录制」权限。\n\n"
-                    "请到 系统设置 → 隐私与安全性 → 屏幕录制，勾选 Recorder，"
-                    "然后重试。\n（首次使用系统会弹出授权请求。）")
+                self._fail(t("rec_sys_perm"))
             else:
-                self._fail("录制电脑声音失败：\n" + err[:200])
+                self._fail(t("rec_sys_fail", err=err[:200]))
 
     def _on_state_change(self, state: QMediaRecorder.RecorderState) -> None:
         if state == QMediaRecorder.RecorderState.RecordingState:
@@ -257,7 +258,7 @@ class RecordingScreen(QWidget):
 
     def _finalize(self, path: str | None) -> None:
         if not path or not Path(path).exists() or Path(path).stat().st_size <= 1024:
-            self._fail("没有录到声音。请检查来源或权限后重试。")
+            self._fail(t("rec_no_audio"))
             return
         path = self._maybe_save_recording(path)
         size_mb = Path(path).stat().st_size / 1_048_576
@@ -267,11 +268,11 @@ class RecordingScreen(QWidget):
     def _maybe_save_recording(self, temp_path: str) -> str:
         box = QMessageBox(self)
         box.setIcon(QMessageBox.Question)
-        box.setWindowTitle("保存录音")
-        box.setText("要保存这段录音吗？")
-        box.setInformativeText("保存后会存到 “Recorder/record” 文件夹，方便以后再用。")
-        save_btn = box.addButton("保存", QMessageBox.AcceptRole)
-        box.addButton("不保存", QMessageBox.RejectRole)
+        box.setWindowTitle(t("rec_save_title"))
+        box.setText(t("rec_save_text"))
+        box.setInformativeText(t("rec_save_info"))
+        save_btn = box.addButton(t("rec_save_yes"), QMessageBox.AcceptRole)
+        box.addButton(t("rec_save_no"), QMessageBox.RejectRole)
         box.setDefaultButton(save_btn)
         box.exec()
         if box.clickedButton() is not save_btn:
@@ -279,7 +280,8 @@ class RecordingScreen(QWidget):
         import shutil
         from datetime import datetime
         from core.paths import record_dir
-        dest = record_dir() / f"录音_{datetime.now():%Y%m%d_%H%M%S}.wav"
+        dest = record_dir() / (
+            f"{t('rec_file_prefix')}_{datetime.now():%Y%m%d_%H%M%S}.wav")
         try:
             shutil.copy2(temp_path, dest)
             return str(dest)
@@ -289,10 +291,10 @@ class RecordingScreen(QWidget):
     def _enter_recording_ui(self) -> None:
         self._is_recording = True
         self._paused = False
-        self._pause_btn.setText("❚❚  暂停")
+        self._pause_btn.setText(t("rec_pause"))
         self._elapsed_s = 0
         self._ring.set_time("00:00:00")
-        self._hint.setText("停止后可直接转写")
+        self._hint.setText(t("rec_hint_idle"))
         self._timer.start()
         self._dot.start()
         self._bars.start()
@@ -320,16 +322,46 @@ class RecordingScreen(QWidget):
 
     def _fail(self, msg: str) -> None:
         self._abort()
-        QMessageBox.warning(self, "录音", msg)
+        QMessageBox.warning(self, t("rec_dialog_title"), msg)
         self.recording_aborted.emit()
 
     def _on_error(self, _error, error_string: str) -> None:
         self._exit_recording_ui()
-        QMessageBox.warning(self, "录音", f"错误:{error_string}")
+        QMessageBox.warning(self, t("rec_dialog_title"),
+                            t("rec_error", err=error_string))
         self.recording_aborted.emit()
 
     def _tick(self) -> None:
         self._elapsed_s += 1
         self._ring.set_time(_format_time(self._elapsed_s))
         mb = self._elapsed_s * 0.031
-        self._hint.setText(f"已写入 {mb:.1f} MB · 停止后可直接转写")
+        self._hint.setText(t("rec_hint_written", mb=f"{mb:.1f}"))
+
+    # ── live language switch ─────────────────────────
+
+    def _source_text(self) -> str:
+        return t(_SOURCE_LABELS.get(self._source, self._source))
+
+    def _render_status(self) -> None:
+        if self._paused:
+            self._status.setText(t("rec_status_paused", source=self._source_text()))
+            theme.set_tone(self._status, "hint")
+        else:
+            self._status.setText(
+                t("rec_status_recording", source=self._source_text()))
+            theme.set_tone(self._status, "danger")
+
+    def _render_hint(self) -> None:
+        mb = f"{self._elapsed_s * 0.031:.1f}"
+        if self._paused:
+            self._hint.setText(t("rec_hint_paused", mb=mb))
+        elif self._is_recording and self._elapsed_s > 0:
+            self._hint.setText(t("rec_hint_written", mb=mb))
+        else:
+            self._hint.setText(t("rec_hint_idle"))
+
+    def retranslate(self) -> None:
+        self._stop_btn.setText(t("rec_stop"))
+        self._pause_btn.setText(t("rec_resume") if self._paused else t("rec_pause"))
+        self._render_status()
+        self._render_hint()

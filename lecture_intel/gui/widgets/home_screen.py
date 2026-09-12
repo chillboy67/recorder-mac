@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from core.i18n import t
 from core.languages import PICKER_LANGUAGES
 from core.modes import GENERAL, CLASSROOM, IELTS
 from gui import theme
@@ -41,12 +42,14 @@ SUPPORTED_EXTENSIONS: set[str] = {
 }
 
 MODES = [GENERAL, CLASSROOM, IELTS]
+# (value, i18n key) — labels resolve through t() so they follow the UI language.
 MODELS = [
-    ("large-v3", "最准 large-v3"),
-    ("large-v3-turbo", "均衡 large-v3-turbo"),
-    ("small", "最快 small"),
+    ("large-v3", "model_large"),
+    ("large-v3-turbo", "model_turbo"),
+    ("small", "model_small"),
 ]
-SOURCES = [("mic", "麦克风"), ("system", "电脑声音"), ("both", "麦克风＋电脑声音")]
+SOURCES = [("mic", "source_mic"), ("system", "source_system"),
+           ("both", "source_both")]
 
 
 class ModeCard(QFrame):
@@ -76,6 +79,10 @@ class ModeCard(QFrame):
         self._desc.setProperty("cardDesc", "on" if on else "off")
         for w in (self, self._title, self._desc):
             theme.repolish(w)
+
+    def set_texts(self, title: str, desc: str) -> None:
+        self._title.setText(title)
+        self._desc.setText(desc)
 
     def mousePressEvent(self, event) -> None:
         self.clicked.emit(self.key)
@@ -114,9 +121,9 @@ class HomeScreen(QWidget):
         glyph = WaveGlyph()
         drop.addWidget(glyph, alignment=Qt.AlignHCenter)
 
-        title = QLabel("把音频拖到这里")
-        title.setStyleSheet("font-size: 15px; font-weight: 600;")
-        drop.addWidget(title, alignment=Qt.AlignHCenter)
+        self._drop_title = QLabel(t("home_drop_title"))
+        self._drop_title.setStyleSheet("font-size: 15px; font-weight: 600;")
+        drop.addWidget(self._drop_title, alignment=Qt.AlignHCenter)
 
         exts = QLabel("m4a · mp3 · wav · webm · flac · aac")
         exts.setProperty("mono", True)
@@ -125,11 +132,11 @@ class HomeScreen(QWidget):
         btn_row = QHBoxLayout()
         btn_row.setSpacing(10)
         btn_row.setAlignment(Qt.AlignHCenter)
-        self._browse_btn = QPushButton("选择文件…")
+        self._browse_btn = QPushButton(t("home_browse"))
         self._browse_btn.setObjectName("ghostPill")
         self._browse_btn.setCursor(Qt.PointingHandCursor)
         self._browse_btn.clicked.connect(self.browse)
-        self._rec_btn = QPushButton("●  实时录音")
+        self._rec_btn = QPushButton(t("home_record"))
         self._rec_btn.setObjectName("primaryPill")
         self._rec_btn.setCursor(Qt.PointingHandCursor)
         self._rec_btn.clicked.connect(self._request_record)
@@ -145,8 +152,8 @@ class HomeScreen(QWidget):
         seg_lay.setSpacing(2)
         self._src_group = QButtonGroup(self)
         self._src_buttons: dict[str, QPushButton] = {}
-        for key, label in SOURCES:
-            b = QPushButton(label)
+        for key, label_key in SOURCES:
+            b = QPushButton(t(label_key))
             b.setObjectName("seg")
             b.setCheckable(True)
             b.setCursor(Qt.PointingHandCursor)
@@ -190,17 +197,17 @@ class HomeScreen(QWidget):
         act_row = QHBoxLayout()
         act_row.setSpacing(10)
         act_row.setAlignment(Qt.AlignHCenter)
-        self._start_btn = QPushButton("开 始 转 写")
+        self._start_btn = QPushButton(t("home_start"))
         self._start_btn.setObjectName("primaryPill")
         self._start_btn.setCursor(Qt.PointingHandCursor)
         self._start_btn.setMinimumWidth(180)
         self._start_btn.clicked.connect(self._start)
-        remove_btn = QPushButton("移除")
-        remove_btn.setObjectName("outlinePill")
-        remove_btn.setCursor(Qt.PointingHandCursor)
-        remove_btn.clicked.connect(self.clear_file)
+        self._remove_btn = QPushButton(t("home_remove"))
+        self._remove_btn.setObjectName("outlinePill")
+        self._remove_btn.setCursor(Qt.PointingHandCursor)
+        self._remove_btn.clicked.connect(self.clear_file)
         act_row.addWidget(self._start_btn)
-        act_row.addWidget(remove_btn)
+        act_row.addWidget(self._remove_btn)
         fc.addLayout(act_row)
 
         self._file_card.setVisible(False)
@@ -211,13 +218,9 @@ class HomeScreen(QWidget):
         cards_row.setSpacing(12)
         cards_row.setAlignment(Qt.AlignHCenter)
         self._mode_cards: dict[str, ModeCard] = {}
-        descs = {
-            "general": "最高精度、忠实原文，中英混合自动识别",
-            "classroom": "降噪 · 聚焦主讲人 · 自动提取重点",
-            "ielts": "区分教官/考生 · 标注读音与语法疑点",
-        }
         for m in MODES:
-            card = ModeCard(m.key, m.label, descs.get(m.key, m.description))
+            card = ModeCard(m.key, t(f"mode_{m.key}_title"),
+                            t(f"mode_{m.key}_desc"))
             card.clicked.connect(self._on_mode)
             self._mode_cards[m.key] = card
             cards_row.addWidget(card)
@@ -228,34 +231,32 @@ class HomeScreen(QWidget):
         srow.setSpacing(18)
         srow.setAlignment(Qt.AlignHCenter)
 
-        lbl_model = QLabel("识别模型")
-        lbl_model.setProperty("tone", "hint")
+        self._lbl_model = QLabel(t("home_model"))
+        self._lbl_model.setProperty("tone", "hint")
         self._model_combo = NoScrollComboBox()
-        for value, label in MODELS:
-            self._model_combo.addItem(label, userData=value)
+        for value, key in MODELS:
+            self._model_combo.addItem(t(key), userData=value)
         self._model_combo.currentIndexChanged.connect(self._save_prefs)
-        srow.addWidget(lbl_model)
+        srow.addWidget(self._lbl_model)
         srow.addWidget(self._model_combo)
 
         srow.addWidget(self._divider())
 
-        lbl_lang = QLabel("语言")
-        lbl_lang.setProperty("tone", "hint")
+        self._lbl_lang = QLabel(t("home_language"))
+        self._lbl_lang.setProperty("tone", "hint")
         self._lang_combo = NoScrollComboBox()
         for value, label in PICKER_LANGUAGES:
             self._lang_combo.addItem(label, userData=value)
-        self._lang_combo.setToolTip(
-            "默认自动检测：中英等混说按静音分块逐块识别。指定语言可纠正识别"
-            "不稳的音频，但会关闭逐块语种切换。")
+        self._lang_combo.setToolTip(t("home_lang_tooltip"))
         self._lang_combo.currentIndexChanged.connect(self._save_prefs)
-        srow.addWidget(lbl_lang)
+        srow.addWidget(self._lbl_lang)
         srow.addWidget(self._lang_combo)
 
         srow.addWidget(self._divider())
 
-        lbl_fmt = QLabel("导出")
-        lbl_fmt.setProperty("tone", "hint")
-        srow.addWidget(lbl_fmt)
+        self._lbl_fmt = QLabel(t("home_export"))
+        self._lbl_fmt.setProperty("tone", "hint")
+        srow.addWidget(self._lbl_fmt)
         self._chips: dict[str, QPushButton] = {}
         for ext in ("txt", "md", "doc", "docx"):
             chip = QPushButton("." + ext)
@@ -269,11 +270,9 @@ class HomeScreen(QWidget):
         srow.addWidget(self._divider())
 
         from PySide6.QtWidgets import QCheckBox
-        self._cb_llm = QCheckBox("本地大模型增强")
+        self._cb_llm = QCheckBox(t("home_llm"))
         self._cb_llm.stateChanged.connect(self._save_prefs)
-        self._cb_llm.setToolTip(
-            "中文用中文模型、英文用英文模型（自动判断）。全程本地离线，"
-            "未安装 Ollama 时自动跳过。")
+        self._cb_llm.setToolTip(t("home_llm_tooltip"))
         srow.addWidget(self._cb_llm)
 
         root.addLayout(srow)
@@ -385,7 +384,7 @@ class HomeScreen(QWidget):
 
     def browse(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
-            self, "选择音频文件", str(Path.home() / "Desktop"),
+            self, t("home_browse_title"), str(Path.home() / "Desktop"),
             "Audio Files (*.m4a *.mp3 *.wav *.flac *.aac *.ogg *.opus *.webm);;"
             "All Files (*)")
         if path:
@@ -446,3 +445,27 @@ class HomeScreen(QWidget):
                 break
         self._drop_card.setProperty("drop", "")
         theme.repolish(self._drop_card)
+
+    # ── live language switch ─────────────────────────
+
+    def retranslate(self) -> None:
+        self._drop_title.setText(t("home_drop_title"))
+        self._browse_btn.setText(t("home_browse"))
+        self._rec_btn.setText(t("home_record"))
+        self._start_btn.setText(t("home_start"))
+        self._remove_btn.setText(t("home_remove"))
+        for key, label_key in SOURCES:
+            if key in self._src_buttons:
+                self._src_buttons[key].setText(t(label_key))
+        for m in MODES:
+            card = self._mode_cards.get(m.key)
+            if card is not None:
+                card.set_texts(t(f"mode_{m.key}_title"), t(f"mode_{m.key}_desc"))
+        self._lbl_model.setText(t("home_model"))
+        self._lbl_lang.setText(t("home_language"))
+        self._lbl_fmt.setText(t("home_export"))
+        self._lang_combo.setToolTip(t("home_lang_tooltip"))
+        self._cb_llm.setText(t("home_llm"))
+        self._cb_llm.setToolTip(t("home_llm_tooltip"))
+        for i, (_value, key) in enumerate(MODELS):
+            self._model_combo.setItemText(i, t(key))

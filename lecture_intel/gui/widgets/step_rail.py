@@ -7,9 +7,10 @@ from __future__ import annotations
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QFrame, QLabel, QVBoxLayout, QWidget
 
+from core.i18n import t
 from gui import theme
 
-_STEPS = ["输入", "模式", "转写", "结果"]
+_STEP_KEYS = ["rail_input", "rail_mode", "rail_transcribe", "rail_results"]
 
 
 class StepRail(QFrame):
@@ -24,10 +25,11 @@ class StepRail(QFrame):
         layout.setSpacing(30)
         layout.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
 
-        for i, label in enumerate(_STEPS):
+        self._active = 0
+        for i, key in enumerate(_STEP_KEYS):
             num = QLabel(f"0{i + 1}")
             num.setAlignment(Qt.AlignCenter)
-            name = QLabel(label)
+            name = QLabel(t(key))
             name.setAlignment(Qt.AlignCenter)
             bar = QFrame()
             bar.setFixedSize(18, 2)
@@ -39,17 +41,21 @@ class StepRail(QFrame):
                 cell.addWidget(w, alignment=Qt.AlignHCenter)
             layout.addLayout(cell)
             self._items.append({"num": num, "name": name, "bar": bar,
-                                "label": label})
+                                "key": key})
 
         self.set_stage(0)
 
     def set_stage(self, active: int) -> None:
         """Steps before `active` are done; `active` is current."""
+        self._active = active
         for i, it in enumerate(self._items):
             state = "done" if i < active else "active" if i == active else "idle"
             it["num"].setProperty("railNum", state)
             it["name"].setProperty("railLabel", state)
-            it["name"].setText(it["label"] + (" ✓" if state == "done" else ""))
+            it["name"].setText(t(it["key"]) + (" ✓" if state == "done" else ""))
             it["bar"].setProperty("railBar", "on" if state == "active" else "off")
             for w in (it["num"], it["name"], it["bar"]):
                 theme.repolish(w)
+
+    def retranslate(self) -> None:
+        self.set_stage(self._active)

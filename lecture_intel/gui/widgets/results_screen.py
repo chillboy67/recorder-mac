@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from core.i18n import t
 from core.languages import display_name
 from gui import theme
 
@@ -78,6 +79,7 @@ class ResultsScreen(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._output_dir: str | None = None
+        self._last_result: dict | None = None
         self._build_ui()
 
     def _build_ui(self) -> None:
@@ -86,21 +88,21 @@ class ResultsScreen(QWidget):
         root.setSpacing(20)
 
         # ── left pane: tabbed previews ──
-        self._left = _GlassPane("逐字转写")
+        self._left = _GlassPane(t("res_transcript"))
         self._tabs = QTabWidget()
         self._tabs.setDocumentMode(True)
         self._left.body.addWidget(self._tabs)
 
         foot = self._left.add_footer()
-        self._btn_folder = QPushButton("打开输出文件夹")
+        self._btn_folder = QPushButton(t("res_open_folder"))
         self._btn_folder.setObjectName("primaryPill")
         self._btn_folder.setCursor(Qt.PointingHandCursor)
         self._btn_folder.clicked.connect(self._open_folder)
-        self._btn_copy = QPushButton("复制全文")
+        self._btn_copy = QPushButton(t("res_copy"))
         self._btn_copy.setObjectName("outlinePill")
         self._btn_copy.setCursor(Qt.PointingHandCursor)
         self._btn_copy.clicked.connect(self._copy_current)
-        self._btn_new = QPushButton("新的转写")
+        self._btn_new = QPushButton(t("res_new"))
         self._btn_new.setObjectName("ghostPill")
         self._btn_new.setCursor(Qt.PointingHandCursor)
         self._btn_new.clicked.connect(self.new_requested)
@@ -112,7 +114,7 @@ class ResultsScreen(QWidget):
         root.addWidget(self._left, stretch=3)
 
         # ── right pane: info / feedback rail ──
-        self._right = _GlassPane("转写信息")
+        self._right = _GlassPane(t("res_info"))
         self._rail_scroll = QScrollArea()
         self._rail_scroll.setWidgetResizable(True)
         self._rail_scroll.setFrameShape(QScrollArea.NoFrame)
@@ -136,6 +138,7 @@ class ResultsScreen(QWidget):
     # ── public API ──────────────────────────────────────────
 
     def load_results(self, result_info: dict) -> None:
+        self._last_result = result_info
         self._output_dir = result_info["output_dir"]
         files = result_info.get("files", [])
         stats = result_info.get("stats", {})
@@ -152,7 +155,7 @@ class ResultsScreen(QWidget):
 
         # left pane header + tabs
         self._left.title_lbl.setText(
-            "逐字转写 · 教官 / 考生" if mode == "ielts" else "逐字转写")
+            t("res_transcript_ielts") if mode == "ielts" else t("res_transcript"))
         lang = display_name(stats.get("language", "?"))
         dur = stats.get("duration_sec", 0)
         meta = f"{lang} · {dur / 60:.0f}:{dur % 60:02.0f}"
@@ -163,19 +166,20 @@ class ResultsScreen(QWidget):
         while self._tabs.count():
             self._tabs.removeTab(0)
         if ielts and ielts.get("markdown"):
-            self._add_text_tab("雅思反馈", ielts["markdown"])
+            self._add_text_tab(t("res_tab_ielts"), ielts["markdown"])
         if classroom and classroom.get("markdown"):
-            title = "重点总结" + ("（AI）" if classroom.get("llm") else "")
+            title = (t("res_tab_summary_ai") if classroom.get("llm")
+                     else t("res_tab_summary"))
             self._add_text_tab(title, classroom["markdown"])
         tidy = stats.get("tidy_markdown")
         if tidy:
-            self._add_text_tab("AI 校对版", tidy)
+            self._add_text_tab(t("res_tab_tidy"), tidy)
         for ext in ("md", "txt", "srt", "json"):
             if ext in file_by_ext:
                 self._add_file_tab(ext, file_by_ext[ext])
 
         # right rail
-        self._right.title_lbl.setText("反馈报告" if ielts else "转写信息")
+        self._right.title_lbl.setText(t("res_feedback") if ielts else t("res_info"))
         self._clear_rail()
         c = theme.current_scheme()
 
@@ -183,9 +187,9 @@ class ResultsScreen(QWidget):
             stat_row = QHBoxLayout()
             stat_row.setSpacing(10)
             for value, label, key in (
-                (str(ielts.get("pron_issue_count", 0)), "发音疑点", "danger"),
-                (str(ielts.get("grammar_issue_count", 0)), "语法 / 用词", "warn"),
-                (f"{ielts.get('wpm', 0):.0f}", "WPM 语速", "ok"),
+                (str(ielts.get("pron_issue_count", 0)), t("res_stat_pron"), "danger"),
+                (str(ielts.get("grammar_issue_count", 0)), t("res_stat_grammar"), "warn"),
+                (f"{ielts.get('wpm', 0):.0f}", t("res_stat_wpm"), "ok"),
             ):
                 cell = QFrame()
                 cell.setObjectName("modeCard")
@@ -204,31 +208,35 @@ class ResultsScreen(QWidget):
             host.setLayout(stat_row)
             self._rail.addWidget(host)
 
-        self._add_rail_kv("模式", {"general": "通用转写", "classroom": "课堂录音",
-                                   "ielts": "雅思口语教官"}.get(mode, mode))
-        self._add_rail_kv("语言", str(lang))
-        self._add_rail_kv("时长", f"{dur:.0f}s")
+        mode_title = (t(f"mode_{mode}_title")
+                      if mode in ("general", "classroom", "ielts") else mode)
+        self._add_rail_kv(t("res_key_mode"), mode_title)
+        self._add_rail_kv(t("res_key_language"), str(lang))
+        self._add_rail_kv(t("res_key_duration"), f"{dur:.0f}s")
         total_s = stats.get("total_time_s", 0)
-        self._add_rail_kv("转写用时", f"{total_s:.0f}s")
+        self._add_rail_kv(t("res_key_elapsed"), f"{total_s:.0f}s")
         if classroom:
-            self._add_rail_kv("提取重点", str(classroom.get("emphasis_count", 0)))
-            self._add_rail_kv("术语定义", str(classroom.get("definition_count", 0)))
+            self._add_rail_kv(t("res_key_emphasis"), str(classroom.get("emphasis_count", 0)))
+            self._add_rail_kv(t("res_key_definitions"), str(classroom.get("definition_count", 0)))
 
         names = QLabel("\n".join(Path(f).name for f in files))
         names.setProperty("mono", True)
         names.setWordWrap(True)
-        self._rail.addWidget(self._rail_section("导出文件"))
+        self._rail.addWidget(self._rail_section(t("res_section_files")))
         self._rail.addWidget(names)
 
-        self._path_lbl.setText("输出：" + str(self._output_dir))
+        self._path_lbl.setText(t("res_output", dir=str(self._output_dir)))
         self._btn_folder.setEnabled(True)
         self._btn_copy.setEnabled(True)
 
     def reset(self) -> None:
+        self._last_result = None
         while self._tabs.count():
             self._tabs.removeTab(0)
         self._clear_rail()
         self._path_lbl.setText("")
+        self._left.title_lbl.setText(t("res_transcript"))
+        self._right.title_lbl.setText(t("res_info"))
 
     # ── helpers ─────────────────────────────────────────────
 
@@ -270,7 +278,7 @@ class ResultsScreen(QWidget):
         try:
             content = Path(filepath).read_text(encoding="utf-8")
         except Exception:
-            content = f"[无法读取 {filepath}]"
+            content = t("res_read_error", path=filepath)
         editor = QPlainTextEdit()
         editor.setReadOnly(True)
         editor.setPlainText(content)
@@ -286,3 +294,18 @@ class ResultsScreen(QWidget):
         current = self._tabs.currentWidget()
         if isinstance(current, QPlainTextEdit):
             QGuiApplication.clipboard().setText(current.toPlainText())
+
+    # ── live language switch ─────────────────────────
+
+    def retranslate(self) -> None:
+        self._btn_folder.setText(t("res_open_folder"))
+        self._btn_copy.setText(t("res_copy"))
+        self._btn_new.setText(t("res_new"))
+        if self._last_result is not None:
+            keep = self._tabs.currentIndex()
+            self.load_results(self._last_result)
+            if 0 <= keep < self._tabs.count():
+                self._tabs.setCurrentIndex(keep)
+        else:
+            self._left.title_lbl.setText(t("res_transcript"))
+            self._right.title_lbl.setText(t("res_info"))

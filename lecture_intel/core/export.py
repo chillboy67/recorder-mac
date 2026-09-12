@@ -13,6 +13,8 @@ from typing import Optional
 
 from modules import ASRResult, ASRSegment
 
+from core.i18n import t
+
 _SPEAKER_ZH = {
     "candidate": "考生",
     "examiner": "教官",
@@ -219,14 +221,15 @@ def _doc(asr, out_dir, base, labels, report_md) -> Path:
     out = out_dir / f"{base}.doc"
     textutil = shutil.which("textutil")
     if not textutil:
-        raise RuntimeError("textutil 不可用（仅 macOS 支持 .doc 导出）")
+        raise RuntimeError(t("export_textutil_missing"))
     proc = subprocess.run(
         [textutil, "-convert", "doc", str(tmp_docx), "-output", str(out)],
         capture_output=True, text=True, check=False,
     )
     tmp_docx.unlink(missing_ok=True)
     if proc.returncode != 0 or not out.exists():
-        raise RuntimeError(f"textutil 转换失败: {proc.stderr.strip()[:160]}")
+        raise RuntimeError(
+            t("export_textutil_failed", err=proc.stderr.strip()[:160]))
     return out
 
 

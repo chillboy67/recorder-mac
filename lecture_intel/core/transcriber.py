@@ -32,6 +32,7 @@ from typing import Callable, Optional
 
 from modules import ASRResult, ASRSegment, ASRWord
 
+from core.i18n import t
 from core.languages import detect_language, disambiguate_latin_language, _LATIN_LANGS
 
 logger = logging.getLogger(__name__)
@@ -102,7 +103,7 @@ class Transcriber:
         engine = self._resolve_engine()
         logger.info("Transcribing with %s (model=%s, chunked=%s)", engine, self.model, chunked)
         if progress:
-            progress(0.0, f"加载 {self.model} 模型 ({engine})…")
+            progress(0.0, t("tr_load_model", model=self.model, engine=engine))
 
         warnings: list[str] = []
         t0 = time.time()
@@ -130,10 +131,10 @@ class Transcriber:
                 logger.warning("mlx-whisper failed (%s); falling back to faster-whisper", exc)
                 if not self._faster_available():
                     raise
-                warnings.append(f"mlx-whisper 失败，已回退 faster-whisper：{exc}")
+                warnings.append(t("tr_warn_fallback", exc=exc))
                 self._engine = engine = "faster-whisper"
                 if progress:
-                    progress(0.05, "MLX 失败，改用 CPU 引擎…")
+                    progress(0.05, t("tr_mlx_fallback"))
                 raw_segments, detected_lang = self._transcribe_faster(
                     audio_path, language, initial_prompt, condition_on_previous, progress
                 )
@@ -153,7 +154,7 @@ class Transcriber:
             engine, language_label, len(segments), len(full_text), dt,
         )
         if progress:
-            progress(1.0, "转写完成")
+            progress(1.0, t("tr_done"))
 
         return ASRResult(
             segments=segments,
@@ -221,7 +222,7 @@ class Transcriber:
         import mlx_whisper
 
         if progress:
-            progress(0.05, "转写中（MLX 加速）…")
+            progress(0.05, t("tr_mlx"))
         result = mlx_whisper.transcribe(
             str(audio_path),
             path_or_hf_repo=self._mlx_repo(),
@@ -305,7 +306,7 @@ class Transcriber:
             if chunk_lang:
                 langs.append(chunk_lang)
             if progress:
-                progress(0.05 + 0.9 * (i + 1) / len(chunks), "转写中（GPU 分块）…")
+                progress(0.05 + 0.9 * (i + 1) / len(chunks), t("tr_gpu_chunk"))
 
         # overall language label = most common per-chunk detection
         lang = max(set(langs), key=langs.count) if langs else "en"
@@ -363,7 +364,7 @@ class Transcriber:
     ):
         model = self._load_faster()
         if progress:
-            progress(0.05, "转写中（CPU）…")
+            progress(0.05, t("tr_cpu"))
         seg_iter, info = model.transcribe(
             str(audio_path),
             language=language,
@@ -391,7 +392,7 @@ class Transcriber:
                 ],
             })
             if progress and total:
-                progress(min(0.95, 0.05 + 0.9 * (s.end / total)), "转写中（CPU）…")
+                progress(min(0.95, 0.05 + 0.9 * (s.end / total)), t("tr_cpu"))
         return segs, info.language
 
     # ------------------------------------------------------------------

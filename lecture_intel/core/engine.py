@@ -21,6 +21,7 @@ from modules import ASRResult
 from modules.audio_loader import AudioLoader
 
 from core import export as exporter
+from core.i18n import t
 from core.languages import normalize_language, prefers_asian_model
 from core.modes import Mode, get_mode
 from core.transcriber import Transcriber
@@ -60,21 +61,21 @@ def run(
                       "percent": percent, "status": status})
 
     # 1) Load + normalize to 16k mono wav -----------------------------------
-    report("load", "加载音频…", 4)
+    report("load", t("eng_load_start"), 4)
     loader = AudioLoader({})
     audio = loader.process(input_path)
     wav_path = audio.path
-    report("load", "音频已加载", 8, "done")
+    report("load", t("eng_load_done"), 8, "done")
 
     # 2) Denoise (classroom) -------------------------------------------------
     if mode.denoise:
-        report("denoise", "降噪处理…", 12)
+        report("denoise", t("eng_denoise_start"), 12)
         from core.denoise import denoise_audio
         wav_path = denoise_audio(wav_path)
-        report("denoise", "降噪完成", 16, "done")
+        report("denoise", t("eng_denoise_done"), 16, "done")
 
     # 3) Transcribe (whole file) --------------------------------------------
-    report("asr", "转写中（首次会下载模型，请耐心等待）…", 20)
+    report("asr", t("eng_asr_start"), 20)
 
     # A caller-supplied language overrides the mode preset; "auto"/"" normalize
     # to None, which re-enables per-chunk detection on mixed-language audio.
@@ -98,7 +99,7 @@ def run(
         progress=asr_progress,
     )
     warnings.extend(asr.warnings)
-    report("asr", f"转写完成（{len(asr.segments)} 段）", 76, "done")
+    report("asr", t("eng_asr_done", count=len(asr.segments)), 76, "done")
 
     labels: Optional[dict[int, str]] = None
     ielts_report = None
@@ -121,18 +122,18 @@ def run(
             llm_on = True
             logger.info("LLM on: language=%s → model=%s", asr.language, llm_model)
         else:
-            warnings.append("已勾选本地大模型，但 Ollama 未运行或模型未安装，已回退离线处理。")
+            warnings.append(t("eng_llm_unavailable"))
             logger.warning("use_llm requested but no Ollama model available")
 
     # 4) Speaker handling ----------------------------------------------------
     if mode.diarize:
-        report("diarize", "区分说话人…", 80)
+        report("diarize", t("eng_diarize_start"), 80)
         from core.diarize import diarize as run_diarize
         dia = run_diarize(asr, wav_path, expected_speakers=mode.expected_speakers)
         labels = dia.labels
-        report("diarize", f"识别到 {dia.speaker_count} 个说话人", 85, "done")
+        report("diarize", t("eng_diarize_done", count=dia.speaker_count), 85, "done")
     elif mode.keep_main_speaker_only:
-        report("diarize", "聚焦主讲人，排除旁人…", 80)
+        report("diarize", t("eng_main_start"), 80)
         from core.diarize import main_speaker_ids
         kept = main_speaker_ids(asr, wav_path)
         if kept is not None:
@@ -141,11 +142,11 @@ def run(
             asr.full_text = " ".join(s.text for s in asr.segments).strip()
             logger.info("Classroom: %d → %d segments after main-speaker filter",
                         before, len(asr.segments))
-        report("diarize", "已聚焦主讲人", 85, "done")
+        report("diarize", t("eng_main_done"), 85, "done")
 
     # 5) IELTS analysis ------------------------------------------------------
     if mode.analyze_ielts:
-        report("analyze", "分析发音 / 语法 / 表达…", 88)
+        report("analyze", t("eng_analyze_start"), 88)
         from core import ielts as ielts_mod
         dia_obj = dia if mode.diarize else None
         ielts_report = ielts_mod.analyze(
@@ -158,26 +159,26 @@ def run(
         )
         # LLM-enhanced examiner-style feedback on the candidate's English.
         if llm_on:
-            report("analyze", "大模型点评中…", 91)
+            report("analyze", t("eng_llm_feedback"), 91)
             fb = llm_mod.ielts_feedback(ielts_report.transcript_candidate, model=llm_model)
             if fb:
                 ielts_report.markdown += (
                     "\n\n---\n\n# 🤖 AI 考官点评（本地大模型）\n\n" + fb + "\n")
-        report("analyze", "分析完成", 94, "done")
+        report("analyze", t("eng_analyze_done"), 94, "done")
 
     # 5b) Classroom: AI-corrected transcript (context-aware) + key-point summary
     if mode.summarize:
         from core import classroom as classroom_mod
         classroom_report = classroom_mod.summarize(asr)   # always have a fallback
         if llm_on:
-            report("analyze", "AI 根据上课内容校对原文…", 90)
+            report("analyze", t("eng_correct_start"), 90)
             def _corr_prog(frac, msg):
                 report("analyze", msg, 88 + int(frac * 4))
             corrected = llm_mod.correct_transcript(
                 asr.full_text, context=_lecture_context(asr.language),
                 language=asr.language, model=llm_model,
                 progress=_corr_prog)
-            report("analyze", "AI 提炼重点…", 93)
+            report("analyze", t("eng_extract_start"), 93)
             summary_md = llm_mod.summarize_lecture(
                 corrected or asr.full_text, language=asr.language, model=llm_model)
             parts = ["# 课堂重点总结（本地大模型）", ""]
@@ -187,19 +188,19 @@ def run(
             classroom_md = "\n".join(parts)
         if classroom_md is None:
             classroom_md = classroom_report.markdown   # heuristic fallback
-        report("analyze", "重点提取完成", 94, "done")
+        report("analyze", t("eng_extract_done"), 94, "done")
 
     # 5c) General: AI determines the true transcript (accuracy-focused correction)
     if (not mode.analyze_ielts and not mode.summarize) and llm_on:
-        report("analyze", "AI 校对全文（提高准确性）…", 90)
+        report("analyze", t("eng_general_correct"), 90)
         def _corr_prog(frac, msg):
             report("analyze", msg, 88 + int(frac * 6))
         general_tidy_md = llm_mod.correct_transcript(
             asr.full_text, language=asr.language, model=llm_model, progress=_corr_prog)
-        report("analyze", "整理完成", 94, "done")
+        report("analyze", t("eng_general_done"), 94, "done")
 
     # 6) Export --------------------------------------------------------------
-    report("export", "导出结果…", 96)
+    report("export", t("eng_export_start"), 96)
     fmts = formats or mode.formats
     if ielts_report:
         extra_md, extra_suffix = ielts_report.markdown, "ielts"
@@ -215,7 +216,7 @@ def run(
         extra_markdown=extra_md,
         extra_markdown_suffix=extra_suffix,
     )
-    report("export", "完成", 100, "done")
+    report("export", t("eng_export_done"), 100, "done")
 
     elapsed = time.time() - t_start
     summary = {

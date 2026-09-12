@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 from typing import Callable, Optional
 
+from core.i18n import t
 from core.languages import LANGUAGE_NAMES_EN
 
 logger = logging.getLogger(__name__)
@@ -133,7 +134,7 @@ def correct_lecture(text: str, model: str = DEFAULT_MODEL, host: str = DEFAULT_H
             return None
         out.append(res)
         if progress:
-            progress((i + 1) / len(chunks), f"校对中 {i+1}/{len(chunks)}")
+            progress((i + 1) / len(chunks), t("llm_proofreading", i=i + 1, n=len(chunks)))
     return "\n".join(out)
 
 
@@ -192,7 +193,7 @@ def correct_transcript(text: str, context: str = "", model: str = DEFAULT_MODEL,
         else:
             out.append(res)
         if progress:
-            progress((i + 1) / len(chunks), f"AI 校对 {i+1}/{len(chunks)}")
+            progress((i + 1) / len(chunks), t("llm_correcting", i=i + 1, n=len(chunks)))
     return "\n".join(out)
 
 
@@ -239,10 +240,10 @@ def summarize_lecture(text: str, model: str = DEFAULT_MODEL, host: str = DEFAULT
             return None
         notes.append(res)
         if progress:
-            progress(0.1 + 0.7 * (i + 1) / len(chunks), f"提炼要点 {i+1}/{len(chunks)}")
+            progress(0.1 + 0.7 * (i + 1) / len(chunks), t("llm_extracting", i=i + 1, n=len(chunks)))
     combined = "\n".join(notes)
     if progress:
-        progress(0.9, "整合总结…")
+        progress(0.9, t("llm_merging"))
     final = _gen(f"要点笔记：\n{combined}", reduce_sys, model=model, host=host, temperature=0.3)
     return final
 
@@ -304,5 +305,5 @@ def tidy_transcript(text: str, model: str = DEFAULT_MODEL, host: str = DEFAULT_H
             return None
         out.append(res)
         if progress:
-            progress((i + 1) / len(chunks), f"整理中 {i+1}/{len(chunks)}")
+            progress((i + 1) / len(chunks), t("llm_tidying", i=i + 1, n=len(chunks)))
     return "\n\n".join(out)
