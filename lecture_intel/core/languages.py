@@ -53,6 +53,15 @@ PICKER_LANGUAGES: tuple[tuple[str, str], ...] = (
     ("hi", "印地语"),
 )
 
+# English names for the picker languages, used in prompts that must name the
+# language being processed (see core.llm). Unknown codes fall back to the code.
+LANGUAGE_NAMES_EN: dict[str, str] = {
+    "zh": "Chinese", "en": "English", "ja": "Japanese", "ko": "Korean",
+    "fr": "French", "de": "German", "es": "Spanish", "it": "Italian",
+    "pt": "Portuguese", "ru": "Russian", "ar": "Arabic", "th": "Thai",
+    "vi": "Vietnamese", "id": "Indonesian", "hi": "Hindi",
+}
+
 # Display names for anything Whisper may report, not just what the picker
 # offers. Unknown codes fall back to the code itself rather than guessing.
 LANGUAGE_NAMES: dict[str, str] = {
