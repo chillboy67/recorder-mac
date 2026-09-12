@@ -24,6 +24,11 @@ def run_pipeline_subprocess(input_path, output_dir, settings, queue):
         if root not in sys.path:
             sys.path.insert(0, root)
 
+        # Emit progress messages in the language the GUI is currently showing.
+        # The subprocess is a fresh interpreter, so set it before running.
+        from core.i18n import set_language
+        set_language((settings or {}).get("ui_lang"))
+
         from core.engine import run
 
         def on_progress(info):

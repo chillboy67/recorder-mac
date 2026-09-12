@@ -25,6 +25,8 @@ _ROOT = str(Path(__file__).resolve().parent.parent.parent)
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
+from core.i18n import t  # noqa: E402  (after sys.path is set)
+
 
 class PipelineWorker(QObject):
     progress = Signal(dict)
@@ -124,13 +126,9 @@ class PipelineWorker(QObject):
                 pass
             code = self._proc.exitcode
             self._finish()
-            self.error.emit(
-                "处理进程意外退出"
-                + (f"（退出码 {code}）" if code is not None else "")
-                + "，很可能是内存不足或模型过大。\n\n"
-                "你的录音文件已安全保存，没有丢失。\n"
-                "建议在「识别模型」里选「均衡」或「最快」后重试。"
-            )
+            code_part = (t("worker_crash_code", code=code)
+                         if code is not None else "")
+            self.error.emit(t("worker_crash", code=code_part))
 
     def _emit_result(self, summary: dict) -> None:
         stem = Path(self.input_path).stem

@@ -20,16 +20,17 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from core.i18n import t
 from gui import theme
 from gui.widgets.visuals import ProgressRing
 
 STEP_LABELS: dict[str, str] = {
-    "load":     "加载音频",
-    "denoise":  "降噪处理",
-    "asr":      "语音转写",
-    "diarize":  "区分说话人",
-    "analyze":  "分析 / AI 增强",
-    "export":   "导出结果",
+    "load":     "step_load",
+    "denoise":  "step_denoise",
+    "asr":      "step_asr",
+    "diarize":  "step_diarize",
+    "analyze":  "step_analyze",
+    "export":   "step_export",
 }
 STATUS_ICONS = {"waiting": "○", "running": "●", "done": "✓", "error": "✗"}
 
@@ -79,11 +80,11 @@ class ProcessingScreen(QWidget):
 
         foot = QHBoxLayout()
         foot.addStretch()
-        cancel = QPushButton("取消")
-        cancel.setObjectName("cancelPill")
-        cancel.setCursor(Qt.PointingHandCursor)
-        cancel.clicked.connect(self.cancel_requested)
-        foot.addWidget(cancel)
+        self._cancel_btn = QPushButton(t("proc_cancel"))
+        self._cancel_btn.setObjectName("cancelPill")
+        self._cancel_btn.setCursor(Qt.PointingHandCursor)
+        self._cancel_btn.clicked.connect(self.cancel_requested)
+        foot.addWidget(self._cancel_btn)
         lay.addLayout(foot)
 
         root.addWidget(card)
@@ -96,13 +97,13 @@ class ProcessingScreen(QWidget):
             w["row"].deleteLater()
         self._step_widgets.clear()
         self._step_start.clear()
-        self._ring.set_progress(0, "准备中…")
+        self._ring.set_progress(0, t("proc_preparing"))
         self._file_lbl.setText(filename)
         self._meta_lbl.setText(meta)
 
         c = theme.current_scheme()
         for step in enabled_steps:
-            label = STEP_LABELS.get(step, step)
+            label = t(STEP_LABELS.get(step, step))
             row = QWidget()
             rl = QHBoxLayout(row)
             rl.setContentsMargins(0, 0, 0, 0)
@@ -120,7 +121,7 @@ class ProcessingScreen(QWidget):
             rl.addWidget(tlbl)
             self._steps_box.addWidget(row)
             self._step_widgets[step] = {"row": row, "icon": icon,
-                                        "name": name, "time": tlbl}
+                                        "name": name, "time": tlbl, "key": step}
 
     def update_progress(self, info: dict) -> None:
         step = info.get("step", "")
@@ -142,7 +143,7 @@ class ProcessingScreen(QWidget):
             self._step_start[step] = time.time()
             w["name"].setStyleSheet(
                 f"color: {c['accent']}; font-size: 13px; font-weight: 600;")
-            w["time"].setText("进行中")
+            w["time"].setText(t("proc_in_progress"))
             w["time"].setStyleSheet(f"color: {c['accent']}; font-size: 11px;")
         elif status == "done":
             elapsed = time.time() - self._step_start.get(step, time.time())
@@ -152,3 +153,11 @@ class ProcessingScreen(QWidget):
         elif status == "error":
             w["name"].setStyleSheet(f"color: {c['danger']}; font-size: 13px;")
             w["time"].setText("")
+
+    def retranslate(self) -> None:
+        """Re-apply static text in the newly selected language."""
+        self._cancel_btn.setText(t("proc_cancel"))
+        for step, w in self._step_widgets.items():
+            w["name"].setText(t(STEP_LABELS.get(step, step)))
+            if w["icon"].text() == STATUS_ICONS["running"]:
+                w["time"].setText(t("proc_in_progress"))

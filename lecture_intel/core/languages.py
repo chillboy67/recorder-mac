@@ -28,6 +28,8 @@ from __future__ import annotations
 import re
 from typing import Optional
 
+from core.i18n import EN, current_language
+
 # ── UI ───────────────────────────────────────────────────────────────
 # "auto" lets Whisper decide and is what enables per-chunk code-switching
 # detection. A forced language trades that away for reliability on audio
@@ -322,8 +324,21 @@ def disambiguate_latin_language(text: str, detected: str) -> str:
     return best if scores[best] >= 2 else detected
 
 
-def display_name(code: Optional[str]) -> str:
-    """Human-readable name for a language code, for the UI and exports."""
+def display_name(code: Optional[str], lang: Optional[str] = None) -> str:
+    """Human-readable name for a language code, in the active UI language.
+
+    Chinese uses the full ``LANGUAGE_NAMES`` table; English uses the picker's
+    ``LANGUAGE_NAMES_EN`` (plus ``mixed``). Unknown codes fall back to the code
+    itself rather than guessing. ``lang`` overrides the UI language (used by
+    tests); it defaults to whatever the interface is currently showing.
+    """
+    active = lang or current_language()
+    if active == EN:
+        if not code:
+            return "Unknown"
+        if code == "mixed":
+            return "Mixed"
+        return LANGUAGE_NAMES_EN.get(code, code)
     if not code:
         return "未知"
     return LANGUAGE_NAMES.get(code, code)

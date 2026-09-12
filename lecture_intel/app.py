@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 def _check_dependencies() -> list[str]:
     """Return a list of missing critical dependencies (empty = all good)."""
+    from core.i18n import t
     missing = []
     for mod, hint in [
         ("PySide6", "pip install pyside6"),
@@ -32,7 +33,7 @@ def _check_dependencies() -> list[str]:
     has_mlx = _can_import("mlx_whisper")
     has_faster = _can_import("faster_whisper")
     if not (has_mlx or has_faster):
-        missing.append("mlx-whisper 或 faster-whisper（二者至少装一个）")
+        missing.append(t("deps_whisper"))
     return missing
 
 
@@ -58,16 +59,20 @@ def main() -> None:
     app.setApplicationVersion("2.0.0")
 
     from PySide6.QtCore import QSettings
+    from core.i18n import detect_system_language, set_language, t
     from gui.theme import apply as apply_theme
-    mode = QSettings("LucasLab", "Recorder").value("appearance", "auto")
+    prefs = QSettings("LucasLab", "Recorder")
+    # Apply the UI language before anything is drawn (or any dialog is shown),
+    # defaulting to the system locale on first launch.
+    lang_pref = prefs.value("ui_language")
+    set_language(lang_pref if lang_pref else detect_system_language())
+    mode = prefs.value("appearance", "auto")
     apply_theme(app, mode if mode in ("auto", "light", "dark") else "auto")
 
     missing = _check_dependencies()
     if missing:
         QMessageBox.critical(
-            None, "缺少依赖",
-            "无法启动，缺少以下依赖：\n\n" + "\n".join(missing) +
-            "\n\n请在项目目录运行：\n  uv pip install -r requirements.txt",
+            None, t("deps_title"), t("deps_body", missing="\n".join(missing)),
         )
         sys.exit(1)
 

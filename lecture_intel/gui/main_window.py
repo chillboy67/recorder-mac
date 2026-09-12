@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from core.i18n import current_language, set_language, t, ui_language_choices
 from gui import theme
 from gui.widgets.home_screen import HomeScreen
 from gui.widgets.processing_screen import ProcessingScreen, STEP_LABELS
@@ -51,57 +52,89 @@ class MainWindow(QMainWindow):
         super().__init__()
         self._worker: PipelineWorker | None = None
         self._prefs = QSettings("LucasLab", "Recorder")
+        self._status_key: str | None = None
+        self._status_args: dict = {}
+        self._state_key: str = ""
+        self._state_args: dict = {}
+        self._state_tone: str = "hint"
 
-        self.setWindowTitle("Recorder · 录音转文字")
+        # The UI language is applied app-wide before this window is built (see
+        # app.py). Re-assert it from prefs so the window is still correct when
+        # constructed directly (e.g. in tests), and persist the first choice.
+        lang = self._prefs.value("ui_language")
+        if lang:
+            set_language(lang)
+        else:
+            self._prefs.setValue("ui_language", current_language())
+
+        self.setWindowTitle(t("app_title"))
         self.setMinimumSize(1080, 720)
         self._restore_geometry()
         self._build_menu()
         self._build_ui()
-        self.statusBar().showMessage("就绪 · 全程离线")
+        self._show_status("status_ready")
 
     # ── menu ────────────────────────────────────────────────
 
     def _build_menu(self) -> None:
         menu_bar = self.menuBar()
+        menu_bar.clear()
 
-        file_menu = menu_bar.addMenu("文件")
-        open_act = QAction("打开录音…", self)
+        file_menu = menu_bar.addMenu(t("menu_file"))
+        open_act = QAction(t("menu_file_open"), self)
         open_act.setShortcut(QKeySequence.Open)
         open_act.triggered.connect(lambda: self._home.browse())
         file_menu.addAction(open_act)
         file_menu.addSeparator()
-        reveal_act = QAction("显示输出文件夹", self)
+        reveal_act = QAction(t("menu_file_reveal"), self)
         reveal_act.setShortcut("Cmd+Shift+O")
         reveal_act.triggered.connect(self._reveal_output)
         file_menu.addAction(reveal_act)
 
-        view_menu = menu_bar.addMenu("视图")
-        reset_act = QAction("重置", self)
+        view_menu = menu_bar.addMenu(t("menu_view"))
+        reset_act = QAction(t("menu_view_reset"), self)
         reset_act.setShortcut("Cmd+R")
         reset_act.triggered.connect(self._reset)
         view_menu.addAction(reset_act)
         view_menu.addSeparator()
-        appearance = view_menu.addMenu("外观")
+
+        appearance = view_menu.addMenu(t("menu_appearance"))
         self._appearance_group = QActionGroup(self)
-        cur = self._prefs.value("appearance", "auto")
-        for key, label in (("auto", "跟随系统"), ("light", "浅色"), ("dark", "深色")):
-            act = QAction(label, self, checkable=True)
-            act.setChecked(cur == key)
+        cur_appearance = self._prefs.value("appearance", "auto")
+        for key, label_key in (("auto", "appearance_auto"),
+                               ("light", "appearance_light"),
+                               ("dark", "appearance_dark")):
+            act = QAction(t(label_key), self, checkable=True)
+            act.setData(key)
+            act.setChecked(cur_appearance == key)
             act.triggered.connect(lambda _=False, k=key: self._set_appearance(k))
             self._appearance_group.addAction(act)
             appearance.addAction(act)
 
-        help_menu = menu_bar.addMenu("帮助")
-        docs_act = QAction("打开说明", self)
+        language = view_menu.addMenu(t("menu_language"))
+        self._language_group = QActionGroup(self)
+        cur_lang = current_language()
+        for code, native in ui_language_choices():
+            act = QAction(native, self, checkable=True)
+            act.setData(code)
+            act.setChecked(cur_lang == code)
+            act.triggered.connect(lambda _=False, c=code: self._set_language(c))
+            self._language_group.addAction(act)
+            language.addAction(act)
+
+        help_menu = menu_bar.addMenu(t("menu_help"))
+        docs_act = QAction(t("menu_help_docs"), self)
         docs_act.triggered.connect(self._open_readme)
         help_menu.addAction(docs_act)
 
-    _APPEARANCE_LABELS = {"auto": "◐ 外观 · 跟随系统",
-                          "dark": "● 外观 · 深色",
-                          "light": "○ 外观 · 浅色"}
+    _APPEARANCE_LABEL_KEYS = {"auto": "appearance_btn_auto",
+                              "dark": "appearance_btn_dark",
+                              "light": "appearance_btn_light"}
 
     def _set_appearance(self, mode: str) -> None:
         self._prefs.setValue("appearance", mode)
+        for act in self._appearance_group.actions():
+            act.setChecked(act.data() == mode)
         theme.apply(QApplication.instance(), mode)
         self._update_theme_btn()
         self._rail.set_stage(self._stage_for(self._stack.currentIndex()))
@@ -110,7 +143,43 @@ class MainWindow(QMainWindow):
     def _update_theme_btn(self) -> None:
         cur = self._prefs.value("appearance", "auto")
         self._btn_theme.setText(
-            self._APPEARANCE_LABELS.get(cur, self._APPEARANCE_LABELS["auto"]))
+            t(self._APPEARANCE_LABEL_KEYS.get(cur, "appearance_btn_auto")))
+
+    # ── language ──────────────────────────────────
+
+    def _set_language(self, code: str) -> None:
+        applied = set_language(code)
+        self._prefs.setValue("ui_language", applied)
+        for act in self._language_group.actions():
+            act.setChecked(act.data() == applied)
+        self._retranslate()
+
+    def _cycle_language(self) -> None:
+        self._set_language("en" if current_language() == "zh" else "zh")
+
+    def _update_lang_btn(self) -> None:
+        self._btn_lang.setText(t("lang_btn"))
+
+    def _retranslate(self) -> None:
+        """Re-apply every string in the newly selected language, live."""
+        self.setWindowTitle(t("app_title"))
+        self._build_menu()
+        self._wordmark.setText(t("wordmark"))
+        self._btn_folder.setText(t("btn_output_folder"))
+        self._btn_theme.setToolTip(t("theme_tooltip"))
+        self._btn_lang.setToolTip(t("lang_btn_tooltip"))
+        self._update_theme_btn()
+        self._update_lang_btn()
+        self._rail.retranslate()
+        self._home.retranslate()
+        self._recording.retranslate()
+        self._processing.retranslate()
+        self._results.retranslate()
+        if self._state_key:
+            self._state_lbl.setText(t(self._state_key, **self._state_args))
+        if self._status_key:
+            self.statusBar().showMessage(
+                t(self._status_key, **self._status_args))
 
     # ── central UI ──────────────────────────────────────────
 
@@ -125,26 +194,33 @@ class MainWindow(QMainWindow):
         strip = QWidget()
         sl = QHBoxLayout(strip)
         sl.setContentsMargins(20, 10, 20, 10)
-        wordmark = QLabel("R E C O R D E R  —  全程离线")
-        wordmark.setObjectName("wordmark")
+        self._wordmark = QLabel(t("wordmark"))
+        self._wordmark.setObjectName("wordmark")
         self._state_lbl = QLabel("")
         theme.set_tone(self._state_lbl, "hint")
-        btn_folder = QPushButton("输出文件夹")
-        btn_folder.setObjectName("quiet")
-        btn_folder.setCursor(Qt.PointingHandCursor)
-        btn_folder.clicked.connect(self._reveal_output)
+        self._btn_folder = QPushButton(t("btn_output_folder"))
+        self._btn_folder.setObjectName("quiet")
+        self._btn_folder.setCursor(Qt.PointingHandCursor)
+        self._btn_folder.clicked.connect(self._reveal_output)
         self._btn_theme = QPushButton()
         self._btn_theme.setObjectName("quiet")
         self._btn_theme.setCursor(Qt.PointingHandCursor)
-        self._btn_theme.setToolTip("点击切换：跟随系统 → 深色 → 浅色")
+        self._btn_theme.setToolTip(t("theme_tooltip"))
         self._btn_theme.clicked.connect(self._cycle_appearance)
         self._update_theme_btn()
-        sl.addWidget(wordmark)
+        self._btn_lang = QPushButton()
+        self._btn_lang.setObjectName("quiet")
+        self._btn_lang.setCursor(Qt.PointingHandCursor)
+        self._btn_lang.setToolTip(t("lang_btn_tooltip"))
+        self._btn_lang.clicked.connect(self._cycle_language)
+        self._update_lang_btn()
+        sl.addWidget(self._wordmark)
         sl.addStretch()
         sl.addWidget(self._state_lbl)
         sl.addStretch()
-        sl.addWidget(btn_folder)
+        sl.addWidget(self._btn_folder)
         sl.addWidget(self._btn_theme)
+        sl.addWidget(self._btn_lang)
         outer.addWidget(strip)
 
         # rail + stage
@@ -184,24 +260,42 @@ class MainWindow(QMainWindow):
     def _stage_for(screen: int) -> int:
         return {HOME: 0, RECORDING: 0, PROCESSING: 2, RESULTS: 3}[screen]
 
-    def _go(self, screen: int, state_text: str = "",
-            tone: str = "hint") -> None:
+    def _go(self, screen: int, state_key: str = "",
+            tone: str = "hint", **args) -> None:
         self._stack.setCurrentIndex(screen)
         self._rail.set_stage(self._stage_for(screen))
-        self._state_lbl.setText(state_text)
+        self._state_key = state_key
+        self._state_args = args
+        self._state_tone = tone
+        self._state_lbl.setText(t(state_key, **args) if state_key else "")
         theme.set_tone(self._state_lbl, tone)
+
+    def _show_status(self, key: str | None, **args) -> None:
+        """Set the status bar from a catalog key, remembering it so a live
+        language switch can re-render it."""
+        self._status_key = key
+        self._status_args = args
+        self.statusBar().showMessage(t(key, **args) if key else "")
+
+    def _show_status_text(self, text: str) -> None:
+        """Show a transient, already-composed message (e.g. from the pipeline
+        subprocess). Not tracked, so a language switch leaves it until the next
+        progress tick replaces it."""
+        self._status_key = None
+        self._status_args = {}
+        self.statusBar().showMessage(text)
 
     # ── recording ───────────────────────────────────────────
 
     def _start_recording(self, source: str, device) -> None:
         self._go(RECORDING, "", "hint")
         self._recording.start_capture(source, device)
-        self.statusBar().showMessage("录音中…")
+        self._show_status("status_recording")
 
     def _on_recording_ready(self, path: str, meta: str) -> None:
         self._home.set_file(path, meta)
         self._go(HOME)
-        self.statusBar().showMessage(f"已录制:{Path(path).name}")
+        self._show_status("status_recorded", name=Path(path).name)
 
     # ── processing ──────────────────────────────────────────
 
@@ -219,9 +313,11 @@ class MainWindow(QMainWindow):
         size_mb = p.stat().st_size / 1_048_576
         self._processing.reset(active_steps, p.name, f"{size_mb:.1f} MB")
         self._results.reset()
-        self._go(PROCESSING, "PROCESSING", "accent")
-        self.statusBar().showMessage("处理中…")
+        self._go(PROCESSING, "state_processing", "accent")
+        self._show_status("status_processing")
 
+        # Tell the subprocess which language to report progress in.
+        settings = {**settings, "ui_lang": current_language()}
         self._worker = PipelineWorker(
             input_path=input_path, output_dir=output_dir, settings=settings)
         self._worker.progress.connect(self._on_progress)
@@ -231,27 +327,27 @@ class MainWindow(QMainWindow):
 
     def _on_progress(self, info: dict) -> None:
         self._processing.update_progress(info)
-        self.statusBar().showMessage(info.get("message", ""))
+        self._show_status_text(info.get("message", ""))
 
     def _on_finished(self, result: dict) -> None:
         total_s = result.get("stats", {}).get("total_time_s", 0)
         self._results.load_results(result)
-        self._go(RESULTS, f"✓ 转写完成 · 用时 {total_s:.0f}s", "ok")
-        self.statusBar().showMessage(
-            f"✓ 完成，用时 {total_s:.0f}s  ·  输出：{result['output_dir']}")
+        self._go(RESULTS, "state_done", "ok", seconds=f"{total_s:.0f}")
+        self._show_status("status_done", seconds=f"{total_s:.0f}",
+                          dir=result["output_dir"])
         self._send_notification(
-            "Recorder", f"转写完成 — {Path(result['output_dir']).name}")
+            "Recorder", t("notify_done", name=Path(result["output_dir"]).name))
 
     def _on_error(self, msg: str) -> None:
-        self._go(HOME, "发生错误", "danger")
-        self.statusBar().showMessage("发生错误")
-        QMessageBox.critical(self, "处理出错", msg)
+        self._go(HOME, "state_error", "danger")
+        self._show_status("status_error")
+        QMessageBox.critical(self, t("error_box_title"), msg)
 
     def _cancel_processing(self) -> None:
         if self._worker and self._worker.isRunning():
             self._worker.cancel()
-        self._go(HOME, "已取消", "hint")
-        self.statusBar().showMessage("已取消")
+        self._go(HOME, "state_cancelled", "hint")
+        self._show_status("status_cancelled")
 
     # ── utilities ───────────────────────────────────────────
 
@@ -261,15 +357,11 @@ class MainWindow(QMainWindow):
         self._home.clear_file()
         self._results.reset()
         self._go(HOME)
-        self.statusBar().showMessage("就绪 · 全程离线")
+        self._show_status("status_ready")
 
     def _cycle_appearance(self) -> None:
         cur = self._prefs.value("appearance", "auto")
         nxt = {"auto": "dark", "dark": "light", "light": "auto"}.get(cur, "auto")
-        for act in self._appearance_group.actions():
-            act.setChecked(
-                act.text() == {"auto": "跟随系统", "dark": "深色",
-                               "light": "浅色"}[nxt])
         self._set_appearance(nxt)
 
     def _reveal_output(self) -> None:

@@ -14,6 +14,8 @@ import tempfile
 from pathlib import Path
 from typing import Optional
 
+from core.i18n import t
+
 
 def binary_path() -> Optional[Path]:
     """Locate the compiled helper (installed location first, then dev tree)."""
@@ -43,7 +45,7 @@ class SystemAudioRecorder:
     def start(self) -> str:
         b = binary_path()
         if b is None:
-            raise RuntimeError("系统音频录制组件缺失，请重新运行 make_app.sh 编译。")
+            raise RuntimeError(t("sys_component_missing"))
         out = tempfile.NamedTemporaryFile(suffix=".wav", prefix="recorder_sys_", delete=False)
         out.close()
         self.output_path = out.name
