@@ -32,7 +32,7 @@ from typing import Callable, Optional
 
 from modules import ASRResult, ASRSegment, ASRWord
 
-from core.languages import detect_language
+from core.languages import detect_language, disambiguate_latin_language, _LATIN_LANGS
 
 logger = logging.getLogger(__name__)
 
@@ -418,12 +418,21 @@ class Transcriber:
                 for w in s.get("words", [])
             ]
             text = (s.get("text") or "").strip()
+            lang = detect_language(text, s.get("chunk_language") or detected)
+            # Function-word disambiguation for Latin-script languages: when
+            # the chunk language and the detected language are both Latin
+            # (en/fr/de/es), the per-segment function words can correct a
+            # chunk-level mislabel — e.g. an English segment inside a
+            # French-labelled chunk.
+            chunk_lang = s.get("chunk_language")
+            if chunk_lang in _LATIN_LANGS and lang in _LATIN_LANGS:
+                lang = disambiguate_latin_language(text, chunk_lang)
             segments.append(ASRSegment(
                 id=i,
                 start=float(s.get("start", 0.0) or 0.0),
                 end=float(s.get("end", 0.0) or 0.0),
                 text=text,
-                language=detect_language(text, s.get("chunk_language") or detected),
+                language=lang,
                 confidence=float(s.get("avg_logprob", 0.0) or 0.0),
                 words=words,
             ))
