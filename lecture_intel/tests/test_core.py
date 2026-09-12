@@ -191,3 +191,33 @@ def test_foreign_script_count_respects_the_reference_language():
     assert foreign_script_count("日本語です", "ja") == 0       # native to Japanese
     assert foreign_script_count("한국어입니다", "ja") >= 2     # Hangul is not Japanese
     assert foreign_script_count("hello there", "en") == 0
+
+
+# ── _candidate_score regression tests (#10) ─────────────────────────
+
+def _scored_seg(text: str, language: str = "en") -> ASRSegment:
+    return ASRSegment(id=0, start=0.0, end=5.0, text=text,
+                      language=language, confidence=-0.2)
+
+
+def test_candidate_score_prefers_english_cluster_zh_en():
+    """Regression: the Chinese coach cluster must score lower than the English
+    candidate cluster — same behaviour as the old latin/cjk ratio."""
+    from core.diarize import _candidate_score
+    coach = [_scored_seg("这里要注意时态，你用了过去式。", "zh"),
+             _scored_seg("这个 very good", "zh")]
+    candidate = [_scored_seg("Well, I would talk about Bluebeard.", "en"),
+                 _scored_seg("He have many wives and it is a very good story.", "en")]
+    assert _candidate_score(coach) < _candidate_score(candidate)
+
+
+def test_candidate_score_prefers_english_cluster_fr_en():
+    """#10 regression: a French examiner cluster must score lower than an
+    English candidate cluster.  The old latin/cjk ratio gave both ≈1.0 and
+    degenerated to word count, flipping the assignment."""
+    from core.diarize import _candidate_score
+    examiner = [_scored_seg("Attention, vous avez utilisé le passé composé.", "fr"),
+                _scored_seg("N'oubliez pas l'accord du participe passé.", "fr")]
+    candidate = [_scored_seg("Well, I would talk about Bluebeard.", "en"),
+                 _scored_seg("He have many wives and it is a very good story.", "en")]
+    assert _candidate_score(examiner) < _candidate_score(candidate)

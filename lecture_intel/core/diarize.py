@@ -327,12 +327,14 @@ def _candidate_score(segs: list[ASRSegment]) -> float:
     text = " ".join(s.text for s in segs)
     words = text.split()
     n_words = len(words)
-    latin = len(re.findall(r"[a-zA-Z]", text))
-    cjk = len(re.findall(r"[一-鿿]", text))
-    english_share = latin / max(latin + cjk, 1)
+    # Language-based: candidate answers in the exam language (English).
+    # A cluster whose segments are labelled "en" is the candidate; a cluster
+    # of French/German/Chinese segments scores 0 — unlike the old latin/cjk
+    # ratio, this distinguishes fr from en.
+    en_share = sum(1 for s in segs if s.language == CANDIDATE_LANGUAGE) / max(len(segs), 1)
     questions = len(_QUESTION_CUES.findall(text))
     avg_turn = n_words / max(len(segs), 1)
-    return n_words * english_share + avg_turn * 3.0 - questions * 8.0
+    return n_words * en_share + avg_turn * 3.0 - questions * 8.0
 
 
 def _nearest_label(seg, all_segs, labels) -> str:

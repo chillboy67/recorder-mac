@@ -255,6 +255,73 @@ def normalize_language(value) -> Optional[str]:
     return v
 
 
+# ── Latin-script function-word disambiguation ────────────────────────
+# Languages that share the Latin script and can be told apart by their
+# function words.  The chunk-level detection Whisper reports covers ~60 s of
+# conversation, so a chunk that mixes two Latin languages gets one label for
+# both — these function words recover the per-segment language.
+
+_LATIN_FUNCTION_WORDS: dict[str, frozenset[str]] = {
+    "en": frozenset({"the", "is", "are", "was", "were", "have", "has", "had",
+                     "been", "will", "would", "could", "should", "can", "may",
+                     "might", "do", "does", "did", "not", "this", "that", "it",
+                     "they", "we", "you", "he", "she", "what", "which",
+                     "where", "when", "how", "and", "but", "or", "if", "so",
+                     "of", "in", "on", "at", "to", "for", "with", "from",
+                     "by", "about", "into", "through", "i", "me", "my",
+                     "your", "his", "her", "our", "their", "there", "here",
+                     "then", "than", "just", "very", "too"}),
+    "fr": frozenset({"le", "la", "les", "un", "une", "des", "du", "de", "au",
+                     "aux", "je", "tu", "il", "elle", "nous", "vous", "ils",
+                     "elles", "mon", "ton", "son", "ma", "ta", "sa", "mes",
+                     "tes", "ses", "ce", "cette", "ces", "qui", "que", "quoi",
+                     "dont", "est", "sont", "a", "ont", "fait", "avoir",
+                     "être", "ne", "pas", "plus", "très", "aussi", "bien",
+                     "mal", "et", "mais", "ou", "si", "car", "ni", "dans",
+                     "sur", "sous", "avec", "sans", "pour", "par", "ici",
+                     "là", "y", "en", "tout", "tous", "même"}),
+    "de": frozenset({"der", "die", "das", "ein", "eine", "ich", "du", "er",
+                     "sie", "wir", "ihr", "und", "oder", "aber", "ist",
+                     "sind", "hat", "nicht", "auch", "nur", "noch", "schon",
+                     "sehr", "wohl", "in", "an", "auf", "mit", "für", "zu",
+                     "von", "bei", "nach", "hier", "da", "dort", "wo", "was",
+                     "wer", "wie", "wann"}),
+    "es": frozenset({"el", "la", "los", "las", "un", "una", "yo", "tú", "él",
+                     "ella", "nosotros", "ustedes", "ellos", "ellas", "es",
+                     "son", "ha", "no", "más", "muy", "también", "bien",
+                     "mal", "y", "o", "pero", "si", "porque", "para", "con",
+                     "por", "en", "aquí", "ahí", "donde", "qué", "quién",
+                     "cómo", "cuándo"}),
+}
+
+_LATIN_LANGS: frozenset[str] = frozenset(_LATIN_FUNCTION_WORDS)
+
+
+def disambiguate_latin_language(text: str, detected: str) -> str:
+    """Use function words to tell apart Latin-script languages that share a
+    script and where the chunk-level detection may be wrong.
+
+    Only fires when *detected* is a known Latin-script language in
+    ``_LATIN_FUNCTION_WORDS`` (currently en/fr/de/es).  Text with fewer than
+    three words is left unchanged — there isn't enough signal to override.
+    """
+    if detected not in _LATIN_LANGS:
+        return detected
+    words = re.findall(r'[a-zA-Zà-ÿÀ-ŸñÑ¿¡]+', text or '')
+    if len(words) < 3:
+        return detected
+    lower = {w.lower() for w in words}
+    scores: dict[str, int] = {}
+    for lang, fws in _LATIN_FUNCTION_WORDS.items():
+        score = len(lower & fws)
+        if score >= 2:
+            scores[lang] = score
+    if not scores:
+        return detected
+    best = max(scores, key=scores.get)
+    return best if scores[best] >= 2 else detected
+
+
 def display_name(code: Optional[str]) -> str:
     """Human-readable name for a language code, for the UI and exports."""
     if not code:

@@ -23,6 +23,7 @@ from core.languages import (  # noqa: E402
     LANGUAGE_NAMES,
     PICKER_LANGUAGES,
     detect_language,
+    disambiguate_latin_language,
     display_name,
     normalize_language,
     prefers_asian_model,
@@ -259,3 +260,44 @@ def test_chunking_off_uses_single_pass(tmp_path, mlx_spy):
     Transcriber(model="large-v3").transcribe(tmp_path / "a.wav", chunked=False)
     assert mlx_spy["chunked"] is None
     assert mlx_spy["single"]
+
+
+# ── function-word Latin disambiguation (#11) ─────────────────────────
+
+def test_function_words_correct_mislabelled_chunk():
+    """English text inside a French-labelled chunk must be corrected to English."""
+    assert disambiguate_latin_language(
+        "I think we should talk about this issue", "fr") == "en"
+
+
+def test_function_words_keep_correct_chunk_language():
+    """French text in a French chunk stays French."""
+    assert disambiguate_latin_language(
+        "Attention, vous avez utilisé le passé composé.", "fr") == "fr"
+
+
+def test_function_words_dont_override_non_latin():
+    """Chinese text is never touched by the Latin function-word check."""
+    # detected="fr" is not a realistic input for Chinese text, but the
+    # function must be a no-op when the text has no Latin function words.
+    assert disambiguate_latin_language("这里要注意时态", "fr") == "fr"
+    # Non-Latin detected language: no-op regardless of text.
+    assert disambiguate_latin_language("hello world", "zh") == "zh"
+
+
+def test_function_words_short_text_unchanged():
+    """Fewer than 3 words: not enough signal, leave unchanged."""
+    assert disambiguate_latin_language("the book", "fr") == "fr"
+    assert disambiguate_latin_language("hello", "de") == "de"
+
+
+def test_function_words_via_to_segments(tmp_path):
+    """End-to-end through _to_segments: English text in a French chunk is
+    corrected to English at the segment level."""
+    raw = [
+        {**_raw("I think we should talk about this"), "chunk_language": "fr"},
+        {**_raw("vous avez utilisé le passé composé"), "chunk_language": "fr"},
+    ]
+    segs = Transcriber._to_segments(raw, detected="fr")
+    assert segs[0].language == "en"   # corrected from fr
+    assert segs[1].language == "fr"   # stays fr
