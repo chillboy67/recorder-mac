@@ -174,10 +174,12 @@ def run(
             def _corr_prog(frac, msg):
                 report("analyze", msg, 88 + int(frac * 4))
             corrected = llm_mod.correct_transcript(
-                asr.full_text, context="一节课的课堂录音", model=llm_model,
+                asr.full_text, context=_lecture_context(asr.language),
+                language=asr.language, model=llm_model,
                 progress=_corr_prog)
             report("analyze", "AI 提炼重点…", 93)
-            summary_md = llm_mod.summarize_lecture(corrected or asr.full_text, model=llm_model)
+            summary_md = llm_mod.summarize_lecture(
+                corrected or asr.full_text, language=asr.language, model=llm_model)
             parts = ["# 课堂重点总结（本地大模型）", ""]
             if summary_md:
                 parts.append(summary_md)
@@ -193,7 +195,7 @@ def run(
         def _corr_prog(frac, msg):
             report("analyze", msg, 88 + int(frac * 6))
         general_tidy_md = llm_mod.correct_transcript(
-            asr.full_text, model=llm_model, progress=_corr_prog)
+            asr.full_text, language=asr.language, model=llm_model, progress=_corr_prog)
         report("analyze", "整理完成", 94, "done")
 
     # 6) Export --------------------------------------------------------------
@@ -248,3 +250,11 @@ def _ielts_summary(r) -> dict:
         "naturalness_count": len(r.naturalness),
         "markdown": r.markdown,
     }
+
+
+def _lecture_context(language: str) -> str:
+    """Background hint for the correction prompt, in the transcript's language
+    (code-switching transcripts keep the Chinese hint, matching their prompt)."""
+    if not language or language in ("zh", "mixed"):
+        return "一节课的课堂录音"
+    return "a classroom lecture recording"

@@ -242,25 +242,26 @@ The project wasn't under git for most of its life — it was only imported into 
 Because of that, every commit's date is the import date; commits were organized into 23 commits matching the
 phases above, with each commit's body noting the actual original development period it corresponds to.
 
-## Multilingual (in progress)
+## Multilingual (all three steps done)
 
 Transcription today is **zh/en-first**; optional LLM sizing already follows **Qwen (Asian) / Mistral (European)**.
-Full multilingual (e.g. ja/ko/EU coach sessions) lands in three steps:
+Full multilingual (e.g. ja/ko/EU coach sessions) was planned in three steps, and all three are now complete:
 
 1. **A shared `language` setting** + language helpers — not a standalone "detector app", but one setting every later
    stage shares (role separation, reports, model routing);
 2. Diarization without hard-coded Chinese assumptions;
-3. True multi-language ASR labels; then analysis and optional coach-side translation.
+3. True multi-language ASR labels; then analysis.
 
-Progress: the language helper layer now lives in `core/languages.py` and labels by Unicode script
-(kana → Japanese, Hangul → Korean, Han → Chinese; scripts shared by several languages — Latin, Cyrillic,
-Arabic — defer to Whisper's own detection). Step 3's transcription labels are done: Japanese is no longer
-reported as Chinese, Korean is no longer reported as English, and Latin-script languages no longer collapse
-to English. The zh/en code-switching thresholds are unchanged. Steps 1 and 2 are complete: the
-setting reaches the engine, the CLI (`transcribe.py -l ja`) and a 语言 picker in the UI, and the
-coach/student split no longer assumes a Chinese-speaking coach — Japanese, Korean, Russian and
-Thai coaches are attributed by script, and French/German/Spanish coaches by the per-chunk
-language carried on each segment. What remains is step 3's analysis and optional translation.
+How it works: the helper layer in `core/languages.py` labels by Unicode script (kana → Japanese, Hangul → Korean,
+Han → Chinese; scripts shared by several languages — Latin, Cyrillic, Arabic — defer to Whisper's own detection),
+and the `language` setting reaches the engine, the CLI (`transcribe.py -l ja`) and a 语言 picker in the UI. The
+coach/student split keys on "not the candidate's language": Japanese, Korean, Russian and Thai coaches are
+attributed by script, and French/German/Spanish coaches by the per-chunk language carried on each segment. The
+optional local-LLM enhancement (correction, classroom summaries) now writes its prompts in the transcript's own
+language instead of always Chinese. The IELTS examiner report stays in Chinese (candidates always answer in
+English, and the UI is Chinese) and LanguageTool stays on `en-US` (it diagnoses the candidate's English). The
+zh/en thresholds and attribution rules are unchanged. The one optional item from the plan — coach-side
+translation — is not implemented; revisit if wanted.
 
 See the [LLM guide](lecture_intel/docs/LLM_MODELS.md) for routing notes.
 
