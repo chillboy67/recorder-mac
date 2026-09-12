@@ -99,9 +99,11 @@ Recommended upgrade path is **Qwen (Asian) / Mistral (European)**, sized by RAM.
   language fallback: when two same-gender voices are acoustically too close to
   split, turns that are not in the candidate's English are attributed to the
   coach (教官) and the rest to the student (考生). A Chinese, Japanese, Korean,
-  Russian or Thai coach is caught by script; a French/German/Spanish coach —
-  whose letters match English — by the per-chunk language the chunked ASR path
-  attaches to each segment. The student's English is what the
+  Russian or Thai coach is caught by script — verified on real recordings. A
+  French/German/Spanish coach, whose letters match English, would need the
+  per-chunk language attached to each segment, and that is **not reliable yet**:
+  it only helps when a chunk holds one language, and the acoustic path's role
+  score ignores segment language. The student's English is what the
   pronunciation/grammar analysis runs on.
 
 ## Test

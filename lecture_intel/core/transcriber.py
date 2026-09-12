@@ -285,9 +285,11 @@ class Transcriber:
             )
             offset = a / sr
             # The chunk's own detected language, carried onto each of its
-            # segments. A French turn and an English turn sit in different
-            # chunks but share a script, so this is the only thing that can
-            # tell them apart downstream (see _to_segments).
+            # segments. It is the only signal that can separate two languages
+            # sharing a script (fr vs en), but note the limit found on real
+            # audio: one chunk covers ~60s of conversation, so a chunk that
+            # mixes languages yields a single label for both. Script-based
+            # languages (zh/ja/ko/ru/th…) are unaffected — see _to_segments.
             chunk_lang = r.get("language")
             for seg in r.get("segments", []):
                 seg = dict(seg)
