@@ -350,12 +350,14 @@ def _is_coach_segment(seg: ASRSegment) -> bool:
 
     Two signals, either is enough:
 
-    * the segment's own detected language differs from the candidate's language
-      — this is what catches a Latin-script coach (fr/de/es), whose letters look
-      exactly like English and which no script test can separate;
     * the segment is written in a script foreign to the candidate's language —
-      the fallback for short turns, and for the single-pass / faster-whisper
-      paths, which carry no per-segment language.
+      verified on real recordings for Chinese, Japanese, Korean, Russian and
+      Thai coaches, and independent of any detection quality;
+    * the segment's own detected language differs from the candidate's — needed
+      for a Latin-script coach (fr/de/es), whose letters look exactly like
+      English. Caveat measured on real audio: that language comes from the
+      chunk, so a chunk mixing both languages mislabels it, which can hand the
+      candidate's English turns to the coach. Not reliable for fr/de/es yet.
 
     "mixed" is left to the script check, so a zh/en code-switched turn is
     attributed exactly as it was under the old `_has_chinese` rule."""

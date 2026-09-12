@@ -209,9 +209,11 @@ Voiceprint embeddings + hierarchical clustering are enough for the two-speaker c
 acoustically hard to separate, so there's a **language-based fallback**: when acoustic separation is clearly
 unbalanced and a turn is not in the candidate's language, roles are assigned by language (an IELTS candidate
 always answers in English, so whoever else is speaking is the coach) — this is what makes coach/student
-separation actually reliable. It covers Chinese, Japanese, Korean, Russian and Thai coaches, and also
-French/German/Spanish ones whose letters are indistinguishable from English: those are told apart by the
-per-chunk language the chunked ASR path attaches to each segment, not by script.
+separation actually reliable, and Chinese, Japanese, Korean, Russian and Thai coaches are verified on real audio.
+French/German/Spanish coaches, whose letters are indistinguishable from English, are **not reliable yet**: they
+depend on the per-chunk language the chunked ASR path attaches, which only helps when a silence-bounded chunk
+happens to hold one language (real 60s coaching chunks mix two), and when the acoustic split succeeds the
+role decision (`_candidate_score`) does not consult segment language at all. Both tracked as follow-ups.
 
 **System audio capture writes its own WAV file.**
 ScreenCaptureKit hands back non-interleaved Float32 audio that neither AVAudioFile nor its converters will accept,
@@ -242,10 +244,10 @@ The project wasn't under git for most of its life — it was only imported into 
 Because of that, every commit's date is the import date; commits were organized into 23 commits matching the
 phases above, with each commit's body noting the actual original development period it corresponds to.
 
-## Multilingual (all three steps done)
+## Multilingual
 
-Transcription today is **zh/en-first**; optional LLM sizing already follows **Qwen (Asian) / Mistral (European)**.
-Full multilingual (e.g. ja/ko/EU coach sessions) was planned in three steps, and all three are now complete:
+Planned in three steps. Current status: **steps 1 and 3 are complete and verified on real audio; step 2 is
+verified for Chinese/Japanese/Korean/Russian/Thai coaches, and not yet reliable for French/German/Spanish ones.**
 
 1. **A shared `language` setting** + language helpers — not a standalone "detector app", but one setting every later
    stage shares (role separation, reports, model routing);
@@ -256,12 +258,15 @@ How it works: the helper layer in `core/languages.py` labels by Unicode script (
 Han → Chinese; scripts shared by several languages — Latin, Cyrillic, Arabic — defer to Whisper's own detection),
 and the `language` setting reaches the engine, the CLI (`transcribe.py -l ja`) and a 语言 picker in the UI. The
 coach/student split keys on "not the candidate's language": Japanese, Korean, Russian and Thai coaches are
-attributed by script, and French/German/Spanish coaches by the per-chunk language carried on each segment. The
-optional local-LLM enhancement (correction, classroom summaries) now writes its prompts in the transcript's own
-language instead of always Chinese. The IELTS examiner report stays in Chinese (candidates always answer in
-English, and the UI is Chinese) and LanguageTool stays on `en-US` (it diagnoses the candidate's English). The
-zh/en thresholds and attribution rules are unchanged. The one optional item from the plan — coach-side
-translation — is not implemented; revisit if wanted.
+attributed by script, each verified on a real recording in that language. French/German/Spanish coaches need the
+per-chunk language carried on each segment and are **not reliable yet** — that signal only suffices when a
+silence-bounded chunk holds a single language (real 60s coaching chunks mix two), and the acoustic path's role
+decision does not consult segment language at all; both are tracked as follow-ups. The optional local-LLM
+enhancement (correction, classroom summaries) now writes its prompts in the transcript's own language instead of
+always Chinese. The IELTS examiner report stays in Chinese (candidates always answer in English, and the UI is
+Chinese) and LanguageTool stays on `en-US` (it diagnoses the candidate's English). The zh/en thresholds and
+attribution rules are unchanged. The one optional item from the plan — coach-side translation — is not
+implemented; revisit if wanted.
 
 See the [LLM guide](lecture_intel/docs/LLM_MODELS.md) for routing notes.
 
