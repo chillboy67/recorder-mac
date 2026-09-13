@@ -122,6 +122,10 @@ cd lecture_intel
 .venv/bin/python3 transcribe.py 讲座.m4a -l ja               # 指定语言（默认自动检测）
 ```
 
+语言选择器列出 12 种雅思主流生源区语言（中/英/日/韩/法/德/西/阿/泰/越/印尼/印地语），
+但**「自动检测」不限于此**——Whisper 本身支持 100 种语言（mlx-whisper 与 faster-whisper 实测为同一张语言表），
+列表之外的语音照常识别转写，只是无法在界面或命令行手动指定。
+
 支持 m4a / mp3 / wav / webm / flac / aac / ogg / opus。
 
 ### 可选：本地大模型增强

@@ -301,3 +301,19 @@ def test_function_words_via_to_segments(tmp_path):
     segs = Transcriber._to_segments(raw, detected="fr")
     assert segs[0].language == "en"   # corrected from fr
     assert segs[1].language == "fr"   # stays fr
+
+
+def test_latin_languages_outside_the_family_keep_their_detection():
+    """Whisper's 100-language table includes Latin-script languages the curated
+    family never listed (yo, tk, ha, mi, ht…). They used to collapse to "en"."""
+    assert detect_language("Mo ti lo si ile itaja lonu.", "yo") == "yo"
+    assert detect_language("Men bazara gitdim.", "tk") == "tk"
+    assert detect_language("Na tafi kasuwa jiya.", "ha") == "ha"
+
+
+def test_contradicting_detection_on_latin_text_is_still_discarded():
+    """A non-Latin detection over Latin letters is a misdetection, not evidence."""
+    assert detect_language("This is plainly English text here.", "ja") == "en"
+    assert detect_language("This is plainly English text here.", "yue") == "en"
+    # and with no detection at all the old default stands
+    assert detect_language("This is plainly English text here.") == "en"

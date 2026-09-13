@@ -127,6 +127,12 @@ Three model tiers are selectable in the UI: **most accurate** `large-v3` / **bal
 .venv/bin/python3 transcribe.py talk.m4a -l ja                 # pin the language (default: auto-detect)
 ```
 
+The language picker lists 12 languages from the mainstream IELTS-taking regions
+(zh/en/ja/ko/fr/de/es/ar/th/vi/id/hi), but **auto-detect is not limited to them** —
+Whisper itself recognises 100 languages (the same table in both mlx-whisper and
+faster-whisper), so audio in a language outside the list
+still transcribes; it just can't be pinned manually.
+
 Supports m4a / mp3 / wav / webm / flac / aac / ogg / opus.
 
 ### Optional: local LLM enhancement
