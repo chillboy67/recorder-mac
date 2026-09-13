@@ -1,8 +1,9 @@
 """
 Language table and script-based language labelling.
 
-Whisper already recognises ~99 languages, so nothing here teaches the app a new
-language. What it adds is the curated list the UI offers, display names, and the
+Whisper already recognises 100 languages (the same table in mlx-whisper and
+faster-whisper), so nothing here teaches the app a new language. What it adds
+is the curated list the UI offers, display names, and the
 labeller that turns Whisper's output into the ``language`` tag stored on
 ``ASRResult`` / ``ASRSegment``.
 
@@ -194,6 +195,25 @@ def _family_member(script: str, detected: Optional[str]) -> Optional[str]:
     return None
 
 
+# Codes whose own script is not Latin. Anything else the engine may report is
+# written in Latin letters, so on Latin text the detection is usable evidence.
+_NON_LATIN: frozenset[str] = frozenset(_NATIVE_SCRIPTS) | {"yue"}
+
+
+def _latin_detection(detected: Optional[str]) -> Optional[str]:
+    """Whisper's answer for a Latin-script language outside the curated family.
+
+    The family gate above only covers the languages this app reasons about
+    (en/fr/de/es/…); without this, Yoruba or Turkmen audio — correctly detected
+    by Whisper — was relabelled "en" here, which then fed the IELTS English
+    share and the display name. A detection whose script contradicts the text
+    (Japanese on Latin letters) is still discarded.
+    """
+    if detected and detected not in _NON_LATIN:
+        return detected
+    return None
+
+
 def detect_language(text: str, detected: Optional[str] = None) -> str:
     """Label a piece of text, combining its script with Whisper's detection.
 
@@ -228,13 +248,15 @@ def detect_language(text: str, detected: Optional[str] = None) -> str:
     if han >= _DOMINANT:
         return "zh"
     if latin >= _DOMINANT:
-        return _family_member("latin", detected) or "en"
+        return (_family_member("latin", detected) or _latin_detection(detected)
+                or "en")
     if min(han, latin) >= _MIXED:
         return "mixed"
     if han > latin:
         return "zh"
     if latin:
-        return _family_member("latin", detected) or "en"
+        return (_family_member("latin", detected) or _latin_detection(detected)
+                or "en")
     return detected or "en"
 
 
