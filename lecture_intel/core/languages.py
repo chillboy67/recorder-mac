@@ -45,9 +45,6 @@ PICKER_LANGUAGES: tuple[tuple[str, str], ...] = (
     ("fr", "Français"),
     ("de", "Deutsch"),
     ("es", "Español"),
-    ("it", "Italiano"),
-    ("pt", "Português"),
-    ("ru", "Русский"),
     ("ar", "العربية"),
     ("th", "ไทย"),
     ("vi", "Tiếng Việt"),
@@ -59,9 +56,8 @@ PICKER_LANGUAGES: tuple[tuple[str, str], ...] = (
 # language being processed (see core.llm). Unknown codes fall back to the code.
 LANGUAGE_NAMES_EN: dict[str, str] = {
     "zh": "Chinese", "en": "English", "ja": "Japanese", "ko": "Korean",
-    "fr": "French", "de": "German", "es": "Spanish", "it": "Italian",
-    "pt": "Portuguese", "ru": "Russian", "ar": "Arabic", "th": "Thai",
-    "vi": "Vietnamese", "id": "Indonesian", "hi": "Hindi",
+    "fr": "French", "de": "German", "es": "Spanish", "ar": "Arabic",
+    "th": "Thai", "vi": "Vietnamese", "id": "Indonesian", "hi": "Hindi",
 }
 
 # Display names for anything Whisper may report, not just what the picker
