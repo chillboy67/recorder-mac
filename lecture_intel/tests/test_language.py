@@ -56,6 +56,8 @@ def test_kanji_only_line_trusts_whisper():
 
 
 @pytest.mark.parametrize("text,detected,expected", [
+    # Russian is unsupported: the Cyrillic script guess still tags it, but
+    # only as a bare code with no display name (see test below).
     ("Привет, как дела сегодня?", None, "ru"),
     ("Привет, як справи сьогодні?", "uk", "uk"),   # Cyrillic, but Whisper heard Ukrainian
     ("مرحبا كيف حالك اليوم", None, "ar"),
