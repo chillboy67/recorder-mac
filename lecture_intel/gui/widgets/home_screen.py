@@ -30,8 +30,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from core.i18n import t
-from core.languages import PICKER_LANGUAGES
+from core.i18n import mic_display_name, t
+from core.languages import AUTO, PICKER_LANGUAGES
 from core.modes import GENERAL, CLASSROOM, IELTS
 from gui import theme
 from gui.widgets.common import NoScrollComboBox
@@ -246,7 +246,8 @@ class HomeScreen(QWidget):
         self._lbl_lang.setProperty("tone", "hint")
         self._lang_combo = NoScrollComboBox()
         for value, label in PICKER_LANGUAGES:
-            self._lang_combo.addItem(label, userData=value)
+            self._lang_combo.addItem(t("lang_auto") if value == AUTO else label,
+                                     userData=value)
         self._lang_combo.setToolTip(t("home_lang_tooltip"))
         self._lang_combo.currentIndexChanged.connect(self._save_prefs)
         srow.addWidget(self._lbl_lang)
@@ -293,7 +294,8 @@ class HomeScreen(QWidget):
         default = QMediaDevices.defaultAudioInput()
         default_idx = 0
         for i, dev in enumerate(devices):
-            self._mic_combo.addItem(dev.description(), userData=dev)
+            self._mic_combo.addItem(mic_display_name(dev.description()),
+                                    userData=dev)
             if dev.id() == default.id():
                 default_idx = i
         self._mic_combo.setCurrentIndex(default_idx)
@@ -465,7 +467,12 @@ class HomeScreen(QWidget):
         self._lbl_lang.setText(t("home_language"))
         self._lbl_fmt.setText(t("home_export"))
         self._lang_combo.setToolTip(t("home_lang_tooltip"))
+        self._lang_combo.setItemText(0, t("lang_auto"))
         self._cb_llm.setText(t("home_llm"))
         self._cb_llm.setToolTip(t("home_llm_tooltip"))
         for i, (_value, key) in enumerate(MODELS):
             self._model_combo.setItemText(i, t(key))
+        for i in range(self._mic_combo.count()):
+            dev = self._mic_combo.itemData(i)
+            if dev is not None:
+                self._mic_combo.setItemText(i, mic_display_name(dev.description()))

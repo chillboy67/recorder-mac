@@ -34,6 +34,36 @@ _UI_LANGUAGE_NAMES: dict[str, str] = {ZH: "中文", EN: "English"}
 
 _state: dict[str, str] = {"lang": DEFAULT}
 
+# Hardware-name markers used to fold a device description into a generic label
+# (see ``mic_display_name``). They are matched against the *brand/model* part
+# only — "Microphone" is stripped first, otherwise the word itself would match
+# the "phone" marker and label every device as a phone.
+_PHONE_MIC_MARKERS: tuple[str, ...] = (
+    "iphone", "ipad", "apple watch", "watch", "phone", "huawei", "xiaomi",
+    "pixel", "oneplus", "android", "continuity", "redmi", "oppo",
+)
+# Checked before phones: "Galaxy Buds" / "Pixel Buds" are earphones, not handsets.
+_EARPHONE_MIC_MARKERS: tuple[str, ...] = (
+    "airpods", "earpods", "earphone", "earbud", "ear-bud", "buds",
+    "headphone", "head-phone", "headset", "head-set", "beats", "bose",
+    "sony", "sennheiser", "jabra", "plantronics", "soundcore",
+)
+_COMPUTER_MIC_MARKERS: tuple[str, ...] = (
+    "macbook", "imac", "mac mini", "mac studio", "mac pro", "mac",
+    "built-in", "internal", "computer", "pc", "laptop",
+)
+# Standalone mics and camera/webcam mics: brands and words that never belong in
+# a user-facing label.
+_EXTERNAL_MIC_MARKERS: tuple[str, ...] = (
+    "yeti", "rode", "shure", "zoom", "focusrite", "scarlett", "behringer",
+    "fifine", "maono", "samson", "audio-technica", "webcam", "camera",
+    "logitech", "external", "usb audio", "condenser",
+)
+# Words macOS / CoreAudio append after the hardware name.
+_MIC_SUFFIXES: tuple[str, ...] = (
+    " microphone", " mic", "麦克风", "话筒",
+)
+
 
 def ui_language_choices() -> tuple[tuple[str, str], ...]:
     """(code, native-name) pairs for the language switcher."""
@@ -87,6 +117,37 @@ def t(key: str, **kwargs) -> str:
         except (KeyError, IndexError, ValueError):
             pass
     return text
+
+
+def _mic_model_name(description: str) -> str:
+    """Lowercase hardware part of a device name, sans "Microphone" suffix."""
+    d = (description or "").strip().lower()
+    for suffix in _MIC_SUFFIXES:
+        if d.endswith(suffix):
+            d = d[: -len(suffix)].strip()
+            break
+    return d
+
+
+def mic_display_name(description: str) -> str:
+    """Generic, localized label for an audio-input device.
+
+    System descriptions carry the exact hardware model ("MacBook Air
+    Microphone", "AirPods 4", "iPhone 14 Pro Microphone"). The four cases users
+    actually distinguish — earphone, phone, built-in, external — are relabelled
+    by category, which also stops model names leaking into the UI. Anything
+    else keeps its own name; there is no honest generic word for it.
+    """
+    model = _mic_model_name(description)
+    if any(marker in model for marker in _EARPHONE_MIC_MARKERS):
+        return t("mic_earphone")
+    if any(marker in model for marker in _PHONE_MIC_MARKERS):
+        return t("mic_phone")
+    if any(marker in model for marker in _COMPUTER_MIC_MARKERS):
+        return t("mic_computer")
+    if any(marker in model for marker in _EXTERNAL_MIC_MARKERS):
+        return t("mic_external")
+    return description
 
 
 # ── catalog ───────────────────────────────────────────────────────────────
@@ -176,6 +237,7 @@ _CATALOG: dict[str, dict[str, str]] = {
     "home_remove": {"zh": "移除", "en": "Remove"},
     "home_model": {"zh": "识别模型", "en": "Model"},
     "home_language": {"zh": "语言", "en": "Language"},
+    "lang_auto": {"zh": "自动检测", "en": "Auto"},
     "home_lang_tooltip": {
         "zh": "默认自动检测：中英等混说按静音分块逐块识别。指定语言可纠正识别"
               "不稳的音频，但会关闭逐块语种切换。",
@@ -184,7 +246,7 @@ _CATALOG: dict[str, dict[str, str]] = {
               "helps with unstable audio, but turns off per-chunk language switching.",
     },
     "home_export": {"zh": "导出", "en": "Export"},
-    "home_llm": {"zh": "本地大模型增强", "en": "Local LLM enhancement"},
+    "home_llm": {"zh": "本地大模型增强", "en": "Local LLM"},
     "home_llm_tooltip": {
         "zh": "中文用中文模型、英文用英文模型（自动判断）。全程本地离线，"
               "未安装 Ollama 时自动跳过。",
@@ -196,11 +258,15 @@ _CATALOG: dict[str, dict[str, str]] = {
 
     # source segmented control
     "source_mic": {"zh": "麦克风", "en": "Microphone"},
+    "mic_computer": {"zh": "电脑麦克风", "en": "Computer Microphone"},
+    "mic_phone": {"zh": "手机麦克风", "en": "Phone Microphone"},
+    "mic_earphone": {"zh": "耳机", "en": "Earphone"},
+    "mic_external": {"zh": "外置麦克风", "en": "External Microphone"},
     "source_system": {"zh": "电脑声音", "en": "System Audio"},
     "source_both": {"zh": "麦克风＋电脑声音", "en": "Mic + System Audio"},
 
     # model picker
-    "model_large": {"zh": "最准 large-v3", "en": "Most accurate · large-v3"},
+    "model_large": {"zh": "最准 large-v3", "en": "Accurate · large-v3"},
     "model_turbo": {"zh": "均衡 large-v3-turbo", "en": "Balanced · large-v3-turbo"},
     "model_small": {"zh": "最快 small", "en": "Fastest · small"},
 
