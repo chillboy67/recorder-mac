@@ -77,3 +77,20 @@ def test_every_picker_language_has_an_english_name():
         if code == "auto":
             continue
         assert LANGUAGE_NAMES_EN.get(code), f"{code} has no English name for prompts"
+
+
+def test_resolve_first_degrades_through_installed_candidates(monkeypatch):
+    """A missing default must not kill enhancement: each role walks its
+    candidate list and takes the first model the user actually pulled."""
+    from core import llm
+
+    monkeypatch.setattr(llm, "_installed",
+                        lambda host=None: ["llama3.1:8b", "qwen2.5:7b"])
+    # qwen is Chinese-role only: the non-Chinese chain skips it and lands on
+    # the newest non-Qwen model installed, here llama3.1 (2024-07)
+    assert llm.resolve_first(llm.NON_CHINESE_CANDIDATES) == "llama3.1:8b"
+    # qwen3 absent → the Chinese list lands on qwen2.5
+    assert llm.resolve_first(llm.CHINESE_CANDIDATES) == "qwen2.5:7b"
+    # nothing pulled at all → None, and the caller skips enhancement
+    monkeypatch.setattr(llm, "_installed", lambda host=None: [])
+    assert llm.resolve_first(llm.NON_CHINESE_CANDIDATES) is None

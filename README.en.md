@@ -143,7 +143,7 @@ The first time you hit “Start Transcription”, a save-location sheet appears 
 
 With [Ollama](https://ollama.com), enable “AI enhancement” in the UI to fix recognition typos, generate classroom summaries, and add IELTS-style notes. When off, offline rules apply. Models run on-device — do not commit weights to Git.
 
-Which model to run is yours to choose in Ollama — the app does not make that call for you; with Ollama absent, enhancement is skipped automatically. Install steps, RAM tiers, and China mirrors:
+Defaults: Chinese audio is recommended **Qwen** (`qwen3` / `qwen2.5:7b`), everything else **Mistral**; the candidate chain only admits LLMs downloadable from Ollama (no audio-multimodal LLM in the library can actually receive audio today, and this app never sends audio to Ollama anyway) — but those are only defaults; which model you install, and how big, is your call. With Ollama absent, or no matching model pulled, enhancement is skipped automatically. Install steps, RAM tiers, and China mirrors:
 
 **[lecture_intel/docs/LLM_MODELS.md](lecture_intel/docs/LLM_MODELS.md)**
 

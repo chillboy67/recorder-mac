@@ -21,6 +21,7 @@ from modules import ASRResult
 from modules.audio_loader import AudioLoader
 
 from core import export as exporter
+from core import llm as llm_mod
 from core.i18n import t
 from core.languages import normalize_language, prefers_asian_model
 from core.modes import Mode, get_mode
@@ -43,8 +44,8 @@ def run(
     formats: Optional[list[str]] = None,
     languagetool_url: str = "http://127.0.0.1:8010/v2/check",
     use_llm: bool = False,
-    llm_model: str = "llama3.1:8b",        # English model
-    chinese_model: str = "qwen-zh:7b",     # Chinese model (uncensored Qwen2.5)
+    llm_model: str = llm_mod.DEFAULT_MODEL,            # head of the non-Chinese candidates
+    chinese_model: str = llm_mod.DEFAULT_CHINESE_MODEL,  # head of the Chinese candidates
     progress: Optional[ProgressCB] = None,
 ) -> dict:
     """Run the full pipeline for one file. Returns a result summary dict."""
@@ -108,15 +109,17 @@ def run(
     general_tidy_md: Optional[str] = None
 
     # Is the local LLM usable, and which one? Route by the detected language:
-    # CJK audio → the Asian model; everything else → the European/English one.
-    # Falls back to whichever is installed if the preferred one isn't.
+    # CJK audio → the Chinese candidates; everything else → the multilingual
+    # ones. Neither role is a single hardcoded name: the caller's preferred
+    # model heads the list, then each role degrades through whatever else the
+    # user happens to have pulled, so installing "the wrong" family still works.
     llm_on = False
     if use_llm:
-        from core import llm as llm_mod
-        prefer = chinese_model if prefers_asian_model(asr.language) else llm_model
-        alt = llm_model if prefer == chinese_model else chinese_model
-        resolved = (llm_mod.resolve_model(prefer)
-                    or llm_mod.resolve_model(alt))
+        asian = prefers_asian_model(asr.language)
+        head = chinese_model if asian else llm_model
+        own = llm_mod.CHINESE_CANDIDATES if asian else llm_mod.NON_CHINESE_CANDIDATES
+        other = llm_mod.NON_CHINESE_CANDIDATES if asian else llm_mod.CHINESE_CANDIDATES
+        resolved = llm_mod.resolve_first((head,) + own + other)
         if resolved:
             llm_model = resolved
             llm_on = True

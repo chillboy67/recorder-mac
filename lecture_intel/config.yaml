@@ -103,7 +103,7 @@ llm:
   enabled: true
   provider: "ollama"
   api_base: "http://127.0.0.1:11434"
-  model: "llama3.1:8b"           # llama3.1:8b | phi4 | gemma4:e4b
+  model: "mistral"                # mistral | phi4 | gemma4:e4b
   temperature: 0.1
   top_p: 0.9
   repeat_penalty: 1.1

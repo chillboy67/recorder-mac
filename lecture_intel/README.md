@@ -74,7 +74,8 @@ What it adds (falls back to offline heuristics if Ollama is off):
 - **课堂**: lecture-context correction + key-point summary
 - **雅思**: examiner-style critique; candidate transcript stays verbatim
 
-Which model to run is yours to choose in Ollama; with Ollama absent,
+Defaults: Chinese → Qwen, everything else → Mistral; the exact model you
+install is your choice. With Ollama absent, or nothing matching pulled,
 enhancement is skipped automatically.
 
 **Install, hardware tiers, China mirrors, pull commands:**  
