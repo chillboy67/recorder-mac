@@ -143,7 +143,7 @@ The first time you hit “Start Transcription”, a save-location sheet appears 
 
 With [Ollama](https://ollama.com), enable “AI enhancement” in the UI to fix recognition typos, generate classroom summaries, and add IELTS-style notes. When off, offline rules apply. Models run on-device — do not commit weights to Git.
 
-Recommended by language family: **Asian (zh/ja/ko/…) → Qwen**, **European (en/fr/es/de/…) → Mistral**. Sizing by RAM, install steps, and co-existence with Whisper:
+Which model to run is yours to choose in Ollama — the app does not make that call for you; with Ollama absent, enhancement is skipped automatically. Install steps, RAM tiers, and China mirrors:
 
 **[lecture_intel/docs/LLM_MODELS.md](lecture_intel/docs/LLM_MODELS.md)**
 

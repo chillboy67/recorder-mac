@@ -74,8 +74,8 @@ What it adds (falls back to offline heuristics if Ollama is off):
 - **课堂**: lecture-context correction + key-point summary
 - **雅思**: examiner-style critique; candidate transcript stays verbatim
 
-Code defaults today: Chinese/mixed → `qwen-zh:7b`, else → `llama3.1:8b`.
-Recommended upgrade path is **Qwen (Asian) / Mistral (European)**, sized by RAM.
+Which model to run is yours to choose in Ollama; with Ollama absent,
+enhancement is skipped automatically.
 
 **Install, hardware tiers, China mirrors, pull commands:**  
 → **[docs/LLM_MODELS.md](docs/LLM_MODELS.md)**
