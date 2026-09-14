@@ -135,6 +135,10 @@ still transcribes; it just can't be pinned manually.
 
 Supports m4a / mp3 / wav / webm / flac / aac / ogg / opus.
 
+### Where output goes
+
+The first time you hit “Start Transcription”, a save-location sheet appears (like a browser download prompt). The default is an `output/` folder **inside the folder you cloned or unzipped the repo into** — the path is found at runtime by walking up to `.git`, so everyone gets their own location and nothing is baked in from the author's machine. Launched as an installed app, with no repo around, it falls back to the data folder under `~/Documents`. It never defaults to `~/Library/Application Support` or `/Applications` — nobody looks in a system folder for their own files. Each run gets a subfolder named after the recording. The choice is remembered and not asked again; change it from **File → Change Output Folder…**, and open the current one with **File → Reveal Output Folder**. On the CLI, output defaults to `<name>_output` next to the audio file; override with `-o`.
+
 ### Optional: local LLM enhancement
 
 With [Ollama](https://ollama.com), enable “AI enhancement” in the UI to fix recognition typos, generate classroom summaries, and add IELTS-style notes. When off, offline rules apply. Models run on-device — do not commit weights to Git.
