@@ -259,11 +259,8 @@ _CATALOG: dict[str, dict[str, str]] = {
     "home_export": {"zh": "导出", "en": "Export"},
     "home_llm": {"zh": "本地大模型增强", "en": "Local LLM"},
     "home_llm_tooltip": {
-        "zh": "中文用中文模型、英文用英文模型（自动判断）。全程本地离线，"
-              "未安装 Ollama 时自动跳过。",
-        "en": "Uses a Chinese model for Chinese and an English model for English "
-              "(decided automatically). Runs fully offline; skipped when Ollama "
-              "isn’t installed.",
+        "zh": "未安装 Ollama 时自动跳过。",
+        "en": "Skipped when Ollama isn’t installed.",
     },
     "home_browse_title": {"zh": "选择音频文件", "en": "Choose an audio file"},
 

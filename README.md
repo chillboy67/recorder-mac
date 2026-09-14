@@ -141,7 +141,7 @@ cd lecture_intel
 
 装了 [Ollama](https://ollama.com) 之后可在界面打开「AI 增强」：修正听不清导致的错字、生成课堂总结、补充雅思考官点评。关掉则走离线规则。模型跑在本机，权重不要提交进 Git。
 
-推荐按语系选型：**亚洲（中/日/韩等）→ Qwen**，**欧洲（英/法/西/德等）→ Mistral**；不同内存该装多大、如何安装，见：
+装哪个模型由你自己在 Ollama 里决定，App 不替你做这个选择；未安装 Ollama 时增强自动跳过。安装步骤、内存档位与中国镜像见：
 
 **[lecture_intel/docs/LLM_MODELS.md](lecture_intel/docs/LLM_MODELS.md)**
 
