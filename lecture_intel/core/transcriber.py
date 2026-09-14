@@ -33,7 +33,8 @@ from typing import Callable, Optional
 from modules import ASRResult, ASRSegment, ASRWord
 
 from core.i18n import t
-from core.languages import detect_language, disambiguate_latin_language, _LATIN_LANGS
+from core.languages import (detect_language, disambiguate_latin_language,
+                            english_function_words_dominate, _LATIN_LANGS)
 
 logger = logging.getLogger(__name__)
 
@@ -428,6 +429,11 @@ class Transcriber:
             chunk_lang = s.get("chunk_language")
             if chunk_lang in _LATIN_LANGS and lang in _LATIN_LANGS:
                 lang = disambiguate_latin_language(text, chunk_lang)
+            elif lang != "en" and english_function_words_dominate(text):
+                # Accented English whose detection landed on a language outside
+                # the function-word table (it/pt/nl/…): the IELTS guarantee that
+                # an English answer stays English still applies.
+                lang = "en"
             segments.append(ASRSegment(
                 id=i,
                 start=float(s.get("start", 0.0) or 0.0),
