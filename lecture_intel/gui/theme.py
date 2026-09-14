@@ -260,9 +260,20 @@ def _qss(c: dict) -> str:
     QComboBox:focus {{ border-color: {c['accent']}; }}
     QComboBox::drop-down {{ border: none; width: 24px; }}
     QComboBox::down-arrow {{ image: url({_CHEVRON_PNG}); width: 11px; height: 11px; }}
-    QComboBox QAbstractItemView {{ background: {c['card']}; border: 1px solid {c['line']};
-        border-radius: 10px; padding: 5px; selection-background-color: {c['accent']};
-        selection-color: {c['accent_ink']}; outline: 0; }}
+    /* the popup container is translucent (see NoScrollComboBox), so its rounded
+       background IS the popup edge — no border ring of its own; the selected
+       row's ring is the only outline inside */
+    QComboBoxPrivateContainer {{ background: {c['card']}; border: none;
+        border-radius: 12px; padding: 5px; }}
+    QComboBox QAbstractItemView {{ background: transparent; border: none;
+        padding: 0; outline: 0; }}
+    /* the item box carries its own rounded frame: without border-radius here
+       the selected/hover row draws a sharp rectangle inside the rounded popup */
+    QComboBox QAbstractItemView::item {{ border: 1px solid transparent;
+        border-radius: 7px; padding: 6px 9px; color: {c['ink']}; }}
+    QComboBox QAbstractItemView::item:hover {{ background: {c['accent_soft']}; }}
+    QComboBox QAbstractItemView::item:selected {{ background: {c['accent_soft']};
+        border-color: {c['accent_border']}; color: {c['ink']}; }}
 
     QCheckBox {{ spacing: 8px; color: {c['ink2']}; background: transparent;
                  font-size: 12px; }}
