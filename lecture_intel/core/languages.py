@@ -59,6 +59,14 @@ LANGUAGE_NAMES_EN: dict[str, str] = {
     "zh": "Chinese", "en": "English", "ja": "Japanese", "ko": "Korean",
     "fr": "French", "de": "German", "es": "Spanish", "ar": "Arabic",
     "th": "Thai", "vi": "Vietnamese", "id": "Indonesian", "hi": "Hindi",
+    # the recognised-but-not-pickable languages, so the English UI never shows
+    # a bare code for something the app reports
+    "it": "Italian", "pt": "Portuguese", "nl": "Dutch", "ru": "Russian",
+    "uk": "Ukrainian", "pl": "Polish", "cs": "Czech", "sv": "Swedish",
+    "da": "Danish", "no": "Norwegian", "fi": "Finnish", "hu": "Hungarian",
+    "ro": "Romanian", "el": "Greek", "he": "Hebrew", "tr": "Turkish",
+    "fa": "Persian", "ur": "Urdu", "bn": "Bengali", "ta": "Tamil",
+    "ms": "Malay", "tl": "Filipino", "sw": "Swahili",
 }
 
 # Display names for anything Whisper may report, not just what the picker
@@ -90,6 +98,19 @@ LANGUAGE_NAMES: dict[str, str] = {
 # Languages whose model should be the Asian one (Qwen family), per
 # docs/LLM_MODELS.md §2 — CJK text needs a CJK-trained model.
 CJK_LANGS: frozenset[str] = frozenset({"zh", "ja", "ko"})
+
+# Common languages the picker does not offer but users still hit in practice
+# (world speaker volume + IELTS candidature). Together with the picker this is
+# the set the app will actually report: Whisper can detect 100 languages, but
+# naming one the UI has no entry for only produces a label nobody asked for.
+EXTRA_RECOGNISED: frozenset[str] = frozenset({
+    "ru", "uk", "pl", "cs", "sv", "da", "no", "fi", "hu", "ro", "el", "he",
+    "tr", "fa", "ur", "bn", "ta", "ms", "tl", "sw", "it", "pt", "nl",
+})
+RECOGNISED_LANGUAGES: frozenset[str] = (
+    frozenset(code for code, _ in PICKER_LANGUAGES if code != AUTO)
+    | EXTRA_RECOGNISED
+)
 
 # ── scripts ──────────────────────────────────────────────────────────
 
@@ -201,15 +222,17 @@ _NON_LATIN: frozenset[str] = frozenset(_NATIVE_SCRIPTS) | {"yue"}
 
 
 def _latin_detection(detected: Optional[str]) -> Optional[str]:
-    """Whisper's answer for a Latin-script language outside the curated family.
+    """Whisper's answer for a Latin-script language the app recognises.
 
     The family gate above only covers the languages this app reasons about
-    (en/fr/de/es/…); without this, Yoruba or Turkmen audio — correctly detected
-    by Whisper — was relabelled "en" here, which then fed the IELTS English
-    share and the display name. A detection whose script contradicts the text
-    (Japanese on Latin letters) is still discarded.
+    (en/fr/de/es/…); without this, Italian or Turkish audio — correctly
+    detected by Whisper — was relabelled "en" here, which then fed the IELTS
+    English share and the display name. Detections outside
+    ``RECOGNISED_LANGUAGES`` are dropped on purpose: the app reports the picker
+    languages plus common ones, not all 100. A detection whose script
+    contradicts the text (Japanese on Latin letters) is discarded too.
     """
-    if detected and detected not in _NON_LATIN:
+    if detected and detected not in _NON_LATIN and detected in RECOGNISED_LANGUAGES:
         return detected
     return None
 
@@ -317,6 +340,35 @@ _LATIN_FUNCTION_WORDS: dict[str, frozenset[str]] = {
 _LATIN_LANGS: frozenset[str] = frozenset(_LATIN_FUNCTION_WORDS)
 
 
+def english_function_words_dominate(text: str) -> bool:
+    """True when Latin-script text reads as function-word English.
+
+    The IELTS guarantee, for EVERY accent: a candidate answering in English
+    keeps the English tag whether their accent pulls the detection to French,
+    Hindi, Spanish or anything else — the rule looks at the transcript alone,
+    never at the detection. Requires a Latin-dominant script share and English
+    function words that both outnumber every other tabulated language and are
+    dense in the sentence (≥3 hits, or ≥2 hits covering a quarter of the words,
+    so short answers like "Yes, I do." still count). Genuine French or German
+    prose, whose own function words win, is untouched.
+    """
+    counts = script_counts(text)
+    total = sum(counts.values())
+    if not total or counts.get("latin", 0) / total < _DOMINANT:
+        return False
+    words = re.findall(r'[a-zA-Zà-ÿÀ-ŸñÑ¿¡]+', text or '')
+    if len(words) < 2:
+        return False
+    lower = {w.lower() for w in words}
+    scores = {lang: len(lower & fws)
+              for lang, fws in _LATIN_FUNCTION_WORDS.items()}
+    en = scores.get("en", 0)
+    other = max((s for lang, s in scores.items() if lang != "en"), default=0)
+    if en <= other:
+        return False
+    return en >= 3 or en / len(words) >= 0.25
+
+
 def disambiguate_latin_language(text: str, detected: str) -> str:
     """Use function words to tell apart Latin-script languages that share a
     script and where the chunk-level detection may be wrong.
@@ -325,6 +377,8 @@ def disambiguate_latin_language(text: str, detected: str) -> str:
     ``_LATIN_FUNCTION_WORDS`` (currently en/fr/de/es).  Text with fewer than
     three words is left unchanged — there isn't enough signal to override.
     """
+    if english_function_words_dominate(text):
+        return "en"
     if detected not in _LATIN_LANGS:
         return detected
     words = re.findall(r'[a-zA-Zà-ÿÀ-ŸñÑ¿¡]+', text or '')

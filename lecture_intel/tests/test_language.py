@@ -286,9 +286,11 @@ def test_function_words_dont_override_non_latin():
 
 
 def test_function_words_short_text_unchanged():
-    """Fewer than 3 words: not enough signal, leave unchanged."""
-    assert disambiguate_latin_language("the book", "fr") == "fr"
+    """A single word carries no signal at all, so it is left unchanged."""
     assert disambiguate_latin_language("hello", "de") == "de"
+    # two words with an English function word ARE signal enough: "the book"
+    # is English even inside a French-labelled chunk
+    assert disambiguate_latin_language("the book", "fr") == "en"
 
 
 def test_function_words_via_to_segments(tmp_path):
@@ -303,12 +305,21 @@ def test_function_words_via_to_segments(tmp_path):
     assert segs[1].language == "fr"   # stays fr
 
 
-def test_latin_languages_outside_the_family_keep_their_detection():
-    """Whisper's 100-language table includes Latin-script languages the curated
-    family never listed (yo, tk, ha, mi, ht…). They used to collapse to "en"."""
-    assert detect_language("Mo ti lo si ile itaja lonu.", "yo") == "yo"
-    assert detect_language("Men bazara gitdim.", "tk") == "tk"
-    assert detect_language("Na tafi kasuwa jiya.", "ha") == "ha"
+def test_common_languages_outside_the_picker_keep_their_detection():
+    """The app reports the picker languages plus common ones (it/pt/nl/tr/ms…),
+    which the old whitelist collapsed to "en"."""
+    assert detect_language("Sono andato al mercato ieri.", "it") == "it"
+    assert detect_language("Eu fui ao mercado ontem.", "pt") == "pt"
+    assert detect_language("Ik ging naar de markt.", "nl") == "nl"
+    assert detect_language("Ben pazara gittim.", "tr") == "tr"
+    assert detect_language("Saya pergi ke pasar.", "ms") == "ms"
+
+
+def test_languages_outside_the_recognised_set_fall_back():
+    """Whisper detects 100 languages; the app only reports the recognised set,
+    so anything rarer keeps the old Latin default instead of a nameless tag."""
+    assert detect_language("Mo ti lo si ile itaja lonu.", "yo") == "en"
+    assert detect_language("Men bazara gitdim.", "tk") == "en"
 
 
 def test_contradicting_detection_on_latin_text_is_still_discarded():
@@ -317,3 +328,73 @@ def test_contradicting_detection_on_latin_text_is_still_discarded():
     assert detect_language("This is plainly English text here.", "yue") == "en"
     # and with no detection at all the old default stands
     assert detect_language("This is plainly English text here.") == "en"
+
+
+def test_every_recognised_language_has_a_display_name_in_both_uis():
+    """The app only reports RECOGNISED_LANGUAGES, so each one must be nameable
+    in both interface languages — otherwise the UI shows a bare code."""
+    from core.languages import (LANGUAGE_NAMES, LANGUAGE_NAMES_EN,
+                                RECOGNISED_LANGUAGES)
+    assert not (RECOGNISED_LANGUAGES - set(LANGUAGE_NAMES))
+    assert not (RECOGNISED_LANGUAGES - set(LANGUAGE_NAMES_EN))
+
+
+def test_russian_is_not_a_supported_language():
+    """Support for Russian was dropped: no picker entry, not in the recognised
+    set, and no display name in either UI — it degrades to the bare code."""
+    from core.languages import (LANGUAGE_NAMES, LANGUAGE_NAMES_EN,
+                                PICKER_LANGUAGES, RECOGNISED_LANGUAGES)
+    codes = {c for c, _ in PICKER_LANGUAGES}
+    assert "ru" not in codes
+    assert "ru" not in RECOGNISED_LANGUAGES
+    assert "ru" not in LANGUAGE_NAMES
+    assert "ru" not in LANGUAGE_NAMES_EN
+
+
+def test_accented_english_stays_english():
+    """The IELTS guarantee: an English answer keeps the English tag even when
+    the speaker's accent pulls the detection to their first language — inside
+    the function-word table (fr) or outside it (it)."""
+    from core.languages import english_function_words_dominate as dominates
+
+    en = ("Well, I would say that the most important thing is that we are "
+          "not going to give up on this.")
+    fr = ("Bonjour, je pense que le plus important est que nous ne allons "
+          "pas abandonner cela.")
+    assert dominates(en) is True
+    assert dominates(fr) is False          # genuine French prose is untouched
+    assert disambiguate_latin_language(en, "fr") == "en"
+    assert disambiguate_latin_language(en, "it") == "en"
+    assert disambiguate_latin_language(fr, "fr") == "fr"
+
+
+def test_accented_english_through_to_segments():
+    """End-to-end: a chunk Whisper mislabelled Italian still yields an English
+    segment when the words are function-word English."""
+    raw = [{**_raw("Well, I would say that the most important thing is that "
+                   "we are not going to give up on this."),
+            "chunk_language": "it"}]
+    segs = Transcriber._to_segments(raw, detected="it")
+    assert segs[0].language == "en"
+
+
+def test_every_accent_of_english_stays_english():
+    """French was only the example: whatever language the accent pulls the
+    detection to, function-word English text keeps the English tag — including
+    short answers, which the old >=3-hits threshold dropped."""
+    short = "Yes, I do."
+    medium = "Yes, of course, that is exactly what I mean."
+    for detected in ("fr", "de", "es", "it", "pt", "nl", "hi", "tr", "sw", "yo"):
+        assert disambiguate_latin_language(short, detected) == "en", detected
+        assert disambiguate_latin_language(medium, detected) == "en", detected
+
+
+def test_non_english_prose_is_not_swallowed():
+    """The guard must not colonise other languages: their own function words
+    outrank the English ones, so the tag survives."""
+    es = "Sí, creo que lo más importante es que no vamos a rendirnos."
+    de = "Ich denke, dass das wichtigste ist, dass wir nicht aufgeben."
+    fr = "Bonjour, je pense que le plus important est que nous ne allons pas."
+    assert disambiguate_latin_language(es, "es") == "es"
+    assert disambiguate_latin_language(de, "de") == "de"
+    assert disambiguate_latin_language(fr, "fr") == "fr"
