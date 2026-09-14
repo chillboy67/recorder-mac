@@ -90,6 +90,9 @@ enhancement is skipped automatically.
 - We feed the **whole file** to Whisper rather than pre-chunking — this is the
   single biggest accuracy improvement over the old pipeline.
 - Nothing is ever paraphrased. Errors in speech are preserved verbatim.
+- The optional AI enhancement only writes a **separate** corrected companion
+  (punctuation, obvious recognition typos); the verbatim transcript files are
+  never overwritten, and the speaker's own errors are flagged, not fixed.
 - **Code-switching (中英混合):** plain mlx does one global language pass and
   translates the minority language away. IELTS mode keeps the GPU but splits the
   audio at silences and detects language **per chunk** (`chunked_language`), so
