@@ -18,6 +18,7 @@ from PySide6.QtCore import QSettings, Qt
 from PySide6.QtGui import QAction, QActionGroup, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
+    QFileDialog,
     QHBoxLayout,
     QLabel,
     QMainWindow,
@@ -29,6 +30,7 @@ from PySide6.QtWidgets import (
 )
 
 from core.i18n import current_language, set_language, t, ui_language_choices
+from core.paths import default_output_root
 from gui import theme
 from gui.widgets.home_screen import HomeScreen
 from gui.widgets.processing_screen import ProcessingScreen, STEP_LABELS
@@ -90,6 +92,9 @@ class MainWindow(QMainWindow):
         reveal_act.setShortcut("Cmd+Shift+O")
         reveal_act.triggered.connect(self._reveal_output)
         file_menu.addAction(reveal_act)
+        set_out_act = QAction(t("menu_file_set_output"), self)
+        set_out_act.triggered.connect(self._change_output_dir)
+        file_menu.addAction(set_out_act)
 
         view_menu = menu_bar.addMenu(t("menu_view"))
         reset_act = QAction(t("menu_view_reset"), self)
@@ -300,8 +305,11 @@ class MainWindow(QMainWindow):
     # ── processing ──────────────────────────────────────────
 
     def _start_processing(self, input_path: str, settings: dict) -> None:
-        from core.paths import data_root
-        output_dir = str(data_root() / Path(input_path).stem)
+        base = self._output_base()
+        if base is None:          # user dismissed the save-location sheet
+            self._show_status("status_no_output")
+            return
+        output_dir = str(base / Path(input_path).stem)
         Path(output_dir).mkdir(parents=True, exist_ok=True)
 
         active_steps = list(_STEPS_BY_MODE.get(settings["mode"],
@@ -365,8 +373,47 @@ class MainWindow(QMainWindow):
         self._set_appearance(nxt)
 
     def _reveal_output(self) -> None:
-        from core.paths import data_root
-        subprocess.run(["open", str(data_root())])
+        target = self._saved_output_dir() or default_output_root()
+        target.mkdir(parents=True, exist_ok=True)
+        subprocess.run(["open", str(target)])
+
+    # ── output location ──────────────────────────────────
+
+    def _saved_output_dir(self) -> Path | None:
+        """The folder the user confirmed earlier, if any and still usable."""
+        saved = self._prefs.value("output_dir")
+        if not saved:
+            return None
+        p = Path(str(saved)).expanduser()
+        return p if p.is_dir() else None
+
+    def _output_base(self) -> Path | None:
+        """Confirmed output folder — asked once, like a browser's save sheet.
+
+        Nothing is written before the user has seen the location: the sheet
+        opens on ``output/`` beside the app code (so a download from GitHub
+        keeps its results in its own folder, with no path from the author's
+        machine baked in), and they can accept it or navigate elsewhere. The
+        answer is remembered; "Change Output Folder…" asks again.
+        """
+        saved = self._saved_output_dir()
+        if saved is not None:
+            return saved
+        chosen = QFileDialog.getExistingDirectory(
+            self, t("output_ask_title"), str(default_output_root()))
+        if not chosen:
+            return None
+        self._prefs.setValue("output_dir", chosen)
+        return Path(chosen)
+
+    def _change_output_dir(self) -> None:
+        current = self._saved_output_dir() or default_output_root()
+        chosen = QFileDialog.getExistingDirectory(
+            self, t("output_change_title"), str(current))
+        if not chosen:
+            return
+        self._prefs.setValue("output_dir", chosen)
+        self._show_status_text(t("output_changed", dir=chosen))
 
     def _open_readme(self) -> None:
         readme = Path(__file__).parent.parent / "README.md"

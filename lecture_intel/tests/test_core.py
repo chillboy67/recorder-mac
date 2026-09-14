@@ -221,3 +221,51 @@ def test_candidate_score_prefers_english_cluster_fr_en():
     candidate = [_scored_seg("Well, I would talk about Bluebeard.", "en"),
                  _scored_seg("He have many wives and it is a very good story.", "en")]
     assert _candidate_score(examiner) < _candidate_score(candidate)
+
+
+# ── output location ────────────────────────────────────────────────────
+
+def _fake_paths_at(tmp_path, monkeypatch, where):
+    """Point core.paths at a fake location, as if the code lived in `where`."""
+    from core import paths
+
+    fake = where / "core" / "paths.py"
+    fake.parent.mkdir(parents=True, exist_ok=True)
+    fake.write_text("")
+    monkeypatch.setattr(paths, "__file__", str(fake))
+    return paths
+
+
+def test_output_goes_into_the_folder_git_cloned(tmp_path, monkeypatch):
+    """Another user's output must land in *their* checkout, wherever they put
+    it — the path may never be baked in on the author's machine."""
+    clone = tmp_path / "Downloads" / "recorder"
+    (clone / ".git").mkdir(parents=True)
+    paths = _fake_paths_at(tmp_path, monkeypatch, clone / "lecture_intel")
+
+    assert paths.clone_root() == clone
+    out = paths.default_output_root()
+    assert out == clone / "output"
+    assert out.is_dir()                       # created on demand
+
+
+def test_installed_app_never_defaults_to_a_system_folder(tmp_path, monkeypatch):
+    """make_app.sh flattens lecture_intel/ into ~/Library/Application Support,
+    where there is no checkout. Output must not follow the code there."""
+    install = tmp_path / "Application Support" / "Recorder"
+    paths = _fake_paths_at(tmp_path, monkeypatch, install)
+    monkeypatch.setattr(paths, "data_root",
+                        lambda: tmp_path / "Documents" / "Recorder")
+
+    assert paths.clone_root() is None
+    out = paths.default_output_root()
+    assert out == tmp_path / "Documents" / "Recorder"
+    assert "Application Support" not in str(out)
+    assert "/Applications" not in str(out)
+
+
+def test_repo_output_root_is_inside_the_checkout():
+    from core import paths
+    out = paths.default_output_root()
+    assert out == paths.clone_root() / "output"
+    assert "Application Support" not in str(out)

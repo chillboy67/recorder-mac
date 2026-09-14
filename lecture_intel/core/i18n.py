@@ -162,6 +162,7 @@ _CATALOG: dict[str, dict[str, str]] = {
     "menu_file": {"zh": "文件", "en": "File"},
     "menu_file_open": {"zh": "打开录音…", "en": "Open Recording…"},
     "menu_file_reveal": {"zh": "显示输出文件夹", "en": "Reveal Output Folder"},
+    "menu_file_set_output": {"zh": "更改输出文件夹…", "en": "Change Output Folder…"},
     "menu_view": {"zh": "视图", "en": "View"},
     "menu_view_reset": {"zh": "重置", "en": "Reset"},
     "menu_appearance": {"zh": "外观", "en": "Appearance"},
@@ -199,6 +200,16 @@ _CATALOG: dict[str, dict[str, str]] = {
                     "en": "✓ Done in {seconds}s · Output: {dir}"},
     "status_error": {"zh": "发生错误", "en": "An error occurred"},
     "status_cancelled": {"zh": "已取消", "en": "Cancelled"},
+    "status_no_output": {"zh": "已取消 · 未选择输出文件夹",
+                         "en": "Cancelled — no output folder chosen"},
+
+    # first-run output location prompt (a download-style "save here?" sheet)
+    "output_ask_title": {"zh": "确认保存位置",
+                         "en": "Choose Where to Save"},
+    "output_change_title": {"zh": "选择输出文件夹",
+                            "en": "Pick an Output Folder"},
+    "output_changed": {"zh": "输出文件夹已设为 {dir}",
+                       "en": "Output folder set to {dir}"},
 
     # dialogs / notifications / startup
     "error_box_title": {"zh": "处理出错", "en": "Processing Error"},
