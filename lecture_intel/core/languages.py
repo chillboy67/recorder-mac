@@ -46,6 +46,7 @@ PICKER_LANGUAGES: tuple[tuple[str, str], ...] = (
     ("fr", "Français"),
     ("de", "Deutsch"),
     ("es", "Español"),
+    ("uk", "Українська"),
     ("ar", "العربية"),
     ("th", "ไทย"),
     ("vi", "Tiếng Việt"),
@@ -61,7 +62,7 @@ LANGUAGE_NAMES_EN: dict[str, str] = {
     "th": "Thai", "vi": "Vietnamese", "id": "Indonesian", "hi": "Hindi",
     # the recognised-but-not-pickable languages, so the English UI never shows
     # a bare code for something the app reports
-    "it": "Italian", "pt": "Portuguese", "nl": "Dutch", "ru": "Russian",
+    "it": "Italian", "pt": "Portuguese", "nl": "Dutch",
     "uk": "Ukrainian", "pl": "Polish", "cs": "Czech", "sv": "Swedish",
     "da": "Danish", "no": "Norwegian", "fi": "Finnish", "hu": "Hungarian",
     "ro": "Romanian", "el": "Greek", "he": "Hebrew", "tr": "Turkish",
@@ -75,7 +76,7 @@ LANGUAGE_NAMES: dict[str, str] = {
     "mixed": "多语混合",
     "zh": "中文", "en": "英语", "ja": "日语", "ko": "韩语",
     "fr": "法语", "de": "德语", "es": "西班牙语", "it": "意大利语",
-    "pt": "葡萄牙语", "nl": "荷兰语", "ru": "俄语", "uk": "乌克兰语",
+    "pt": "葡萄牙语", "nl": "荷兰语", "uk": "乌克兰语",
     "pl": "波兰语", "cs": "捷克语", "sk": "斯洛伐克语", "sv": "瑞典语",
     "da": "丹麦语", "no": "挪威语", "fi": "芬兰语", "is": "冰岛语",
     "hu": "匈牙利语", "ro": "罗马尼亚语", "bg": "保加利亚语",
@@ -103,8 +104,10 @@ CJK_LANGS: frozenset[str] = frozenset({"zh", "ja", "ko"})
 # (world speaker volume + IELTS candidature). Together with the picker this is
 # the set the app will actually report: Whisper can detect 100 languages, but
 # naming one the UI has no entry for only produces a label nobody asked for.
+# Russian is deliberately absent — support for it was dropped in favour of
+# accuracy over breadth; a Russian detection now surfaces as the bare code.
 EXTRA_RECOGNISED: frozenset[str] = frozenset({
-    "ru", "uk", "pl", "cs", "sv", "da", "no", "fi", "hu", "ro", "el", "he",
+    "uk", "pl", "cs", "sv", "da", "no", "fi", "hu", "ro", "el", "he",
     "tr", "fa", "ur", "bn", "ta", "ms", "tl", "sw", "it", "pt", "nl",
 })
 RECOGNISED_LANGUAGES: frozenset[str] = (
@@ -141,7 +144,10 @@ _SCRIPT_LANG: dict[str, str] = {
 # its answer beats the script default — Ukrainian text should not be reported
 # as Russian just because both use Cyrillic.
 _SCRIPT_FAMILY: dict[str, frozenset[str]] = {
-    "cyrillic": frozenset({"ru", "uk", "bg", "sr", "mk", "be", "kk", "ky", "tg", "mn"}),
+    # ru is not listed: Russian is unsupported, so a Russian detection must not
+    # be trusted into a supported label — the script default below reports it
+    # as the bare, unnamed code instead.
+    "cyrillic": frozenset({"uk", "bg", "sr", "mk", "be", "kk", "ky", "tg", "mn"}),
     "arabic": frozenset({"ar", "fa", "ur", "ps", "ku", "sd", "ug"}),
     "devanagari": frozenset({"hi", "mr", "ne", "sa"}),
     "latin": frozenset({
