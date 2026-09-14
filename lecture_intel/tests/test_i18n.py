@@ -25,6 +25,7 @@ from core.i18n import (  # noqa: E402
     ZH,
     current_language,
     detect_system_language,
+    mic_display_name,
     set_language,
     t,
     ui_language_choices,
@@ -137,3 +138,40 @@ def test_display_name_explicit_lang_override():
     set_language(ZH)
     assert display_name("en", lang=EN) == "English"
     assert display_name("en", lang=ZH) == "英语"
+
+
+def test_mic_display_name_folds_builtin_and_phone_mics():
+    # model names must not leak into the UI
+    set_language(ZH)
+    assert mic_display_name("MacBook Air Microphone") == "电脑麦克风"
+    assert mic_display_name("Built-in Microphone") == "电脑麦克风"
+    assert mic_display_name("iPhone 14 Pro Microphone") == "手机麦克风"
+    set_language(EN)
+    assert mic_display_name("MacBook Air Microphone") == "Computer Microphone"
+    assert mic_display_name("iPhone 14 Pro Microphone") == "Phone Microphone"
+
+
+def test_mic_display_name_keeps_unrecognized_devices():
+    # "Microphone" must not match the phone marker, and hardware outside every
+    # known category has no honest generic label, so it keeps its own name.
+    set_language(EN)
+    assert mic_display_name("Kitchen Sink Mic") == "Kitchen Sink Mic"
+    assert mic_display_name("") == ""
+
+
+def test_mic_display_name_folds_earphones_and_external_mics():
+    """Brand/model names must never reach the UI: earphones (incl. "Galaxy
+    Buds", which is not a handset) and standalone/webcam mics get category
+    labels in both languages."""
+    set_language(ZH)
+    assert mic_display_name("AirPods 4") == "耳机"
+    assert mic_display_name("Sony WH-1000XM5") == "耳机"
+    assert mic_display_name("Galaxy Buds2 Pro") == "耳机"
+    assert mic_display_name("Blue Yeti") == "外置麦克风"
+    assert mic_display_name("Logitech C920 Webcam") == "外置麦克风"
+    set_language(EN)
+    assert mic_display_name("AirPods 4") == "Earphone"
+    assert mic_display_name("Galaxy Buds2 Pro") == "Earphone"
+    assert mic_display_name("Blue Yeti") == "External Microphone"
+    # a phone stays a phone even when it arrives as a Continuity camera
+    assert mic_display_name("Continuity Camera Microphone") == "Phone Microphone"
