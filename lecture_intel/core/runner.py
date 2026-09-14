@@ -30,6 +30,7 @@ def run_pipeline_subprocess(input_path, output_dir, settings, queue):
         set_language((settings or {}).get("ui_lang"))
 
         from core.engine import run
+        from core import llm as llm_mod
 
         def on_progress(info):
             try:
@@ -45,8 +46,8 @@ def run_pipeline_subprocess(input_path, output_dir, settings, queue):
             language=settings.get("language"),
             formats=settings.get("formats"),
             use_llm=settings.get("use_llm", False),
-            llm_model=settings.get("llm_model", "llama3.1:8b"),
-            chinese_model=settings.get("chinese_model", "qwen-zh:7b"),
+            llm_model=settings.get("llm_model") or llm_mod.DEFAULT_MODEL,
+            chinese_model=settings.get("chinese_model") or llm_mod.DEFAULT_CHINESE_MODEL,
             progress=on_progress,
         )
         queue.put(("result", summary))

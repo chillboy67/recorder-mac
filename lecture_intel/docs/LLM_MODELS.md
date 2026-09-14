@@ -32,8 +32,8 @@
 2. **不要**在 16–32GB 机器上同时常驻 Qwen + Mistral + Whisper large-v3。
 3. 推荐流水线：`转写（Whisper）→ 再调用 LLM`，而不是峰值叠满。
 
-> 当前代码默认仍是 `llama3.1:8b`（英）+ `qwen-zh:7b`（中）。  
-> 下表中的 **Mistral / qwen2.5** 为 **推荐升级选型**；改默认名需同步改代码（见文末）。
+> 当前代码默认：`mistral`（非中文）+ `qwen3`（中文）；候选链只收**可在 Ollama 下载**的大语言模型，按新→旧自动降级。  
+> 支持音频+文字多模态的大语言模型（Voxtral Mini 3B、Nemotron 3 Nano Omni）**目前都不满足"可下载且能喂音频"**：Voxtral 不在 Ollama 库；Nemotron 的 Ollama 页 Input 仅 Text, Image 且 28GB。本 App 本就不向 Ollama 送音频（Whisper 先转写），故音频多模态能力在此用不上，见 §3。
 
 ---
 
@@ -53,7 +53,8 @@
 
 | 角色 | **推荐 Ollama 标签** | 约占用（Q4 级） | 说明 |
 |------|----------------------|-----------------|------|
-| 亚洲 / 中文 | **`qwen2.5:7b`** 或已有的 **`qwen-zh:7b`** | 盘约 4.7GB，运行约 5.5–7GB | **默认首选**；与现有中文 prompt 匹配 |
+| 音频+文字多模态（背景参考） | `voxtral-mini-3b-2507` / `nemotron3:33b` | 2–3GB / 28GB | **不在代码候选链**：Ollama 库无 Voxtral；Nemotron 的 Input 仅 Text, Image。本 App 不向 Ollama 送音频 |
+| 亚洲 / 中文 | **`qwen3:8b`** 或 `qwen2.5:7b` / 已有的 `qwen-zh:7b` | 盘约 4.7–5.2GB，运行约 5.5–7GB | 中文总结、中文雅思诊断说明、CJK 教官用语 |
 | 欧洲 / 英文 | **`mistral`（7B）** | 盘约 4.4GB，运行约 5–6.5GB | **16GB 默认欧语**；比 Nemo 更省内存 |
 | 欧语想更强 | `mistral-nemo`（12B） | 盘约 7.1GB，运行约 8–10GB | **仅建议：转写结束后再开**；勿与 large-v3 峰值叠满 |
 | 不推荐作默认 | `qwen2.5:14b`、Mistral Small 22/24B、Mixtral | ≥9GB / ≥13GB | 16GB + Whisper 易交换卡顿 |
@@ -155,13 +156,13 @@ ollama pull mistral-nemo
 
 | 参数 | 默认 | 说明 |
 |------|------|------|
-| `chinese_model` | `qwen-zh:7b` | 社区 abliterated Qwen2.5-7B（需自建 tag） |
-| `llm_model` | `llama3.1:8b` | Meta Llama 3.1 8B |
+| `chinese_model` | `qwen3` | 中文最新档；没装则降级 qwen2.5 / qwen-zh |
+| `llm_model` | `mistral` | Mistral 7B；没装则按候选表新→旧降级 |
 
-历史安装方式（ModelScope，见 `lecture_intel/README.md` 亦可）：
+历史安装方式（ModelScope，旧默认 Llama，现仅留存参考）：
 
 ```bash
-# 英文（Llama）— 可被 mistral 替代
+# 旧默认（Llama）——现默认已是 mistral，装过它的可以继续用
 ollama pull modelscope.cn/LLM-Research/Meta-Llama-3.1-8B-Instruct-GGUF
 ollama cp modelscope.cn/LLM-Research/Meta-Llama-3.1-8B-Instruct-GGUF llama3.1:8b
 
@@ -214,7 +215,7 @@ App 内勾选「本地大模型增强」→ 跑一条短录音；若模型缺失
 
 ```
 内存 ≤8GB  → 小模型 3–4B 或关闭 LLM；Whisper 用 small
-内存 16GB  → Qwen 7B + Mistral 7B；串行；Whisper 优先 turbo
+内存 16GB  → 中文 Qwen3/Qwen 7B、其余 Mistral 7B；串行；Whisper 优先 turbo
 内存 24–32GB → Qwen 14B + Mistral Nemo
 内存 ≥64GB → Qwen 32B 级 + Mistral Small 24B
 只要中文报告稳 → 优先 Qwen，不要只靠欧语模型

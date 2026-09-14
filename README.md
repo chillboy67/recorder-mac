@@ -141,7 +141,9 @@ cd lecture_intel
 
 装了 [Ollama](https://ollama.com) 之后可在界面打开「AI 增强」：修正听不清导致的错字、生成课堂总结、补充雅思考官点评。关掉则走离线规则。模型跑在本机，权重不要提交进 Git。
 
-装哪个模型由你自己在 Ollama 里决定，App 不替你做这个选择；未安装 Ollama 时增强自动跳过。安装步骤、内存档位与中国镜像见：
+默认路由：中文录音推荐 **Qwen**（`qwen3` / `qwen2.5:7b`），其余语言默认 **Mistral**；
+候选链只收可在 Ollama 下载的大语言模型（Ollama 库中目前不存在可下载且真能喂音频的多模态大语言模型，而本 App 本就不向 Ollama 送音频）。
+这只是默认值，具体装哪个、装多大由你自行选择。未安装 Ollama 或没装任何匹配模型时，增强自动跳过。安装步骤、内存档位与中国镜像见：
 
 **[lecture_intel/docs/LLM_MODELS.md](lecture_intel/docs/LLM_MODELS.md)**
 

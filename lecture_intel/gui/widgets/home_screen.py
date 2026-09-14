@@ -338,8 +338,6 @@ class HomeScreen(QWidget):
             "language": self._lang_combo.currentData(),
             "formats": formats,
             "use_llm": self._cb_llm.isChecked(),
-            "llm_model": "llama3.1:8b",
-            "chinese_model": "qwen-zh:7b",
         }
 
     def _save_prefs(self) -> None:

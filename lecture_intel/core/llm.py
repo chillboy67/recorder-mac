@@ -5,23 +5,47 @@ Everything here is best-effort: if Ollama isn't running or the model is missing,
 each function returns None and the caller falls back to the offline heuristics.
 Nothing leaves the machine.
 
-Default model: llama3.1:8b (Meta) — ~4.9GB / ~6GB RAM, runs on the M-series GPU.
-Non-Chinese model, handles English well and Chinese acceptably. Heavy enough to
-be useful, light enough not to cook a 16GB Mac for occasional batch jobs.
+Default model: mistral (7B) — the multilingual workhorse of the Mistral family
+and the largest one a 16GB Mac can run alongside Whisper. The audio-multimodal
+LLMs (Voxtral Mini 3B, Nemotron 3 Nano Omni) are deliberately absent: neither
+is usable through Ollama today — Voxtral isn't in the Ollama library at all,
+and Nemotron's Ollama page lists Input: Text, Image only (28GB besides). This
+app never sends audio to Ollama anyway (Whisper transcribes first), so audio
+multimodality would add nothing here. Background in docs/LLM_MODELS.md.
 """
 from __future__ import annotations
 
 import logging
-from typing import Callable, Optional
+from typing import Callable, Iterable, Optional
 
 from core.i18n import t
 from core.languages import LANGUAGE_NAMES_EN
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL = "llama3.1:8b"
+DEFAULT_MODEL = "mistral"
+DEFAULT_CHINESE_MODEL = "qwen3"
 DEFAULT_HOST = "http://127.0.0.1:11434"
 _NUM_CTX = 8192
+
+# Ordered candidates per role, newest release first; the role default heads the
+# chain at call time. Ollama-downloadable large language models only — the
+# audio-multimodal ones are left out because none of them can actually receive
+# audio through Ollama (see module docstring). Kept to ≤12B on purpose: 24B+
+# models swap on 16GB.
+NON_CHINESE_CANDIDATES: tuple[str, ...] = (
+    "gemma3",         # 2025-03
+    "phi4",           # 2024-12
+    "mistral-nemo",   # 2024-07, 12B
+    "llama3.1",       # 2024-07
+    "mistral",        # 7B v0.3, 2024-05
+)
+CHINESE_CANDIDATES: tuple[str, ...] = (
+    "qwen3",          # 2025-04
+    "qwen2.5",        # 2024-09
+    "qwen-zh",        # community abliterated Qwen2.5-7B
+    "mistral",        # last-resort cross-family fallback
+)
 
 
 def _installed(host: str = DEFAULT_HOST) -> list[str]:
@@ -60,6 +84,19 @@ def resolve_model(preferred: str = DEFAULT_MODEL, host: str = DEFAULT_HOST) -> O
 def available(model: str = DEFAULT_MODEL, host: str = DEFAULT_HOST) -> bool:
     """True if the Ollama server is up and a matching model is pulled."""
     return resolve_model(model, host) is not None
+
+
+def resolve_first(names: Iterable[str], host: str = DEFAULT_HOST) -> Optional[str]:
+    """First installed model among ``names``, in order; ``None`` if none are."""
+    seen: set[str] = set()
+    for name in names:
+        if name in seen:
+            continue
+        seen.add(name)
+        hit = resolve_model(name, host)
+        if hit:
+            return hit
+    return None
 
 
 def _gen(prompt: str, system: str = "", *, model: str = DEFAULT_MODEL,
