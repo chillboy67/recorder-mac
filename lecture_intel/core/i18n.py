@@ -247,7 +247,7 @@ _CATALOG: dict[str, dict[str, str]] = {
     "home_start": {"zh": "开 始 转 写", "en": "Start Transcription"},
     "home_remove": {"zh": "移除", "en": "Remove"},
     "home_model": {"zh": "识别模型", "en": "Model"},
-    "home_language": {"zh": "语言", "en": "Language"},
+    "home_language": {"zh": "识别语言", "en": "Recognition language"},
     "lang_auto": {"zh": "自动检测", "en": "Auto"},
     "lang_auto_short": {"zh": "Auto", "en": "Auto"},
     "home_lang_tooltip": {
