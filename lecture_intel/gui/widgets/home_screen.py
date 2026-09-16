@@ -34,7 +34,7 @@ from core.i18n import mic_display_name, t
 from core.languages import AUTO, PICKER_LANGUAGES
 from core.modes import GENERAL, CLASSROOM, IELTS
 from gui import theme
-from gui.widgets.common import NoScrollComboBox
+from gui.widgets.common import ChipButton, NoScrollComboBox
 from gui.widgets.visuals import WaveGlyph
 
 SUPPORTED_EXTENSIONS: set[str] = {
@@ -260,7 +260,7 @@ class HomeScreen(QWidget):
         srow.addWidget(self._lbl_fmt)
         self._chips: dict[str, QPushButton] = {}
         for ext in ("txt", "md", "doc", "docx"):
-            chip = QPushButton("." + ext)
+            chip = ChipButton("." + ext)
             chip.setObjectName("chip")
             chip.setCheckable(True)
             chip.setCursor(Qt.PointingHandCursor)

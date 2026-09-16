@@ -1,9 +1,11 @@
 """Shared widget subclasses."""
 from __future__ import annotations
 
-from PySide6.QtCore import QEvent, Qt
-from PySide6.QtGui import QPalette
-from PySide6.QtWidgets import QComboBox, QFrame, QListView, QStyledItemDelegate
+from PySide6.QtCore import QEvent, QRectF, Qt
+from PySide6.QtGui import QColor, QPaintEvent, QPainter, QPalette, QPen
+from PySide6.QtWidgets import QComboBox, QFrame, QListView, QPushButton, QStyledItemDelegate
+
+from gui import theme
 
 
 class NoScrollComboBox(QComboBox):
@@ -58,3 +60,33 @@ class NoScrollComboBox(QComboBox):
 
     def wheelEvent(self, event) -> None:  # noqa: N802 (Qt naming)
         event.ignore()
+
+
+class ChipButton(QPushButton):
+    """A checkable export-format chip that paints its own rounded bevel.
+
+    Qt 6.11 on macOS silently drops QSS border-radius on QPushButton: the
+    styled background and border still paint, but as a square rect (QFrame
+    is unaffected). So the rounded chip shape is painted here from the live
+    theme scheme; theme.py keeps owning text color / font / padding via the
+    #chip rules, with background and border left to this paintEvent.
+    """
+
+    RADIUS = 12.0
+
+    def paintEvent(self, event: QPaintEvent) -> None:  # noqa: N802 (Qt naming)
+        c = theme.current_scheme()
+        on = self.isChecked()
+        edge = c["accent_border"] if on else (c["line"] if self.isEnabled() else c["line2"])
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        rect = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
+        if on:
+            p.setPen(Qt.NoPen)
+            p.setBrush(QColor(c["accent_soft"]))
+            p.drawRoundedRect(rect, self.RADIUS, self.RADIUS)
+        p.setBrush(Qt.NoBrush)
+        p.setPen(QPen(QColor(edge), 1))
+        p.drawRoundedRect(rect, self.RADIUS, self.RADIUS)
+        p.end()
+        super().paintEvent(event)   # label only; the QSS bevel is transparent

@@ -233,11 +233,13 @@ def _qss(c: dict) -> str:
     QPushButton#outlinePill:hover {{ color: {c['ink']}; }}
 
     /* export chips + source segments */
-    QPushButton#chip {{ background: transparent; border: 1px solid {c['line']};
-        border-radius: 12px; padding: 3px 12px; color: {c['ink3']};
+    /* #chip bevel (bg/border/rounding) is painted by ChipButton.paintEvent —
+       Qt 6.11 on macOS ignores QSS border-radius on QPushButton; QSS keeps
+       text color / font / padding only. */
+    QPushButton#chip {{ background: transparent; border: none;
+        padding: 3px 12px; color: {c['ink3']};
         font-family: {QSS_DISPLAY}; font-size: 11px; }}
-    QPushButton#chip:checked {{ background: {c['accent_soft']};
-        border: 1px solid {c['accent_border']}; color: {c['accent']}; }}
+    QPushButton#chip:checked {{ color: {c['accent']}; }}
     QPushButton#seg {{ background: transparent; border: none; border-radius: 13px;
         padding: 6px 16px; color: {c['ink3']}; font-size: 12px; }}
     QPushButton#seg:checked {{ background: {c['accent_soft']}; color: {c['accent']};
