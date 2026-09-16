@@ -249,6 +249,7 @@ _CATALOG: dict[str, dict[str, str]] = {
     "home_model": {"zh": "识别模型", "en": "Model"},
     "home_language": {"zh": "语言", "en": "Language"},
     "lang_auto": {"zh": "自动检测", "en": "Auto"},
+    "lang_auto_short": {"zh": "Auto", "en": "Auto"},
     "home_lang_tooltip": {
         "zh": "默认自动检测：中英等混说按静音分块逐块识别。指定语言可纠正识别"
               "不稳的音频，但会关闭逐块语种切换。",
@@ -275,8 +276,11 @@ _CATALOG: dict[str, dict[str, str]] = {
 
     # model picker
     "model_large": {"zh": "最准 large-v3", "en": "Accurate · large-v3"},
+    "model_large_word": {"zh": "最准", "en": "Accurate"},
     "model_turbo": {"zh": "均衡 large-v3-turbo", "en": "Balanced · large-v3-turbo"},
+    "model_turbo_word": {"zh": "均衡", "en": "Balanced"},
     "model_small": {"zh": "最快 small", "en": "Fastest · small"},
+    "model_small_word": {"zh": "最快", "en": "Fastest"},
 
     # modes (titles reused on the results rail)
     "mode_general_title": {"zh": "通用转写", "en": "General"},

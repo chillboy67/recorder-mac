@@ -48,6 +48,13 @@ MODELS = [
     ("large-v3-turbo", "model_turbo"),
     ("small", "model_small"),
 ]
+# compact closed-state icons, colour emoji on purpose: direct hit =
+# accurate, scale = balanced, bolt = fast (emoji presentation selectors)
+MODEL_ICONS = {
+    "model_large": chr(127919),              # 🎯
+    "model_turbo": chr(9878) + chr(65039),   # ⚖️
+    "model_small": chr(9889) + chr(65039),   # ⚡️
+}
 SOURCES = [("mic", "source_mic"), ("system", "source_system"),
            ("both", "source_both")]
 
@@ -89,6 +96,28 @@ class ModeCard(QFrame):
         super().mousePressEvent(event)
 
 
+class _PopupWordCombo(NoScrollComboBox):
+    """Combo whose popup can show different labels than the closed row.
+
+    word_provider(opened) is called before the popup opens (so Qt sizes the
+    list at the opened labels' width) and after it closes.
+    """
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.word_provider = None
+
+    def showPopup(self) -> None:  # noqa: N802 (Qt naming)
+        if self.word_provider:
+            self.word_provider(True)
+        super().showPopup()
+
+    def hidePopup(self) -> None:  # noqa: N802 (Qt naming)
+        super().hidePopup()
+        if self.word_provider:
+            self.word_provider(False)
+
+
 class HomeScreen(QWidget):
     record_requested = Signal(str, object)
     process_requested = Signal(str, dict)
@@ -104,7 +133,9 @@ class HomeScreen(QWidget):
     # ── UI ──────────────────────────────────────────────────
 
     def _build_ui(self) -> None:
+        self._compact: bool | None = None
         root = QVBoxLayout(self)
+        self._root_lay = root
         root.setContentsMargins(48, 12, 48, 24)
         root.setSpacing(24)
         root.setAlignment(Qt.AlignCenter)
@@ -114,6 +145,7 @@ class HomeScreen(QWidget):
         self._drop_card.setObjectName("glassCard")
         self._drop_card.setFixedWidth(640)
         drop = QVBoxLayout(self._drop_card)
+        self._drop_lay = drop
         drop.setContentsMargins(40, 34, 40, 30)
         drop.setSpacing(14)
         drop.setAlignment(Qt.AlignHCenter)
@@ -228,15 +260,18 @@ class HomeScreen(QWidget):
 
         # ---- settings row ----
         srow = QHBoxLayout()
+        self._srow = srow
         srow.setSpacing(18)
         srow.setAlignment(Qt.AlignHCenter)
 
         self._lbl_model = QLabel(t("home_model"))
         self._lbl_model.setProperty("tone", "hint")
-        self._model_combo = NoScrollComboBox()
+        self._model_combo = _PopupWordCombo()
+        self._model_combo.word_provider = self._on_model_popup
         for value, key in MODELS:
             self._model_combo.addItem(t(key), userData=value)
         self._model_combo.currentIndexChanged.connect(self._save_prefs)
+        self._model_combo.currentIndexChanged.connect(self._refresh_model_tooltip)
         srow.addWidget(self._lbl_model)
         srow.addWidget(self._model_combo)
 
@@ -244,7 +279,7 @@ class HomeScreen(QWidget):
 
         self._lbl_lang = QLabel(t("home_language"))
         self._lbl_lang.setProperty("tone", "hint")
-        self._lang_combo = NoScrollComboBox()
+        self._lang_combo = _PopupWordCombo()
         for value, label in PICKER_LANGUAGES:
             self._lang_combo.addItem(t("lang_auto") if value == AUTO else label,
                                      userData=value)
@@ -277,6 +312,82 @@ class HomeScreen(QWidget):
         srow.addWidget(self._cb_llm)
 
         root.addLayout(srow)
+
+    def resizeEvent(self, event) -> None:  # noqa: N802 (Qt naming)
+        super().resizeEvent(event)
+        compact = self.width() <= 1080
+        if compact != self._compact:
+            self._compact = compact
+            self._apply_compact()
+
+    def _on_model_popup(self, opened: bool) -> None:
+        # open list: whole words instead of the closed-state icons (swapped
+        # before Qt sizes the popup, so it lays out at the word width);
+        # closed row goes back to the icons
+        if self._compact:
+            self._set_model_texts("word" if opened else "icon")
+
+    def _refresh_model_tooltip(self) -> None:
+        # the icon-only closed combo keeps its meaning on hover
+        if self._compact:
+            key = MODELS[self._model_combo.currentIndex()][1]
+            self._model_combo.setToolTip(t(key + "_word"))
+        else:
+            self._model_combo.setToolTip("")
+
+    def _set_model_texts(self, variant: str) -> None:
+        for i, (_value, key) in enumerate(MODELS):
+            if variant == "icon":
+                text = MODEL_ICONS[key]
+            else:
+                suffix = "_word" if variant == "word" else ""
+                text = t(key + suffix)
+            self._model_combo.setItemText(i, text)
+
+    def _set_lang_auto(self, short: bool) -> None:
+        for i in range(self._lang_combo.count()):
+            if self._lang_combo.itemData(i) == AUTO:
+                self._lang_combo.setItemText(
+                    i, t("lang_auto_short") if short else t("lang_auto"))
+
+    def _apply_compact(self) -> None:
+        """At the smallest window widths the settings row would truncate the
+        combo texts and clip the LLM label; swap to short labels and tighter
+        spacing there so everything stays readable instead of cut off."""
+        if self._compact is None:
+            return
+        self._set_model_texts("icon" if self._compact else "full")
+        self._set_lang_auto(self._compact)
+        self._refresh_model_tooltip()
+        if self._compact:
+            # an icon needs only a stub of width; pinning it keeps the
+            # row inside the window so nothing clips at the minimum size
+            self._model_combo.setFixedWidth(68)
+            self._lang_combo.setFixedWidth(76)
+        else:
+            for cb in (self._model_combo, self._lang_combo):
+                cb.setMinimumWidth(0)
+                cb.setMaximumWidth(16777215)
+        # vertical compaction so the whole page still fits the golden-ratio
+        # minimum height; the full-size spacing comes back when widened
+        if self._compact:
+            self._root_lay.setContentsMargins(48, 6, 48, 10)
+            self._root_lay.setSpacing(10)
+            self._drop_lay.setContentsMargins(40, 16, 40, 14)
+            self._drop_lay.setSpacing(8)
+        else:
+            self._root_lay.setContentsMargins(48, 12, 48, 24)
+            self._root_lay.setSpacing(24)
+            self._drop_lay.setContentsMargins(40, 34, 40, 30)
+            self._drop_lay.setSpacing(14)
+        # compact popups get a tighter box (smaller padding + type) so the
+        # list stays narrow and short; the full-size popup keeps the theme
+        for cb in (self._model_combo, self._lang_combo):
+            cb.view().setStyleSheet(
+                "QAbstractItemView { padding: 3px; font-size: 12px; }"
+                "QAbstractItemView::item { padding: 3px 7px; border-radius: 6px; }"
+                if self._compact else "")
+        self._srow.setSpacing(12 if self._compact else 18)
 
     @staticmethod
     def _divider() -> QFrame:
@@ -474,3 +585,4 @@ class HomeScreen(QWidget):
             dev = self._mic_combo.itemData(i)
             if dev is not None:
                 self._mic_combo.setItemText(i, mic_display_name(dev.description()))
+        self._apply_compact()
