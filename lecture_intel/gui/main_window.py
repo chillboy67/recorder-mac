@@ -70,8 +70,9 @@ class MainWindow(QMainWindow):
             self._prefs.setValue("ui_language", current_language())
 
         self.setWindowTitle(t("app_title"))
-        # minimum footprint keeps the golden ratio (971 / 600 = 1.618)
-        self.setMinimumSize(971, 600)
+        # minimum footprint keeps the golden ratio (1068 / 660 = 1.618),
+        # same as the first-launch default size
+        self.setMinimumSize(1068, 660)
         self._restore_geometry()
         self._build_menu()
         self._build_ui()
