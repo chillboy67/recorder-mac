@@ -261,8 +261,9 @@ def _qss(c: dict) -> str:
     QComboBox::drop-down {{ border: none; width: 24px; }}
     QComboBox::down-arrow {{ image: url({_CHEVRON_PNG}); width: 11px; height: 11px; }}
     /* the rounded panel lives on the view: background + 1px border + radius.
-       The square popup window around it is made fully transparent in
-       NoScrollComboBox.__init__, so only this rounded panel is visible. */
+       The host window (QComboBoxPrivateContainer, a QFrame) is made to contribute
+       nothing: NoFrame + zero line width + swallowed paint event in
+       NoScrollComboBox, plus this belt-and-braces rule for every theme. */
     QComboBoxPrivateContainer {{ background: transparent; border: none; padding: 0; }}
     QComboBox QAbstractItemView {{ background: {c['card']}; border: 1px solid {c['line']};
         border-radius: 10px; padding: 5px; outline: 0; }}
