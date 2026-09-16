@@ -70,7 +70,8 @@ class MainWindow(QMainWindow):
             self._prefs.setValue("ui_language", current_language())
 
         self.setWindowTitle(t("app_title"))
-        self.setMinimumSize(1080, 720)
+        # minimum footprint keeps the golden ratio (971 / 600 = 1.618)
+        self.setMinimumSize(971, 600)
         self._restore_geometry()
         self._build_menu()
         self._build_ui()
@@ -433,7 +434,10 @@ class MainWindow(QMainWindow):
         if geometry:
             self.restoreGeometry(geometry)
         else:
-            self.resize(1180, 780)
+            # first launch (e.g. a fresh clone): open a touch above the
+            # golden-ratio minimum (1068 / 660 = 1.618) so the default
+            # footprint matches the compact design without feeling cramped
+            self.resize(1068, 660)
 
     def closeEvent(self, event) -> None:
         self._prefs.setValue("geometry", self.saveGeometry())
