@@ -1,9 +1,9 @@
 """Shared widget subclasses."""
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QEvent, Qt
 from PySide6.QtGui import QPalette
-from PySide6.QtWidgets import QComboBox, QListView, QStyledItemDelegate
+from PySide6.QtWidgets import QComboBox, QFrame, QListView, QStyledItemDelegate
 
 
 class NoScrollComboBox(QComboBox):
@@ -30,7 +30,16 @@ class NoScrollComboBox(QComboBox):
         # before the native window exists. Anything opaque left behind shows
         # up as the square frame the user keeps (rightly) complaining about.
         box = view.parentWidget()
+        self._popup_box = box
         if box is not None:
+            # QComboBoxPrivateContainer is a QFrame: even with a fully
+            # transparent palette its paintEvent still draws the StyledPanel
+            # rect — the square dark frame around the rounded panel. Strip the
+            # frame geometry and swallow the container's own paint entirely;
+            # its children (the view) keep painting normally, so the view's
+            # rounded panel becomes the popup's only visible edge.
+            box.setFrameShape(QFrame.NoFrame)
+            box.setLineWidth(0)
             box.setAttribute(Qt.WA_TranslucentBackground)
             box.setAttribute(Qt.WA_NoSystemBackground)
             box.setAutoFillBackground(False)
@@ -40,6 +49,12 @@ class NoScrollComboBox(QComboBox):
             lay = box.layout()
             if lay is not None:
                 lay.setContentsMargins(0, 0, 0, 0)
+            box.installEventFilter(self)
+
+    def eventFilter(self, obj, event):  # noqa: N802 (Qt naming)
+        if obj is self._popup_box and event.type() == QEvent.Paint:
+            return True          # the host window contributes no pixels of its own
+        return super().eventFilter(obj, event)
 
     def wheelEvent(self, event) -> None:  # noqa: N802 (Qt naming)
         event.ignore()
