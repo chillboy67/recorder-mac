@@ -260,13 +260,12 @@ def _qss(c: dict) -> str:
     QComboBox:focus {{ border-color: {c['accent']}; }}
     QComboBox::drop-down {{ border: none; width: 24px; }}
     QComboBox::down-arrow {{ image: url({_CHEVRON_PNG}); width: 11px; height: 11px; }}
-    /* the popup container is translucent (see NoScrollComboBox), so its rounded
-       background IS the popup edge — no border ring of its own; the selected
-       row's ring is the only outline inside */
-    QComboBoxPrivateContainer {{ background: {c['card']}; border: none;
-        border-radius: 12px; padding: 5px; }}
-    QComboBox QAbstractItemView {{ background: transparent; border: none;
-        padding: 0; outline: 0; }}
+    /* the rounded panel lives on the view: background + 1px border + radius.
+       The square popup window around it is made fully transparent in
+       NoScrollComboBox.__init__, so only this rounded panel is visible. */
+    QComboBoxPrivateContainer {{ background: transparent; border: none; padding: 0; }}
+    QComboBox QAbstractItemView {{ background: {c['card']}; border: 1px solid {c['line']};
+        border-radius: 10px; padding: 5px; outline: 0; }}
     /* the item box carries its own rounded frame: without border-radius here
        the selected/hover row draws a sharp rectangle inside the rounded popup */
     QComboBox QAbstractItemView::item {{ border: 1px solid transparent;
