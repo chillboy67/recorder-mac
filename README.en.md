@@ -117,6 +117,10 @@ cd lecture_intel
 Three model tiers are selectable in the UI: **most accurate** `large-v3` / **balanced** `large-v3-turbo` /
 **fastest** `small`. Once downloaded, the app runs fully offline at runtime.
 
+In a narrowed (compact) window the model picker collapses to icons: 🎯 = most accurate
+(a dart in the bullseye), ⚖️ = balanced (scales), ⚡ = fastest (lightning bolt). The expanded
+list still shows the full names, and hovering the collapsed picker tooltips the full name.
+
 ### Command line (no UI)
 
 ```bash
