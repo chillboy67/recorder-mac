@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QPalette
 from PySide6.QtWidgets import QComboBox, QListView, QStyledItemDelegate
 
 
@@ -21,16 +22,24 @@ class NoScrollComboBox(QComboBox):
         view = QListView(self)
         view.setItemDelegate(QStyledItemDelegate(view))
         self.setView(view)
-        # The popup is a top-level window and macOS gives it a square, opaque
-        # surface. Translucency must be requested before that window is
-        # created — i.e. here, while the container still exists unwrapped —
-        # or the square corners paint over the rounded QSS background. With it
-        # set early, the container needs no border of its own: the rounded
-        # edge is just where its background stops, and the selected row's ring
-        # is the only outline left inside.
+        # The popup is a top-level window and macOS hands it a square, opaque
+        # surface. The rounded panel is painted by the view (theme.py); for its
+        # rounded corners to be the popup's edge, everything the window itself
+        # paints must be gone: translucency + no system background + no auto
+        # fill + a fully transparent Window palette role, all requested here,
+        # before the native window exists. Anything opaque left behind shows
+        # up as the square frame the user keeps (rightly) complaining about.
         box = view.parentWidget()
         if box is not None:
             box.setAttribute(Qt.WA_TranslucentBackground)
+            box.setAttribute(Qt.WA_NoSystemBackground)
+            box.setAutoFillBackground(False)
+            pal = box.palette()
+            pal.setColor(QPalette.Window, Qt.transparent)
+            box.setPalette(pal)
+            lay = box.layout()
+            if lay is not None:
+                lay.setContentsMargins(0, 0, 0, 0)
 
     def wheelEvent(self, event) -> None:  # noqa: N802 (Qt naming)
         event.ignore()
