@@ -26,11 +26,20 @@ because the diagnostic value lives exactly in those errors.
 
 Recorder's first principle:
 
-> **No mode ever rewrites the speaker's original words. Mistakes are kept exactly as spoken.**
+> **No mode ever rewrites the speaker's choice of words. Mistakes are kept exactly as spoken.**
 
 Anything worth flagging (uncertain pronunciation, grammar issues, non-native phrasing) is **annotated**,
 never edited into the transcript body. The optional local LLM enhancement only touches transcription
 errors caused by unclear audio — it never polishes or rewrites.
+
+The boundaries are stated plainly: Whisper itself drops some filler words while decoding (upstream
+faster-whisper#901 and whisper.cpp#965 were reported and closed unfixed), so filler retention is
+measured against the eval set (see `lecture_intel/eval/README.md`).
+
+Classroom mode is the only mode that cleans up the transcript signal, and every cleanup is **auditable**:
+denoise parameters and the gating decision, dropped time intervals, and folded suspected loops all land
+in `meta.json` in the output directory — each entry reviewable, with the original words always kept in
+the annotation. General and IELTS modes only annotate suspected artifacts and never touch the body text.
 
 ---
 
@@ -48,10 +57,31 @@ errors caused by unclear audio — it never polishes or rewrites.
   with bounded memory and genuine progress reporting.
 - **Crash-safe.** Transcription runs in an isolated subprocess — even if the model process gets killed by the
   system, the UI stays up and the recorded audio is never lost.
-- **Export** to txt / md / doc / docx, with timestamps and speaker labels.
+- **Export** to txt / md / doc / docx, with timestamps and speaker labels; the json export carries the
+  fidelity annotations.
 - **Light/dark theme**, follows the system setting.
 - **Optional local LLM (Ollama)** for tidy-up / classroom summary / IELTS notes.  
   Model picks and install: [lecture_intel/docs/LLM_MODELS.md](lecture_intel/docs/LLM_MODELS.md).
+
+---
+
+## Capture fidelity
+
+- The microphone is captured as **48 kHz / 16-bit / mono** raw PCM. The frequency bands that separate
+  sibilants (s/sh/th/f) live above 8 kHz, and a 16 kHz capture destroys them at the moment of recording —
+  exactly the bands "possible pronunciation issue" diagnosis depends on. All downsampling happens only on
+  derived copies (the engine normalizes to 16 kHz internally for ASR); `original.wav` in the output
+  directory stays capture-faithful forever, with a SHA-256 hash.
+- macOS microphone modes (Standard / Voice Isolation / Wide Spectrum, from the menu-bar mic icon or Control
+  Center): keep **Standard**. To verify the impact of the current mode, record the same sentence under both
+  modes and compare the two `original.wav` files (Voice Isolation's DSP alters the signal; use Standard
+  for diagnosis).
+- **Avoid Bluetooth headsets for pronunciation diagnosis**: in HFP call mode the hardware only outputs
+  16 kHz, and its echo-cancellation/noise-reduction DSP cannot be disabled. Use a wired or analog mic
+  instead.
+- Every output directory ships a `meta.json`: original audio hash, per-step processing parameters
+  (normalization, denoise gating, arbitration, speaker filtering), and export file hashes — the transcript
+  can be proven to come from a specific version of the audio.
 
 ---
 
@@ -62,9 +92,11 @@ Load → transcribe the whole file → export. Automatic Chinese/English detecti
 
 ### Classroom recording
 ffmpeg preprocessing (high-pass filter for low-frequency rumble + adaptive noise reduction + loudness
-normalization) → transcription → speaker clustering that **keeps only the speaker with the longest talk time**
-(side chatter is dropped) → automatic key-point extraction (emphasis phrasing, definition sentences, frequent
-terms, longest-explained segments) generating a `*.summary.md` file.
+normalization, **gated on the measured noise floor**, parameters and decision written to `meta.json`)
+→ transcription → repeat arbitration (real stutter is kept; only confirmed artifacts are folded, with the
+original words kept in the annotation) → speaker clustering that **keeps only the speaker with the longest
+talk time** (dropped intervals written to `meta.json`) → automatic key-point extraction (emphasis phrasing,
+definition sentences, frequent terms, longest-explained segments) generating a `*.summary.md` file.
 
 ### IELTS speaking coach
 Transcription → **token-free two-speaker separation** (voiceprint embeddings + clustering, automatically
@@ -166,7 +198,9 @@ lecture_intel/
 │   ├── engine.py         Single orchestration entry point: run(input, output, mode)
 │   ├── modes.py          Parameter presets for general / classroom / ielts
 │   ├── transcriber.py    Whisper wrapper (mlx → faster-whisper fallback, chunking, per-word confidence)
-│   ├── denoise.py        ffmpeg-based noise reduction (classroom)
+│   ├── provenance.py     meta.json trail: original hash, per-step params, export hashes
+│   ├── repeat_arbitration.py  Stutter-vs-ASR-loop arbitration (timeline → silencedetect → isolated re-decode)
+│   ├── denoise.py        ffmpeg-based noise reduction (classroom, noise-floor gated)
 │   ├── diarize.py        Token-free speaker separation (voiceprint embeddings + clustering + temporal smoothing)
 │   ├── ielts.py          Pronunciation / grammar / phrasing analysis and report generation
 │   ├── classroom.py      Key-point extraction and summarization

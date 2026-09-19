@@ -58,6 +58,9 @@ class Mode:
 
     # --- audio pre-processing ---
     denoise: bool = False          # ffmpeg afftdn + highpass (classroom)
+    # Gate for denoise: only run the filter chain when the measured noise floor
+    # (volumedetect proxy, dB) is louder than this. Clean audio is left untouched.
+    denoise_noise_floor_db: float = -45.0
 
     # --- speaker handling ---
     diarize: bool = False          # split speakers (ielts: examiner vs candidate)

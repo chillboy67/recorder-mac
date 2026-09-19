@@ -54,12 +54,13 @@ class RecordingScreen(QWidget):
         self._source = "mic"
         self._mic_path: str | None = None
         self._sys_path: str | None = None
+        self._mix_path: str | None = None
         self._pending_mix = False
 
         from core.sysaudio import SystemAudioRecorder
         self._sys_rec = SystemAudioRecorder()
 
-        # Qt Multimedia pipeline — WAV · 16 kHz · mono
+        # Qt Multimedia pipeline — WAV · 48 kHz · mono · PCM
         self._session = QMediaCaptureSession()
         self._audio_in = QAudioInput()
         self._recorder = QMediaRecorder()
@@ -67,10 +68,15 @@ class RecordingScreen(QWidget):
         self._session.setRecorder(self._recorder)
         fmt = QMediaFormat()
         fmt.setFileFormat(QMediaFormat.FileFormat.Wave)
+        # The FFmpeg backend behind Qt 6 does not reliably default WAV's codec
+        # to raw PCM; pin it so the capture is uncompressed 48 kHz s16le and the
+        # sibilant bands (8 kHz+) survive for pronunciation diagnosis.
+        fmt.setAudioCodec(QMediaFormat.AudioCodec.Wave)
         self._recorder.setMediaFormat(fmt)
-        self._recorder.setAudioSampleRate(16000)
+        self._recorder.setAudioSampleRate(48000)
         self._recorder.setAudioChannelCount(1)
-        self._recorder.setAudioBitRate(256000)
+        # No setAudioBitRate: it is meaningless for PCM (that 256000 was the
+        # 16k×16-bit coincidence, not a quality knob).
         self._recorder.recorderStateChanged.connect(self._on_state_change)
         self._recorder.errorOccurred.connect(self._on_error)
 
@@ -129,7 +135,7 @@ class RecordingScreen(QWidget):
         self._status.setText(
             t("rec_status_recording", source=t(_SOURCE_LABELS.get(source, source))))
         theme.set_tone(self._status, "danger")
-        self._mic_path = self._sys_path = None
+        self._mic_path = self._sys_path = self._mix_path = None
         self._pending_mix = (source == "both")
 
         # Pausing needs every active capture path to support it. The mic
@@ -181,7 +187,7 @@ class RecordingScreen(QWidget):
             self._status.setText(t("rec_status_paused", source=label))
             theme.set_tone(self._status, "hint")
             self._hint.setText(
-                t("rec_hint_paused", mb=f"{self._elapsed_s * 0.031:.1f}"))
+                t("rec_hint_paused", mb=f"{self._elapsed_s * 0.092:.1f}"))
         else:
             self._paused = False
             if self._source in ("mic", "both"):
@@ -247,14 +253,27 @@ class RecordingScreen(QWidget):
         out.close()
         cmd = [ffmpeg, "-y", "-i", have[0], "-i", have[1],
                "-filter_complex", "amix=inputs=2:duration=longest:normalize=0",
-               "-ac", "1", "-ar", "16000", out.name]
+               "-ac", "1", "-ar", "48000", out.name]
         try:
             r = subprocess.run(cmd, capture_output=True, text=True)
             if r.returncode == 0 and Path(out.name).stat().st_size > 1024:
+                self._mix_path = out.name
                 return out.name
         except Exception:
             pass
         return have[0]
+
+    def cleanup_temps(self) -> None:
+        """Delete the capture temps (mic / system / mix wavs) once processing
+        has consumed the recording. Safe: the engine archives its own copy
+        (original.wav) and a user-saved copy lives in record_dir()."""
+        for p in (self._mic_path, self._sys_path, self._mix_path):
+            if p:
+                try:
+                    Path(p).unlink(missing_ok=True)
+                except OSError:
+                    pass
+        self._mic_path = self._sys_path = self._mix_path = None
 
     def _finalize(self, path: str | None) -> None:
         if not path or not Path(path).exists() or Path(path).stat().st_size <= 1024:
@@ -262,7 +281,7 @@ class RecordingScreen(QWidget):
             return
         path = self._maybe_save_recording(path)
         size_mb = Path(path).stat().st_size / 1_048_576
-        meta = f"{_format_time(self._elapsed_s)} · {size_mb:.1f} MB · 16 kHz WAV"
+        meta = f"{_format_time(self._elapsed_s)} · {size_mb:.1f} MB · 48 kHz WAV"
         self.recording_ready.emit(path, meta)
 
     def _maybe_save_recording(self, temp_path: str) -> str:
@@ -334,7 +353,7 @@ class RecordingScreen(QWidget):
     def _tick(self) -> None:
         self._elapsed_s += 1
         self._ring.set_time(_format_time(self._elapsed_s))
-        mb = self._elapsed_s * 0.031
+        mb = self._elapsed_s * 0.092
         self._hint.setText(t("rec_hint_written", mb=f"{mb:.1f}"))
 
     # ── live language switch ─────────────────────────
@@ -352,7 +371,7 @@ class RecordingScreen(QWidget):
             theme.set_tone(self._status, "danger")
 
     def _render_hint(self) -> None:
-        mb = f"{self._elapsed_s * 0.031:.1f}"
+        mb = f"{self._elapsed_s * 0.092:.1f}"
         if self._paused:
             self._hint.setText(t("rec_hint_paused", mb=mb))
         elif self._is_recording and self._elapsed_s > 0:

@@ -59,7 +59,7 @@ _COMPRESSION_RATIO_THRESHOLD = 2.4
 # Short ladder: a hard 30s window is retried at most twice instead of 6×. The
 # full 6-step ladder triples-to-sextuples the compute on noisy lectures (lots of
 # heat) for little gain, and runaway loops are cleaned afterwards anyway.
-_TEMPERATURE_LADDER = (0.0, 0.4)
+TEMPERATURE_LADDER = (0.0, 0.4)
 
 
 class Transcriber:
@@ -233,7 +233,7 @@ class Transcriber:
             initial_prompt=initial_prompt or None,
             word_timestamps=True,
             condition_on_previous_text=condition_on_previous,
-            temperature=_TEMPERATURE_LADDER,
+            temperature=TEMPERATURE_LADDER,
             no_speech_threshold=_NO_SPEECH_THRESHOLD,
             logprob_threshold=_LOGPROB_THRESHOLD,
             compression_ratio_threshold=_COMPRESSION_RATIO_THRESHOLD,
@@ -282,7 +282,7 @@ class Transcriber:
             r = mlx_whisper.transcribe(
                 clip, path_or_hf_repo=repo, language=language,
                 initial_prompt=initial_prompt or None, word_timestamps=True,
-                condition_on_previous_text=False, temperature=_TEMPERATURE_LADDER,
+                condition_on_previous_text=False, temperature=TEMPERATURE_LADDER,
                 no_speech_threshold=_NO_SPEECH_THRESHOLD,
                 logprob_threshold=_LOGPROB_THRESHOLD,
                 compression_ratio_threshold=_COMPRESSION_RATIO_THRESHOLD,
@@ -375,7 +375,7 @@ class Transcriber:
             word_timestamps=True,
             initial_prompt=initial_prompt or None,
             condition_on_previous_text=condition_on_previous,
-            temperature=_TEMPERATURE_LADDER,
+            temperature=TEMPERATURE_LADDER,
             no_speech_threshold=_NO_SPEECH_THRESHOLD,
             log_prob_threshold=_LOGPROB_THRESHOLD,
             compression_ratio_threshold=_COMPRESSION_RATIO_THRESHOLD,
