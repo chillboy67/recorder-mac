@@ -158,6 +158,10 @@ def run(
         else:
             asr.annotations.extend(
                 {"type": "adjacent_duplicate_segment", **d} for d in dups)
+    # The fidelity audit trail lives in meta.json too, not only the json
+    # export — general/IELTS modes don't export json by default.
+    provenance.append_meta(output_dir, {
+        "name": "annotations", "annotations": asr.annotations})
 
     labels: Optional[dict[int, str]] = None
     ielts_report = None
