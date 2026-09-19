@@ -6,6 +6,7 @@ synthetic ASRResult, so they run in milliseconds and catch wiring bugs.
 """
 from __future__ import annotations
 
+import shutil
 import sys
 from pathlib import Path
 
@@ -107,6 +108,181 @@ def test_repetition_collapse():
     # genuine emphasis (3x) and normal text are left alone
     assert _collapse_repeats("well no no no I disagree") == "well no no no I disagree"
     assert _collapse_repeats("I really like it a lot") == "I really like it a lot"
+
+
+# ── repeat arbitration: stutter vs ASR loop ─────────────────────────
+
+def _wseg(tokens, language="en", seg_id=0):
+    """Build a segment from (word, start, end) tuples, Whisper-style: the text
+    is the concatenation of the tokens (English tokens carry their own leading
+    space), and the words carry the timeline."""
+    ws = [ASRWord(w, s, e, 0.9) for (w, s, e) in tokens]
+    return ASRSegment(id=seg_id, start=tokens[0][1], end=tokens[-1][2],
+                      text="".join(w.word for w in ws), language=language,
+                      confidence=-0.2, words=ws)
+
+
+def _loop_tokens(word, k, dur=0.28, step=None):
+    """k copies of `word`, each advancing dur seconds (real-stutter shape)."""
+    if step is None:
+        step = dur
+    return [((" " + word) if i else word, i * step, i * step + dur)
+            for i in range(k)]
+
+
+def test_repeat_run_detected_en_and_zh():
+    from core.repeat_arbitration import find_repeat_runs
+    en = _wseg(_loop_tokens("no", 4))
+    (run,) = find_repeat_runs(en)
+    assert run.k == 4 and run.n == 1 and run.gram == ("no",)
+    zh = _wseg(_loop_tokens("我", 5, dur=0.2, step=0.25), language="zh")
+    (run,) = find_repeat_runs(zh)
+    assert run.k == 5 and run.n == 1
+
+
+def test_repeat_run_ignores_k3():
+    from core.repeat_arbitration import find_repeat_runs
+    assert find_repeat_runs(_wseg(_loop_tokens("no", 3))) == []
+    # genuine emphasis "no, no, no" plus more speech: nothing folds
+    toks = _loop_tokens("no", 3) + [(" I disagree", 1.0, 1.3)]
+    assert find_repeat_runs(_wseg(toks)) == []
+
+
+def test_l1_frozen_timeline_is_asr_loop():
+    from core.repeat_arbitration import classify_run, find_repeat_runs
+    # word clocks do not advance across copies → decoder froze → asr_loop,
+    # decided at level 1 without ever touching audio
+    toks = [("no", 1.0, 1.01)] * 4
+    (run,) = find_repeat_runs(_wseg(toks))
+    v = classify_run(run, None, None, "en", median_dur=0.25)
+    assert v.verdict == "asr_loop" and v.evidence["level"] == 1
+
+
+def test_l1_advancing_timeline_proceeds_to_l2():
+    from core.repeat_arbitration import classify_run, find_repeat_runs
+    import core.repeat_arbitration as ra
+    toks = _loop_tokens("no", 4, dur=0.25, step=0.35)
+    (run,) = find_repeat_runs(_wseg(toks))
+    # stub L2: 4 voiced bursts → real_speech without needing real audio
+    monkey = lambda *a, **k: 4
+    orig = ra._count_voiced_bursts
+    ra._count_voiced_bursts = monkey
+    try:
+        v = classify_run(run, None, None, "en", median_dur=0.25)
+    finally:
+        ra._count_voiced_bursts = orig
+    assert v.verdict == "real_speech" and v.evidence["level"] == 2
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg not installed")
+def test_l2_silencedetect_on_synthetic_audio(tmp_path):
+    import numpy as np
+    import soundfile as sf
+    from core.repeat_arbitration import classify_run, find_repeat_runs
+    sr = 16000
+
+    def wav_of(kind):
+        if kind == "pulses":        # 4 voiced bursts aligned with the run's
+            w = np.zeros(sr * 3)    # word clock ≈ a real stutter
+            for i in range(4):
+                n = int(0.25 * sr)
+                t0 = int((i * 0.35 + 0.02) * sr)
+                w[t0:t0 + n] = 0.5 * np.sin(2 * np.pi * 440 * np.arange(n) / sr)
+        elif kind == "tone":        # one continuous tone ≈ a frozen loop
+            n = sr * 3
+            w = 0.5 * np.sin(2 * np.pi * 440 * np.arange(n) / sr)
+        else:                       # silence ≈ a loop over nothing
+            w = np.zeros(sr * 3)
+        p = tmp_path / f"{kind}.wav"
+        sf.write(p, w, sr)
+        return p
+
+    toks = _loop_tokens("no", 4, dur=0.25, step=0.35)
+    (run,) = find_repeat_runs(_wseg(toks))
+    for kind, want in (("pulses", "real_speech"), ("tone", "asr_loop"),
+                       ("silence", "asr_loop")):
+        v = classify_run(run, wav_of(kind), None, "en", median_dur=0.25)
+        assert v.verdict == want, (kind, v.evidence)
+        assert v.evidence["level"] == 2
+
+
+def test_l3_redecode_with_mock_transcriber(tmp_path, monkeypatch):
+    import core.repeat_arbitration as ra
+    monkeypatch.setattr(ra, "_extract_clip", lambda *a, **k: str(tmp_path / "clip.wav"))
+    # 3 bursts for k=4 sits between the L2 thresholds (2.4 / 3.2) → inconclusive
+    monkeypatch.setattr(ra, "_count_voiced_bursts", lambda *a, **k: 3)
+    toks = _loop_tokens("no", 4, dur=0.25, step=0.35)
+    (run,) = ra.find_repeat_runs(_wseg(toks))
+
+    class Mock:
+        def __init__(self, k):
+            self.k = k
+
+        def transcribe(self, path, **kw):
+            assert kw["condition_on_previous"] is False
+            assert kw["temperature"] == (0.0,)
+            seg = _wseg(_loop_tokens("no", self.k))
+            return ASRResult(segments=[seg], full_text=seg.text,
+                             language="en", model_used="mock")
+
+    v = ra.classify_run(run, "x.wav", Mock(1), "en", median_dur=0.25)
+    assert v.verdict == "asr_loop" and v.evidence["level"] == 3
+    v = ra.classify_run(run, "x.wav", Mock(4), "en", median_dur=0.25)
+    assert v.verdict == "real_speech"
+    v = ra.classify_run(run, "x.wav", Mock(2), "en", median_dur=0.25)
+    assert v.verdict == "uncertain"
+
+
+def test_apply_verdicts_general_annotates_only():
+    from core.repeat_arbitration import Verdict, apply_verdicts
+    asr = ASRResult(segments=[_wseg(_loop_tokens("no", 4))],
+                    full_text="no no no no", language="en", model_used="t")
+    assert asr.annotations == []            # default is empty
+    v = Verdict(0, 0.0, 1.0, "no no no no", "asr_loop", {"level": 1})
+    apply_verdicts(asr, [v], "general")
+    assert asr.full_text == "no no no no"   # general mode never folds
+    (ann,) = asr.annotations
+    assert ann["type"] == "repeat_arbitration"
+    assert ann["original"] == "no no no no" and ann["verdict"] == "asr_loop"
+
+
+def test_apply_verdicts_classroom_folds_asr_loop():
+    from core.repeat_arbitration import apply_verdicts, arbitrate
+    # frozen word clock → L1 asr_loop, no audio needed
+    toks = [("no" if i == 0 else " no", 1.0, 1.01) for i in range(4)]
+    toks += [(" I disagree", 1.6, 1.9)]
+    seg = _wseg(toks)
+    asr = ASRResult(segments=[seg], full_text=seg.text, language="en",
+                    model_used="t")
+    verdicts = arbitrate(asr, None, None)
+    assert verdicts and all(v.verdict == "asr_loop" for v in verdicts)
+    apply_verdicts(asr, verdicts, "classroom")
+    assert asr.segments[0].text == "no I disagree"   # folded to one copy
+    assert asr.annotations[0]["original"] == "no no no no"   # original kept
+
+
+def test_text_fallback_run_is_never_folded():
+    from core.repeat_arbitration import classify_run, find_repeat_runs
+    seg = ASRSegment(id=0, start=0.0, end=4.0, text="時" * 30,
+                     language="zh", confidence=-0.2)   # no words
+    (run,) = find_repeat_runs(seg)
+    assert run.verified is False
+    v = classify_run(run, None, None, "zh", median_dur=0.25)
+    assert v.verdict == "uncertain"
+
+
+def test_adjacent_duplicate_segments_reported():
+    from core.repeat_arbitration import adjacent_duplicate_segments
+    a = ASRSegment(id=0, start=0.0, end=1.0, text="about this", language="en",
+                   confidence=-0.2)
+    b = ASRSegment(id=1, start=1.0, end=2.0, text="about this", language="en",
+                   confidence=-0.2)
+    c = ASRSegment(id=2, start=2.0, end=3.0, text="something else entirely now",
+                   language="en", confidence=-0.2)
+    asr = ASRResult(segments=[a, b, c], full_text="x", language="en",
+                    model_used="t")
+    (dup,) = adjacent_duplicate_segments(asr)
+    assert dup["segment_id"] == 1 and dup["duplicate_of"] == 0
 
 
 def test_modes_present():

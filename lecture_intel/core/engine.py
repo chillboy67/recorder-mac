@@ -136,6 +136,29 @@ def run(
         "output": {"segments": len(asr.segments), "language": asr.language},
     })
 
+    # 3b) Repeat arbitration: stutter vs ASR loop — annotate everywhere, fold
+    # only confirmed loops in classroom mode (original always kept).
+    from core.repeat_arbitration import (adjacent_duplicate_segments,
+                                         apply_verdicts, arbitrate)
+    verdicts = arbitrate(asr, wav_path, transcriber)
+    apply_verdicts(asr, verdicts, mode.key)
+    # Adjacent duplicate segments (a loop that spans segment boundaries):
+    # classroom keeps the old drop-the-copy behaviour (recorded in meta);
+    # general/IELTS only annotate — the text stays in the transcript.
+    dups = adjacent_duplicate_segments(asr)
+    if dups:
+        if mode.key == "classroom":
+            drop_ids = {d["segment_id"] for d in dups}
+            asr.segments = [s for s in asr.segments if s.id not in drop_ids]
+            for i, s in enumerate(asr.segments):
+                s.id = i
+            asr.full_text = " ".join(s.text for s in asr.segments).strip()
+            provenance.append_meta(output_dir, {
+                "name": "drop_duplicate_segments", "dropped": dups})
+        else:
+            asr.annotations.extend(
+                {"type": "adjacent_duplicate_segment", **d} for d in dups)
+
     labels: Optional[dict[int, str]] = None
     ielts_report = None
     classroom_report = None
