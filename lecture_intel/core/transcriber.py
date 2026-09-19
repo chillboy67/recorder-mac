@@ -19,8 +19,10 @@ Design decisions that matter for accuracy (these fix the old pipeline's
    the IELTS mode flag *likely* mispronunciations, and the per-word timing is
    what the diarizer needs.
 
-4. **Faithful output.** temperature=0 (greedy, deterministic) with Whisper's
-   standard fallback ladder; no paraphrasing anywhere.
+4. **Faithful output.** First pass at temperature 0 with beam search; only
+   windows Whisper itself flags as unstable (low avg logprob or high compression
+   ratio) are retried at temperature 0.4, which samples — those windows are not
+   byte-for-byte reproducible. No paraphrasing anywhere.
 """
 from __future__ import annotations
 
@@ -87,7 +89,7 @@ class Transcriber:
         *,
         language: Optional[str] = None,
         initial_prompt: str = "",
-        condition_on_previous: bool = True,
+        condition_on_previous: bool = False,
         chunked: bool = False,
         chunk_sec: float = 90.0,
         duration_sec: float = 0.0,

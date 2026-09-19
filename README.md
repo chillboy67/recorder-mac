@@ -62,9 +62,6 @@ ffmpeg 预处理（高通去低频隆隆 + 自适应降噪 + 响度归一）→ 
 说话人聚类后**只保留说话时长最长的主讲人**（旁人闲聊被剔除）→
 自动提取重点（强调句式、定义句、高频术语、讲解最久的片段）生成 `*.summary.md`。
 
-课堂模式还带一个术语词典（机器学习 / 深度学习 / 统计 / 数学 / Python / R），
-只纠术语拼写，不动句子结构。
-
 ### 雅思口语教官
 转写 → **免 token 的两人分离**（声纹嵌入 + 聚类，自动判定教官/考生，
 界面可一键对调）→ 分析 → 反馈报告。
@@ -180,7 +177,7 @@ lecture_intel/
 │
 ├── gui/                  PySide6 界面（首页 / 录音 / 处理 / 结果 + 主题）
 ├── native/               SystemAudioRecorder.swift（ScreenCaptureKit 内录）
-├── dictionaries/         课堂术语词典
+├── dictionaries/         课堂术语词典（旧流水线存档，core 引擎未接入）
 └── tests/                无需模型即可跑的单元测试（python -m pytest）
 ```
 
