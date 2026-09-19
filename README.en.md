@@ -66,9 +66,6 @@ normalization) → transcription → speaker clustering that **keeps only the sp
 (side chatter is dropped) → automatic key-point extraction (emphasis phrasing, definition sentences, frequent
 terms, longest-explained segments) generating a `*.summary.md` file.
 
-Classroom mode also ships a domain dictionary (machine learning / deep learning / statistics / math / Python / R)
-that only corrects term spelling, never sentence structure.
-
 ### IELTS speaking coach
 Transcription → **token-free two-speaker separation** (voiceprint embeddings + clustering, automatically
 determines coach vs. student, swappable with one click in the UI) → analysis → feedback report.
@@ -181,7 +178,7 @@ lecture_intel/
 │
 ├── gui/                  PySide6 UI (home / record / process / results + theming)
 ├── native/               SystemAudioRecorder.swift (ScreenCaptureKit-based system audio capture)
-├── dictionaries/         Classroom term dictionary
+├── dictionaries/         Classroom term dictionary (legacy pipeline archive; not wired into the core engine)
 └── tests/                Unit tests that run without needing the model (python -m pytest)
 ```
 
