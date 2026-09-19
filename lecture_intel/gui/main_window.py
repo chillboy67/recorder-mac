@@ -340,6 +340,10 @@ class MainWindow(QMainWindow):
         self._show_status_text(info.get("message", ""))
 
     def _on_finished(self, result: dict) -> None:
+        # Processing consumed the recording (the engine archived its own copy
+        # as original.wav) — the capture temps can go. A user-saved copy in
+        # record_dir() is a different file and is untouched.
+        self._recording.cleanup_temps()
         total_s = result.get("stats", {}).get("total_time_s", 0)
         self._results.load_results(result)
         self._go(RESULTS, "state_done", "ok", seconds=f"{total_s:.0f}")

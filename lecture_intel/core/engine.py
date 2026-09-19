@@ -22,10 +22,11 @@ from modules.audio_loader import AudioLoader
 
 from core import export as exporter
 from core import llm as llm_mod
+from core import provenance
 from core.i18n import t
 from core.languages import normalize_language, prefers_asian_model
 from core.modes import Mode, get_mode
-from core.transcriber import Transcriber
+from core.transcriber import TEMPERATURE_LADDER, Transcriber
 
 logger = logging.getLogger(__name__)
 
@@ -61,18 +62,42 @@ def run(
             progress({"step": step, "message": message,
                       "percent": percent, "status": status})
 
+    # 0) Archive the input for provenance -----------------------------------
+    # The output dir becomes self-contained evidence: original.wav (capture-faithful,
+    # never modified) + meta.json tracing every later transformation.
+    provenance.archive_input(input_path, output_dir)
+
     # 1) Load + normalize to 16k mono wav -----------------------------------
     report("load", t("eng_load_start"), 4)
     loader = AudioLoader({})
     audio = loader.process(input_path)
     wav_path = audio.path
+    provenance.append_meta(output_dir, {
+        "name": "normalize",
+        "params": {"sample_rate": 16000, "channels": 1, "format": "wav"},
+        "input_sha256": provenance.sha256_file(input_path),
+        "output_sha256": provenance.sha256_file(wav_path),
+    })
     report("load", t("eng_load_done"), 8, "done")
 
-    # 2) Denoise (classroom) -------------------------------------------------
+    # 2) Denoise (classroom, gated) ------------------------------------------
     if mode.denoise:
         report("denoise", t("eng_denoise_start"), 12)
-        from core.denoise import denoise_audio
-        wav_path = denoise_audio(wav_path)
+        from core import denoise as denoise_mod
+        floor = denoise_mod.measure_noise_floor(wav_path)
+        # None (measure failed) → default to cleaning, as before the gate existed.
+        decided = floor is None or floor > mode.denoise_noise_floor_db
+        cleaned = denoise_mod.denoise_audio(wav_path) if decided else wav_path
+        provenance.append_meta(output_dir, {
+            "name": "denoise",
+            "input_sha256": provenance.sha256_file(wav_path),
+            "params": {"filter": denoise_mod.FILTER_CHAIN,
+                       "noise_floor_db": floor,
+                       "threshold_db": mode.denoise_noise_floor_db,
+                       "applied": cleaned != wav_path},
+            "output_sha256": provenance.sha256_file(cleaned),
+        })
+        wav_path = cleaned
         report("denoise", t("eng_denoise_done"), 16, "done")
 
     # 3) Transcribe (whole file) --------------------------------------------
@@ -101,6 +126,15 @@ def run(
     )
     warnings.extend(asr.warnings)
     report("asr", t("eng_asr_done", count=len(asr.segments)), 76, "done")
+    provenance.append_meta(output_dir, {
+        "name": "transcribe",
+        "input_sha256": provenance.sha256_file(wav_path),
+        "params": {"model": model, "engine": engine or mode.engine,
+                   "language": lang,
+                   "temperature_ladder": list(TEMPERATURE_LADDER),
+                   "condition_on_previous": mode.condition_on_previous},
+        "output": {"segments": len(asr.segments), "language": asr.language},
+    })
 
     labels: Optional[dict[int, str]] = None
     ielts_report = None
@@ -141,10 +175,20 @@ def run(
         kept = main_speaker_ids(asr, wav_path)
         if kept is not None:
             before = len(asr.segments)
+            removed = [s for s in asr.segments if s.id not in kept]
             asr.segments = [s for s in asr.segments if s.id in kept]
             asr.full_text = " ".join(s.text for s in asr.segments).strip()
             logger.info("Classroom: %d → %d segments after main-speaker filter",
                         before, len(asr.segments))
+            # Dropped speech must not vanish silently: every removed interval
+            # lands in meta.json with its text, so the edit is reviewable.
+            provenance.append_meta(output_dir, {
+                "name": "keep_main_speaker_only",
+                "kept_segment_ids": sorted(kept),
+                "removed": [{"segment_id": s.id, "start": round(s.start, 3),
+                             "end": round(s.end, 3),
+                             "speaker_id": s.speaker_id, "text": s.text}
+                            for s in removed]})
         report("diarize", t("eng_main_done"), 85, "done")
 
     # 5) IELTS analysis ------------------------------------------------------
@@ -220,6 +264,11 @@ def run(
         extra_markdown_suffix=extra_suffix,
     )
     report("export", t("eng_export_done"), 100, "done")
+    provenance.append_meta(output_dir, {
+        "name": "export",
+        "files": {k: {"file": v.name, "sha256": provenance.sha256_file(v)}
+                  for k, v in outputs.items()},
+    })
 
     elapsed = time.time() - t_start
     summary = {
