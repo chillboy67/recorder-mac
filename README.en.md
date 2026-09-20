@@ -340,11 +340,14 @@ Full requirements and design trade-offs are documented in [REQUIREMENTS.md](REQU
 
 ## Directory notes
 
-- `lecture_intel/` — the app itself (the only actively maintained code).
-- `aura_gui/` — a standalone design draft for the UI redesign, kept for reference.
-- `lecture_intel/gui_old/`, `pipeline.py`, `config.yaml`, and the lecture-classification/structured
+- `lecture_intel/` — the app itself (the only actively maintained code). Before touching the UI, read
+  [`lecture_intel/docs/GUI_DESIGN.md`](lecture_intel/docs/GUI_DESIGN.md) (design rules that must hold)
+  and [`lecture_intel/docs/LLM_MODELS.md`](lecture_intel/docs/LLM_MODELS.md) (local LLM choices).
+- `aura_gui/`, `lecture_intel/gui_old/`, `pipeline.py`, `config.yaml`, and the lecture-classification/structured
   modules in `modules/` — earlier implementations superseded by the `core/` engine; deleted on
   2026-09-20 (`modules/audio_loader.py` and its dataclasses are still in use, so `modules/` remains).
+  `aura_gui/` was the design draft for the UI redesign — already merged into `lecture_intel/gui/`; its
+  design intent now lives in `lecture_intel/docs/GUI_DESIGN.md`.
 - `backend/` + `frontend/` — the original FastAPI-based IELTS scoring prototype; its analysis approach
   (pronunciation confidence, grammar rules, report templates) has been folded into `lecture_intel/core/ielts.py`.
   Kept for archival purposes only, safe to ignore.
