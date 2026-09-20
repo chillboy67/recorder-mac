@@ -50,7 +50,9 @@ class AudioLoader:
     def __init__(self, config: dict):
         """
         Args:
-            config: The 'audio' section from config.yaml.
+            config: Optional overrides for the conversion target. Callers pass
+                an empty dict to get the defaults (16 kHz / mono / WAV); the
+                old YAML-driven configuration is gone with the legacy pipeline.
         """
         self.target_sample_rate = config.get("target_sample_rate", TARGET_SAMPLE_RATE)
         self.target_channels = config.get("target_channels", TARGET_CHANNELS)

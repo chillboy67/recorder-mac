@@ -1,1 +1,0 @@
-"""GUI widget components."""

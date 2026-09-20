@@ -1,14 +1,14 @@
 """
-Lecture Intelligence System - Modules Package.
+Lecture Intelligence System - shared data types.
 
-Each module exposes a single main class with:
-  - __init__(self, config: dict)  — receives its section from config.yaml
-  - process(self, input) -> output  — main processing method
+The dataclasses here (AudioFile / ASRSegment / ASRWord / ASRResult / …) are the
+common vocabulary passed between `core/` and the GUI. `modules/audio_loader.py`
+is the only implementation remaining alongside them; the other modules that used
+to live in this package belonged to the retired 11-step pipeline and have been
+deleted — `core/engine.py` is the sole orchestrator now.
 
 All Result objects MUST include:
   - processing_time_ms: float
-
-Modules are independent; pipeline.py is the sole orchestrator.
 """
 
 from __future__ import annotations
