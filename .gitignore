@@ -37,3 +37,6 @@ backend/.pytest_cache/
 .DS_Store
 .idea/
 .vscode/
+
+# ── 智能体工作区数据（本地记忆等，不入库）────────────────────
+.workbuddy/
