@@ -175,10 +175,11 @@ def test_l1_advancing_timeline_proceeds_to_l2():
 
 
 @pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg not installed")
-def test_l2_silencedetect_on_synthetic_audio(tmp_path):
+def test_l2_silencedetect_on_synthetic_audio(tmp_path, monkeypatch):
     import numpy as np
     import soundfile as sf
     from core.repeat_arbitration import classify_run, find_repeat_runs
+    import core.repeat_arbitration as ra
     sr = 16000
 
     def wav_of(kind):
@@ -197,13 +198,45 @@ def test_l2_silencedetect_on_synthetic_audio(tmp_path):
         sf.write(p, w, sr)
         return p
 
+    class Mock:
+        """L3 re-decode: the greedy model hears exactly one copy."""
+        def transcribe(self, path, **kw):
+            seg = _wseg(_loop_tokens("no", 1))
+            return ASRResult(segments=[seg], full_text=seg.text,
+                             language="en", model_used="mock")
+
     toks = _loop_tokens("no", 4, dur=0.25, step=0.35)
     (run,) = find_repeat_runs(_wseg(toks))
-    for kind, want in (("pulses", "real_speech"), ("tone", "asr_loop"),
-                       ("silence", "asr_loop")):
-        v = classify_run(run, wav_of(kind), None, "en", median_dur=0.25)
-        assert v.verdict == want, (kind, v.evidence)
-        assert v.evidence["level"] == 2
+    # strong voicing evidence is conclusive for real speech at L2
+    v = classify_run(run, wav_of("pulses"), None, "en", median_dur=0.25)
+    assert v.verdict == "real_speech" and v.evidence["level"] == 2
+    # low burst count is NOT trusted as asr_loop — it must escalate to L3
+    for kind in ("tone", "silence"):
+        v = classify_run(run, wav_of(kind), Mock(), "en", median_dur=0.25)
+        assert v.verdict == "asr_loop", (kind, v.evidence)
+        assert v.evidence["level"] == 3, (kind, v.evidence)
+
+
+def test_l1_long_rapid_real_run_escapes_frozen_clock_test(tmp_path, monkeypatch):
+    """Real rapid stutter: 8 copies in 1.2 s (per-copy ≪ median word). The
+    relative timeline test would flag it (span < 0.5×expected) — the absolute
+    FROZEN_SPAN_MAX cap must save it, and L2's low burst count must escalate
+    to L3 instead of concluding asr_loop directly."""
+    import core.repeat_arbitration as ra
+    monkeypatch.setattr(ra, "_extract_clip", lambda *a, **k: str(tmp_path / "clip.wav"))
+    toks = _loop_tokens("no", 8, dur=0.15, step=0.15)
+    (run,) = ra.find_repeat_runs(_wseg(toks))
+    monkeypatch.setattr(ra, "_count_voiced_bursts", lambda *a, **k: 2)
+
+    class Mock:
+        def transcribe(self, path, **kw):
+            seg = _wseg(_loop_tokens("no", 8))
+            return ASRResult(segments=[seg], full_text=seg.text,
+                             language="en", model_used="mock")
+
+    v = ra.classify_run(run, "x.wav", Mock(), "en", median_dur=0.25)
+    assert v.verdict == "real_speech"
+    assert v.evidence["level"] == 3 and v.evidence["redecoded_copies"] == 8
 
 
 def test_l3_redecode_with_mock_transcriber(tmp_path, monkeypatch):
@@ -231,6 +264,33 @@ def test_l3_redecode_with_mock_transcriber(tmp_path, monkeypatch):
     assert v.verdict == "real_speech"
     v = ra.classify_run(run, "x.wav", Mock(2), "en", median_dur=0.25)
     assert v.verdict == "uncertain"
+
+
+def test_l3_empty_or_misheard_redecode_is_uncertain_not_asr_loop(tmp_path, monkeypatch):
+    """A greedy re-decode that returns NOTHING, or hears different words than
+    the n-gram (e.g. a shouted window on phone audio), must not count as
+    'model heard one copy' — folding on that would destroy real stutter."""
+    import core.repeat_arbitration as ra
+    monkeypatch.setattr(ra, "_extract_clip", lambda *a, **k: str(tmp_path / "clip.wav"))
+    monkeypatch.setattr(ra, "_count_voiced_bursts", lambda *a, **k: 1)
+    toks = _loop_tokens("谢谢", 4, dur=0.3, step=0.35)
+    (run,) = ra.find_repeat_runs(_wseg(toks, language="zh"))
+
+    class Empty:
+        def transcribe(self, path, **kw):
+            return ASRResult(segments=[], full_text="", language="zh",
+                             model_used="mock")
+
+    class Mishear:
+        def transcribe(self, path, **kw):   # hears something, but not 谢谢
+            seg = _wseg(_loop_tokens("是", 2, dur=0.3, step=0.35), language="zh")
+            return ASRResult(segments=[seg], full_text=seg.text,
+                             language="zh", model_used="mock")
+
+    for mock in (Empty(), Mishear()):
+        v = ra.classify_run(run, "x.wav", mock, "zh", median_dur=0.3)
+        assert v.verdict == "uncertain"
+        assert v.evidence["level"] == 3
 
 
 def test_apply_verdicts_general_annotates_only():
