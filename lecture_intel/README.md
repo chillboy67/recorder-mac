@@ -29,7 +29,8 @@ app.py            PySide6 GUI entry (double-click target)
 transcribe.py     CLI entry
 make_app.sh        builds dist/Recorder.app (lightweight launcher → venv)
 
-core/             ← the new, focused engine
+core/             ← the engine (mode-driven)
+
   modes.py        general / classroom / ielts presets
   transcriber.py  whole-file Whisper (mlx-whisper → faster-whisper fallback)
   denoise.py      ffmpeg cleanup for classroom mode
@@ -39,13 +40,12 @@ core/             ← the new, focused engine
   engine.py       the single orchestrator: run(input, output, mode)
 
 gui/              PySide6 widgets (input / settings / progress / results)
-modules/          shared dataclasses + AudioLoader (reused);
-                  the old 11-step pipeline.py lives here but is no longer used.
+modules/          shared dataclasses + AudioLoader (both still in use)
 tests/            core-logic regression tests (no model needed)
 ```
 
-The old `pipeline.py` + course-classifier / LLM-correction / lecture-structuring
-modules are superseded by `core/engine.py` and kept only for reference.
+The legacy 11-step `pipeline.py` and its course-classifier / LLM-correction /
+lecture-structuring modules have been deleted — `core/engine.py` replaced them.
 
 ## Models (offline / China-friendly)
 

@@ -326,9 +326,9 @@ python -m pytest          # 仓库根目录运行，仅覆盖 lecture_intel/（�
 
 - `lecture_intel/` — App 主体（唯一在维护的代码）。
 - `aura_gui/` — 界面改版的独立设计稿版本，供替换参考。
-- `lecture_intel/gui_old/`、`pipeline.py`、`modules/` 中的课程分类与结构化模块 —
-  被 `core/` 引擎取代的早期实现，保留存档（`modules/audio_loader.py` 与其中的
-  数据类仍在使用）。
+- `lecture_intel/gui_old/`、`pipeline.py`、`config.yaml` 与 `modules/` 中的课程分类
+  与结构化模块 — 被 `core/` 引擎取代的早期实现，已于 2026-09-20 删除
+  （`modules/audio_loader.py` 与其中的数据类仍在使用，故 `modules/` 目录保留）。
 - `backend/` + `frontend/` — 最早的 FastAPI 雅思批改原型，其分析思路
   （发音置信度、语法规则、报告模板）已并入 `lecture_intel/core/ielts.py`，
   保留仅作存档，可忽略。
