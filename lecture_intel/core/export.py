@@ -144,6 +144,7 @@ def _json(asr, out_dir, base, labels) -> Path:
             for s in asr.segments
         ],
         "warnings": asr.warnings,
+        "annotations": asr.annotations,
     }
     p = out_dir / f"{base}.json"
     p.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
