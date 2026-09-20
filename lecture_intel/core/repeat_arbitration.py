@@ -45,6 +45,12 @@ SILENCE_NOISE_DB = -35.0
 # counts as a separator. Bursts shorter than ~120 ms are not reliable copies.
 SILENCE_MIN_DUR = 0.08
 RECODE_OK_RATIO = 0.75
+# L3 re-decodes the run window at several temperatures: real stutter survives
+# across decoding strategies (the n-gram is in the audio), while a decode-loop
+# artifact is unstable. The greedy seed (0.0) keeps the historic semantics;
+# the sampling seeds act as a rescue oracle — e.g. a shouted phone-call window
+# that greedy hears as nothing can still reproduce the n-gram under sampling.
+L3_SEEDS = (0.0, 0.2, 0.8)
 
 
 # ----------------------------------------------------------------------
@@ -149,8 +155,15 @@ def median_word_duration(segments: list[ASRSegment]) -> float:
 # ----------------------------------------------------------------------
 
 def classify_run(run: Run, wav_path, transcriber, segment_lang: str,
-                 median_dur: float) -> Verdict:
-    """Three-level arbitration; earlier levels are cheaper and decisive."""
+                 median_dur: float, oracle_path=None) -> Verdict:
+    """Three-level arbitration; earlier levels are cheaper and decisive.
+
+    `oracle_path` (defaults to `wav_path`) is the audio L3 re-decodes. The
+    engine passes the *pre-denoise* original: denoise can induce decode loops,
+    and re-hearing the same denoised audio only reproduces the artifact.
+    Re-hearing the original is the truthful test — real stutter is in the
+    acoustics whether or not it was denoised.
+    """
     if not run.verified:
         return Verdict(run.segment_id, run.start, run.end, run.original,
                        "uncertain",
@@ -184,30 +197,50 @@ def classify_run(run: Run, wav_path, transcriber, segment_lang: str,
                         "suspect": suspect}, run=run)
     if voiced is not None:
         suspect = True   # low burst count on live audio: treat as suspect
-    # L3 — isolated re-decode: greedy (temperature 0), no cross-window context.
-    copies = _redecode_copies(wav_path, run, transcriber, segment_lang)
-    if copies is None:
+    # L3 — isolated re-decode (greedy + sampling seeds), no cross-window
+    # context, judged against the pre-denoise original when the engine gives
+    # it. Any seed that reproduces most of the run proves the n-gram is in
+    # the audio (real_speech); a greedy single-copy collapse confirms asr_loop.
+    # Zero reproductions on the pipeline audio stays uncertain (fidelity-first
+    # — the model may simply not hear a real stutter in degraded audio); but
+    # zero reproductions on ALL seeds over the PRE-DENOISE original means the
+    # repetition is absent from the recording → asr_loop (foldable in
+    # classroom, original kept in the annotation).
+    counts = _redecode_copies(oracle_path or wav_path, run, transcriber,
+                              segment_lang)
+    oracle = "original" if oracle_path else "pipeline"
+    ok = [c for c in counts if c is not None]
+    if not ok:
         return Verdict(run.segment_id, run.start, run.end, run.original,
                        "uncertain",
                        {"level": 3, "reason": "re-decode failed",
+                        "oracle": oracle, "seeds": list(counts),
                         "suspect": suspect}, run=run)
-    if copies == 0:
-        # The model re-heard the window but could not find the n-gram at all —
-        # acoustic ambiguity, not proof of a loop. Only a clean single copy
-        # confirms asr_loop; zero copies must keep the text (fidelity-first).
-        return Verdict(run.segment_id, run.start, run.end, run.original,
-                       "uncertain",
-                       {"level": 3, "redecoded_copies": 0, "k": run.k,
-                        "reason": "re-decode could not reproduce the n-gram",
-                        "suspect": suspect}, run=run)
-    if copies == 1:
-        verdict = "asr_loop"
-    elif copies >= RECODE_OK_RATIO * run.k:
+    primary = counts[0]
+    if any(c >= RECODE_OK_RATIO * run.k for c in ok):
         verdict = "real_speech"
+    elif primary == 1:
+        verdict = "asr_loop"
+    elif oracle == "original" and len(ok) == len(counts) and all(
+            c == 0 for c in ok):
+        # Every decoding strategy heard NOTHING of the n-gram in the
+        # pre-denoise original — yet the pipeline (possibly denoised) decode
+        # produced k copies. The repetition is not in the recording; it was
+        # invented downstream (denoise/context). Strongest artifact evidence
+        # available; classroom folds it (original kept in the annotation).
+        verdict = "asr_loop"
     else:
         verdict = "uncertain"
     return Verdict(run.segment_id, run.start, run.end, run.original, verdict,
-                   {"level": 3, "redecoded_copies": copies, "k": run.k,
+                   {"level": 3, "redecoded_copies": primary, "k": run.k,
+                    "oracle": oracle, "seeds": list(counts),
+                    "reason": ("stable reproduction on original audio"
+                               if verdict == "real_speech" and oracle == "original"
+                               else "zero copies on all seeds over the original — "
+                                    "repetition absent from the recording"
+                               if verdict == "asr_loop" and oracle == "original"
+                               else "re-decode could not reproduce the n-gram"
+                               if verdict == "uncertain" else None),
                     "suspect": suspect}, run=run)
 
 
@@ -261,40 +294,43 @@ def _count_voiced_bursts(wav_path, a: float, b: float) -> Optional[int]:
         Path(clip).unlink(missing_ok=True)
 
 
-def _redecode_copies(wav_path, run: Run, transcriber, segment_lang: str
-                     ) -> Optional[int]:
-    """Re-transcribe the run's window in isolation (greedy, no context) and
-    count how many copies of the n-gram the model still hears. None on error."""
+def _redecode_copies(wav_path, run: Run, transcriber, segment_lang: str,
+                     seeds: tuple = L3_SEEDS) -> list[Optional[int]]:
+    """Re-transcribe the run's window in isolation at several temperatures
+    (no context) and count how many copies of the n-gram the model still hears
+    per seed. A seed that returns nothing is None (inconclusive), never zero —
+    an empty greedy pass on a shouted window is not evidence of a loop.
+    """
     clip = _extract_clip(wav_path, run.start - SILENCE_PAD, run.end + SILENCE_PAD)
     if clip is None:
-        return None
+        return [None] * len(seeds)
     try:
         lang = segment_lang if segment_lang in ("en", "zh", "ja", "ko", "fr",
                                                 "de", "es") else None
-        result = transcriber.transcribe(
-            Path(clip), language=lang, condition_on_previous=False,
-            temperature=(0.0,))
-        toks = [w.word for s in result.segments for w in s.words]
-        if not toks:
-            toks = result.full_text.split()
-        if not toks:
-            # An empty re-decode is inconclusive, not evidence of a loop: on
-            # real phone-call speech the greedy pass can return nothing for a
-            # shouted 3-second window. Folding on "the model heard silence"
-            # would destroy real stutter.
-            return None
-        toks = [_norm(w) for w in toks]
-        n, count, i = len(run.gram), 0, 0
-        while i + n <= len(toks):
-            if tuple(toks[i:i + n]) == run.gram:
-                count += 1
-                i += n
-            else:
-                i += 1
-        return count
+        counts: list[Optional[int]] = []
+        for seed in seeds:
+            result = transcriber.transcribe(
+                Path(clip), language=lang, condition_on_previous=False,
+                temperature=(seed,))
+            toks = [w.word for s in result.segments for w in s.words]
+            if not toks:
+                toks = result.full_text.split()
+            if not toks:
+                counts.append(None)
+                continue
+            toks = [_norm(w) for w in toks]
+            n, count, i = len(run.gram), 0, 0
+            while i + n <= len(toks):
+                if tuple(toks[i:i + n]) == run.gram:
+                    count += 1
+                    i += n
+                else:
+                    i += 1
+            counts.append(count)
+        return counts
     except Exception as exc:
         logger.warning("L3 re-decode failed: %s", exc)
-        return None
+        return [None] * len(seeds)
     finally:
         Path(clip).unlink(missing_ok=True)
 
@@ -303,14 +339,20 @@ def _redecode_copies(wav_path, run: Run, transcriber, segment_lang: str
 # Orchestration + application
 # ----------------------------------------------------------------------
 
-def arbitrate(asr: ASRResult, wav_path, transcriber) -> list[Verdict]:
-    """Find every repeat run in the result and classify it."""
+def arbitrate(asr: ASRResult, wav_path, transcriber,
+              oracle_path=None) -> list[Verdict]:
+    """Find every repeat run in the result and classify it.
+
+    `oracle_path` is the audio L3 re-decodes (the engine passes the
+    pre-denoise original, see ``classify_run``); defaults to ``wav_path``.
+    """
     med = median_word_duration(asr.segments)
     verdicts = []
     for seg in asr.segments:
         for run in find_repeat_runs(seg):
             verdicts.append(classify_run(run, wav_path, transcriber,
-                                         seg.language, med))
+                                         seg.language, med,
+                                         oracle_path=oracle_path))
     return verdicts
 
 
