@@ -253,7 +253,7 @@ def test_l3_redecode_with_mock_transcriber(tmp_path, monkeypatch):
 
         def transcribe(self, path, **kw):
             assert kw["condition_on_previous"] is False
-            assert kw["temperature"] == (0.0,)
+            assert kw["temperature"] in ((0.0,), (0.2,), (0.8,))
             seg = _wseg(_loop_tokens("no", self.k))
             return ASRResult(segments=[seg], full_text=seg.text,
                              language="en", model_used="mock")
@@ -291,6 +291,93 @@ def test_l3_empty_or_misheard_redecode_is_uncertain_not_asr_loop(tmp_path, monke
         v = ra.classify_run(run, "x.wav", mock, "zh", median_dur=0.3)
         assert v.verdict == "uncertain"
         assert v.evidence["level"] == 3
+
+
+def test_l3_sampling_seed_rescues_real_stutter_greedy_heard_nothing(
+        tmp_path, monkeypatch):
+    """Greedy (seed 0.0) hears nothing on a degraded window, but a sampling
+    seed reproduces the run → real_speech: the n-gram IS in the audio. This is
+    the 14.3 'shouted phone-call window' correction, now recovered by seeds."""
+    import core.repeat_arbitration as ra
+    monkeypatch.setattr(ra, "_extract_clip",
+                        lambda *a, **k: str(tmp_path / "clip.wav"))
+    monkeypatch.setattr(ra, "_count_voiced_bursts", lambda *a, **k: 1)
+    toks = _loop_tokens("打", 4, dur=0.3, step=0.35)
+    (run,) = ra.find_repeat_runs(_wseg(toks, language="zh"))
+
+    class Mock:
+        def __init__(self, per_seed):
+            self.per_seed = iter(per_seed)
+
+        def transcribe(self, path, **kw):
+            word, k = next(self.per_seed)
+            seg = _wseg(_loop_tokens(word, k, dur=0.3, step=0.35),
+                        language="zh")
+            return ASRResult(segments=[seg], full_text=seg.text,
+                             language="zh", model_used="mock")
+
+    v = ra.classify_run(run, "x.wav", Mock([("是", 1), ("打", 4), ("打", 2)]),
+                        "zh", median_dur=0.3)
+    assert v.verdict == "real_speech"
+    assert v.evidence["seeds"] == [0, 4, 2]
+    assert v.evidence["oracle"] == "pipeline"
+
+
+def test_l3_redecodes_against_oracle_original(tmp_path, monkeypatch):
+    """The engine passes the pre-denoise original as the L3 oracle; the
+    re-decode clip must be cut from that file, not the denoised pipeline wav.
+    A single surviving copy on the original confirms the collapse → asr_loop."""
+    import core.repeat_arbitration as ra
+    seen: list[str] = []
+    monkeypatch.setattr(
+        ra, "_extract_clip",
+        lambda wav, a, b: (seen.append(str(wav)) or str(tmp_path / "clip.wav")))
+    monkeypatch.setattr(ra, "_count_voiced_bursts", lambda *a, **k: 1)
+    toks = _loop_tokens("no", 4, dur=0.25, step=0.35)
+    (run,) = ra.find_repeat_runs(_wseg(toks))
+
+    class Mock:
+        def transcribe(self, path, **kw):
+            seg = _wseg(_loop_tokens("no", 1))
+            return ASRResult(segments=[seg], full_text=seg.text,
+                             language="en", model_used="mock")
+
+    v = ra.classify_run(run, "/pip/denoised.wav", Mock(), "en",
+                        median_dur=0.25, oracle_path="/pip/original.wav")
+    assert v.verdict == "asr_loop"
+    assert v.evidence["oracle"] == "original"
+    assert seen and all(p == "/pip/original.wav" for p in seen)
+
+
+def test_l3_all_seeds_zero_on_original_is_asr_loop_but_pipeline_stays_uncertain(
+        tmp_path, monkeypatch):
+    """Zero copies on every seed over the PRE-DENOISE original → the repetition
+    is absent from the recording → asr_loop (foldable in classroom, original
+    kept in the annotation). The SAME re-decode on the pipeline audio stays
+    uncertain — 14.3's '0 copies = ambiguous' correction still holds there."""
+    import core.repeat_arbitration as ra
+    monkeypatch.setattr(ra, "_extract_clip",
+                        lambda *a, **k: str(tmp_path / "clip.wav"))
+    monkeypatch.setattr(ra, "_count_voiced_bursts", lambda *a, **k: 1)
+    toks = _loop_tokens("打", 4, dur=0.3, step=0.35)
+    (run,) = ra.find_repeat_runs(_wseg(toks, language="zh"))
+
+    class Mishear:
+        def transcribe(self, path, **kw):
+            seg = _wseg(_loop_tokens("是", 2, dur=0.3, step=0.35),
+                        language="zh")
+            return ASRResult(segments=[seg], full_text=seg.text,
+                             language="zh", model_used="mock")
+
+    v = ra.classify_run(run, "x.wav", Mishear(), "zh", median_dur=0.3,
+                        oracle_path="/pip/original.wav")
+    assert v.verdict == "asr_loop"
+    assert v.evidence["oracle"] == "original"
+    assert v.evidence["seeds"] == [0, 0, 0]
+
+    v = ra.classify_run(run, "x.wav", Mishear(), "zh", median_dur=0.3)
+    assert v.verdict == "uncertain"
+    assert v.evidence["oracle"] == "pipeline"
 
 
 def test_apply_verdicts_general_annotates_only():

@@ -65,7 +65,7 @@ def run(
     # 0) Archive the input for provenance -----------------------------------
     # The output dir becomes self-contained evidence: original.wav (capture-faithful,
     # never modified) + meta.json tracing every later transformation.
-    provenance.archive_input(input_path, output_dir)
+    original = provenance.archive_input(input_path, output_dir)
 
     # 1) Load + normalize to 16k mono wav -----------------------------------
     report("load", t("eng_load_start"), 4)
@@ -140,7 +140,10 @@ def run(
     # only confirmed loops in classroom mode (original always kept).
     from core.repeat_arbitration import (adjacent_duplicate_segments,
                                          apply_verdicts, arbitrate)
-    verdicts = arbitrate(asr, wav_path, transcriber)
+    # L3 re-hears repeat runs against the PRE-DENOISE original: denoise can
+    # induce decode loops, and re-hearing the same denoised audio only
+    # reproduces the artifact. Real stutter is in the original acoustics.
+    verdicts = arbitrate(asr, wav_path, transcriber, oracle_path=original)
     apply_verdicts(asr, verdicts, mode.key)
     # Adjacent duplicate segments (a loop that spans segment boundaries):
     # classroom keeps the old drop-the-copy behaviour (recorded in meta);
@@ -161,7 +164,8 @@ def run(
     # The fidelity audit trail lives in meta.json too, not only the json
     # export — general/IELTS modes don't export json by default.
     provenance.append_meta(output_dir, {
-        "name": "annotations", "annotations": asr.annotations})
+        "name": "annotations", "annotations": asr.annotations,
+        "oracle_audio": str(original)})
 
     labels: Optional[dict[int, str]] = None
     ielts_report = None
