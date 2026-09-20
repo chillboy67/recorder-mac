@@ -1,54 +1,46 @@
-# Lecture Intelligence System — Complete Dependencies
-# macOS 26.4 · Apple Silicon · faster-whisper · Phi-4 / Llama 3.1 / Gemma 3
-# All free & open-source, completely offline after initial model download
+# Recorder — runtime dependencies
+# macOS · Apple Silicon · mlx-whisper (Metal) with faster-whisper CPU fallback
+# All free & open-source, completely offline after the initial model download.
+#
+# Only what the live tree actually imports (core/ gui/ app.py transcribe.py
+# download_models.py eval/). The legacy pipeline's dependencies were removed
+# together with pipeline.py / main.py / modules/* and are no longer listed.
 
-# ── Audio Processing ──────────────────────────────────────────
-pydub>=0.25.1
+# ── Audio I/O ────────────────────────────────────────────────
 soundfile>=0.12.1
-librosa>=0.10.1
+librosa>=0.10.1            # resampling + silence splitting (10x faster than scipy)
 numpy>=1.24.0
 
-# ── P1-A: Audio Enhancement ──────────────────────────────────
-deepfilternet>=0.5.6
-torch>=2.1.0
-torchaudio>=2.1.0
-
-# ── VAD ──────────────────────────────────────────────────────
-# silero-vad loaded via torch.hub (no separate package needed)
-# torch already installed above
-
-# ── ASR (faster-whisper — mlx-whisper pending macOS 26.4 compat) ──
+# ── ASR ──────────────────────────────────────────────────────
+# Primary engine is mlx-whisper (Apple Silicon GPU / Metal). faster-whisper is
+# the CPU fallback used when mlx is unavailable. Both are required: dropping
+# mlx-whisper silently degrades the default `auto` engine to CPU.
+mlx-whisper>=0.4.0
 faster-whisper>=1.0.0
-ctranslate2>=3.24.0
 
-# ── P1-B: Course Classification ──────────────────────────────
-FlagEmbedding>=1.2.0       # BGE-M3
-sentence-transformers>=2.6.0
+# ── Speaker separation (diarization) ─────────────────────────
+# Imported lazily by core/diarize.py — a missing package does NOT raise, it
+# silently drops speaker labels. Keep both declared.
+resemblyzer>=0.1.3
+scikit-learn>=1.3.0
 
-# ── P1-C: Terminology Correction ─────────────────────────────
-rapidfuzz>=3.5.0           # fuzzy string matching (10x faster than fuzzywuzzy)
-regex>=2023.10.3
+# torch is required at runtime by BOTH resemblyzer (>=1.0.1) and mlx-whisper,
+# so it always arrives transitively. Listed explicitly to pin our tested floor:
+# the old requirements.txt carried a stale `torchaudio`/`deepfilternet` pair
+# instead, which nothing in the live tree imports.
+torch>=2.1.0
 
-# ── P2-A: Speaker Diarization (optional, needs HuggingFace token) ──
-pyannote.audio>=3.1.0
-
-# ── LLM Correction (via Ollama local runtime) ────────────────
-ollama>=0.2.0              # Ollama Python client
+# ── Local LLM enhancement (optional, via a local Ollama runtime) ──
+# Talks to Ollama over HTTP; no Python client needed.
+# Models used: mistral / qwen3 (see core/llm.py). Ollama itself is not a pip
+# dependency — install it separately and pull the models.
 httpx>=0.28.1
 
 # ── Export ───────────────────────────────────────────────────
 python-docx>=1.1.0
-markdown>=3.5.1
-
-# ── Evaluation ───────────────────────────────────────────────
-jiwer>=3.0.3               # WER / CER calculation
-
-# ── Utilities ────────────────────────────────────────────────
-pyyaml>=6.0.1
-rich>=13.7.0               # terminal progress bars
-click>=8.1.7               # CLI
-tqdm>=4.66.1
-python-magic>=0.4.27       # file type detection
 
 # ── GUI (desktop app) ─────────────────────────────────────────
 pyside6>=6.7.0
+
+# ── Dev / test only ───────────────────────────────────────────
+# pytest>=8.0.0
