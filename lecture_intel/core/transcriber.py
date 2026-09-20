@@ -27,7 +27,6 @@ Design decisions that matter for accuracy (these fix the old pipeline's
 from __future__ import annotations
 
 import logging
-import re
 import time
 from pathlib import Path
 from typing import Callable, Optional
@@ -454,45 +453,6 @@ class Transcriber:
                 words=words,
             ))
         return segments
-
-
-def _collapse_repeats(text: str) -> str:
-    """Collapse runaway ASR repetition loops down to a single copy.
-
-    Two passes, because Chinese has no spaces:
-      1. character/substring level — a 1–8 char unit repeated ≥4× (catches
-         "時時時時…" and "啊啊啊", which word-splitting misses);
-      2. word level — for space-separated languages ("no no no no").
-    ≥4 repeats so genuine emphasis ("no, no, no") is preserved."""
-    if not text:
-        return text
-    # 1) substring-level (handles no-space scripts). Non-greedy 1–8 char unit
-    #    repeated 4+ times → keep one copy.
-    text = re.sub(r"(.{1,8}?)\1{3,}", r"\1", text)
-
-    # 2) word-level
-    words = text.split()
-    if len(words) < 6:
-        return text
-    for n in (1, 2, 3, 4):
-        out, i = [], 0
-        while i < len(words):
-            gram = words[i:i + n]
-            if len(gram) < n:
-                out.extend(words[i:])
-                break
-            reps, j = 1, i + n
-            while words[j:j + n] == gram:
-                reps += 1
-                j += n
-            if reps >= 4:
-                out.extend(gram)   # keep a single copy
-                i = j
-            else:
-                out.append(words[i])
-                i += 1
-        words = out
-    return " ".join(words)
 
 
 def _local_model_dir(model: str):
