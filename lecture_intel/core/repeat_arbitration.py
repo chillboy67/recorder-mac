@@ -34,6 +34,11 @@ MAX_NGRAM = 4          # longest repeating unit considered ("no" = 1, "the fact"
 MIN_REPEATS = 4        # k ≥ 4 — genuine emphasis ("no, no, no") stays untouched
 TIMELINE_FACTOR = 0.6  # speech occupies ~60% of its span; the rest is pauses
 TIMELINE_ASR_LOOP = 0.5
+# A frozen-clock loop spans about ONE copy no matter how many times the decoder
+# re-emits it; a real rapid stutter still consumes k× real time. The absolute
+# cap keeps long real runs (e.g. 200 copies of "不" in 12 s, each far faster
+# than the file-wide median word) from being misjudged by the relative test.
+FROZEN_SPAN_MAX = 0.8  # seconds
 SILENCE_PAD = 0.3      # clip padding around the run for the audio probes
 SILENCE_NOISE_DB = -35.0
 # silencedetect only takes one duration: the minimum *silence* length that
@@ -159,27 +164,26 @@ def classify_run(run: Run, wav_path, transcriber, segment_lang: str,
     copy_durs = [run.words[(i + 1) * run.n - 1].end - run.words[i * run.n].start
                  for i in range(run.k)]
     suspect = len(copy_durs) >= 3 and statistics.pstdev(copy_durs) < 0.02
-    if span < TIMELINE_ASR_LOOP * expected:
+    if span < TIMELINE_ASR_LOOP * expected and span < FROZEN_SPAN_MAX:
         return Verdict(run.segment_id, run.start, run.end, run.original,
                        "asr_loop",
                        {"level": 1, "span_sec": round(span, 3),
                         "expected_sec": round(expected, 3)}, run=run)
     # L2 — silencedetect: each real copy is voiced separately, so a genuine
-    # k-fold stutter shows ~k voiced bursts; a looped tone (or looped silence)
-    # shows far fewer.
+    # k-fold stutter shows ~k voiced bursts. A high count is trusted as
+    # real_speech; a LOW count is not trusted as asr_loop, because rapid real
+    # stutter (or a noisy line) can merge every copy into one continuous burst
+    # — the annotation on real phone-call speech proved this. Low counts
+    # escalate to L3; only the model's re-decode may fold.
     voiced = _count_voiced_bursts(wav_path, run.start - SILENCE_PAD,
                                   run.end + SILENCE_PAD)
+    if voiced is not None and voiced >= 0.8 * run.k:
+        return Verdict(run.segment_id, run.start, run.end, run.original,
+                       "real_speech",
+                       {"level": 2, "voiced_bursts": voiced, "k": run.k,
+                        "suspect": suspect}, run=run)
     if voiced is not None:
-        if voiced < 0.6 * run.k:
-            return Verdict(run.segment_id, run.start, run.end, run.original,
-                           "asr_loop",
-                           {"level": 2, "voiced_bursts": voiced, "k": run.k,
-                            "suspect": suspect}, run=run)
-        if voiced >= 0.8 * run.k:
-            return Verdict(run.segment_id, run.start, run.end, run.original,
-                           "real_speech",
-                           {"level": 2, "voiced_bursts": voiced, "k": run.k,
-                            "suspect": suspect}, run=run)
+        suspect = True   # low burst count on live audio: treat as suspect
     # L3 — isolated re-decode: greedy (temperature 0), no cross-window context.
     copies = _redecode_copies(wav_path, run, transcriber, segment_lang)
     if copies is None:
@@ -187,7 +191,16 @@ def classify_run(run: Run, wav_path, transcriber, segment_lang: str,
                        "uncertain",
                        {"level": 3, "reason": "re-decode failed",
                         "suspect": suspect}, run=run)
-    if copies <= 1:
+    if copies == 0:
+        # The model re-heard the window but could not find the n-gram at all —
+        # acoustic ambiguity, not proof of a loop. Only a clean single copy
+        # confirms asr_loop; zero copies must keep the text (fidelity-first).
+        return Verdict(run.segment_id, run.start, run.end, run.original,
+                       "uncertain",
+                       {"level": 3, "redecoded_copies": 0, "k": run.k,
+                        "reason": "re-decode could not reproduce the n-gram",
+                        "suspect": suspect}, run=run)
+    if copies == 1:
         verdict = "asr_loop"
     elif copies >= RECODE_OK_RATIO * run.k:
         verdict = "real_speech"
@@ -264,6 +277,12 @@ def _redecode_copies(wav_path, run: Run, transcriber, segment_lang: str
         toks = [w.word for s in result.segments for w in s.words]
         if not toks:
             toks = result.full_text.split()
+        if not toks:
+            # An empty re-decode is inconclusive, not evidence of a loop: on
+            # real phone-call speech the greedy pass can return nothing for a
+            # shouted 3-second window. Folding on "the model heard silence"
+            # would destroy real stutter.
+            return None
         toks = [_norm(w) for w in toks]
         n, count, i = len(run.gram), 0, 0
         while i + n <= len(toks):
