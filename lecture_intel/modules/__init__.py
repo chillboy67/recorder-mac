@@ -73,6 +73,10 @@ class ASRResult:
     audio_duration_sec: float = 0.0
     warnings: list[str] = field(default_factory=list)
     processing_time_ms: float = 0.0
+    # Fidelity audit trail: repeat-arbitration verdicts, dropped-duplicate
+    # markers, etc. Every entry keeps the original text so annotations never
+    # destroy what the speaker (or the model) actually produced.
+    annotations: list[dict] = field(default_factory=list)
 
 
 @dataclass

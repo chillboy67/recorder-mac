@@ -19,8 +19,10 @@ Design decisions that matter for accuracy (these fix the old pipeline's
    the IELTS mode flag *likely* mispronunciations, and the per-word timing is
    what the diarizer needs.
 
-4. **Faithful output.** temperature=0 (greedy, deterministic) with Whisper's
-   standard fallback ladder; no paraphrasing anywhere.
+4. **Faithful output.** First pass at temperature 0 with beam search; only
+   windows Whisper itself flags as unstable (low avg logprob or high compression
+   ratio) are retried at temperature 0.4, which samples — those windows are not
+   byte-for-byte reproducible. No paraphrasing anywhere.
 """
 from __future__ import annotations
 
@@ -57,7 +59,7 @@ _COMPRESSION_RATIO_THRESHOLD = 2.4
 # Short ladder: a hard 30s window is retried at most twice instead of 6×. The
 # full 6-step ladder triples-to-sextuples the compute on noisy lectures (lots of
 # heat) for little gain, and runaway loops are cleaned afterwards anyway.
-_TEMPERATURE_LADDER = (0.0, 0.4)
+TEMPERATURE_LADDER = (0.0, 0.4)
 
 
 class Transcriber:
@@ -87,10 +89,11 @@ class Transcriber:
         *,
         language: Optional[str] = None,
         initial_prompt: str = "",
-        condition_on_previous: bool = True,
+        condition_on_previous: bool = False,
         chunked: bool = False,
         chunk_sec: float = 90.0,
         duration_sec: float = 0.0,
+        temperature: tuple = TEMPERATURE_LADDER,
         progress: Optional[Callable[[float, str], None]] = None,
     ) -> ASRResult:
         """Transcribe a (normalized 16k mono wav) file.
@@ -114,17 +117,20 @@ class Transcriber:
             # language to be unset.
             try:
                 raw_segments, detected_lang = self._transcribe_mlx_chunked(
-                    audio_path, initial_prompt, progress, chunk_sec, language
+                    audio_path, initial_prompt, progress, chunk_sec, language,
+                    temperature,
                 )
             except Exception as exc:
                 logger.warning("chunked mlx failed (%s); falling back to single-pass", exc)
                 raw_segments, detected_lang = self._transcribe_mlx(
-                    audio_path, language, initial_prompt, condition_on_previous, progress
+                    audio_path, language, initial_prompt, condition_on_previous,
+                    progress, temperature,
                 )
         elif engine == "mlx-whisper":
             try:
                 raw_segments, detected_lang = self._transcribe_mlx(
-                    audio_path, language, initial_prompt, condition_on_previous, progress
+                    audio_path, language, initial_prompt, condition_on_previous,
+                    progress, temperature,
                 )
             except Exception as exc:
                 # mlx failed mid-run (e.g. model download interrupted) — don't
@@ -137,16 +143,17 @@ class Transcriber:
                 if progress:
                     progress(0.05, t("tr_mlx_fallback"))
                 raw_segments, detected_lang = self._transcribe_faster(
-                    audio_path, language, initial_prompt, condition_on_previous, progress
+                    audio_path, language, initial_prompt, condition_on_previous,
+                    progress, temperature,
                 )
         else:
             raw_segments, detected_lang = self._transcribe_faster(
-                audio_path, language, initial_prompt, condition_on_previous, progress
+                audio_path, language, initial_prompt, condition_on_previous,
+                progress, temperature,
             )
         dt = time.time() - t0
 
         segments = self._to_segments(raw_segments, detected_lang)
-        segments = _suppress_repetition(segments)
         full_text = " ".join(s.text for s in segments).strip()
         language_label = detect_language(full_text, detected_lang)
 
@@ -218,7 +225,8 @@ class Transcriber:
         return _MLX_REPOS.get(self.model, f"mlx-community/whisper-{self.model}-mlx")
 
     def _transcribe_mlx(
-        self, audio_path, language, initial_prompt, condition_on_previous, progress,
+        self, audio_path, language, initial_prompt, condition_on_previous,
+        progress, temperature=TEMPERATURE_LADDER,
     ):
         import mlx_whisper
 
@@ -231,7 +239,7 @@ class Transcriber:
             initial_prompt=initial_prompt or None,
             word_timestamps=True,
             condition_on_previous_text=condition_on_previous,
-            temperature=_TEMPERATURE_LADDER,
+            temperature=temperature,
             no_speech_threshold=_NO_SPEECH_THRESHOLD,
             logprob_threshold=_LOGPROB_THRESHOLD,
             compression_ratio_threshold=_COMPRESSION_RATIO_THRESHOLD,
@@ -241,7 +249,8 @@ class Transcriber:
         return segs, lang
 
     def _transcribe_mlx_chunked(self, audio_path, initial_prompt, progress,
-                                chunk_sec=90.0, language: Optional[str] = None):
+                                chunk_sec=90.0, language: Optional[str] = None,
+                                temperature=TEMPERATURE_LADDER):
         """GPU code-switching: split at silences, transcribe chunk by chunk.
 
         mlx runs on the GPU but does ONE global language pass, so it translates
@@ -280,7 +289,7 @@ class Transcriber:
             r = mlx_whisper.transcribe(
                 clip, path_or_hf_repo=repo, language=language,
                 initial_prompt=initial_prompt or None, word_timestamps=True,
-                condition_on_previous_text=False, temperature=_TEMPERATURE_LADDER,
+                condition_on_previous_text=False, temperature=temperature,
                 no_speech_threshold=_NO_SPEECH_THRESHOLD,
                 logprob_threshold=_LOGPROB_THRESHOLD,
                 compression_ratio_threshold=_COMPRESSION_RATIO_THRESHOLD,
@@ -361,7 +370,8 @@ class Transcriber:
         return self._faster_model
 
     def _transcribe_faster(
-        self, audio_path, language, initial_prompt, condition_on_previous, progress,
+        self, audio_path, language, initial_prompt, condition_on_previous,
+        progress, temperature=TEMPERATURE_LADDER,
     ):
         model = self._load_faster()
         if progress:
@@ -373,7 +383,7 @@ class Transcriber:
             word_timestamps=True,
             initial_prompt=initial_prompt or None,
             condition_on_previous_text=condition_on_previous,
-            temperature=_TEMPERATURE_LADDER,
+            temperature=temperature,
             no_speech_threshold=_NO_SPEECH_THRESHOLD,
             log_prob_threshold=_LOGPROB_THRESHOLD,
             compression_ratio_threshold=_COMPRESSION_RATIO_THRESHOLD,
@@ -444,29 +454,6 @@ class Transcriber:
                 words=words,
             ))
         return segments
-
-
-def _suppress_repetition(segments):
-    """Collapse Whisper hallucination loops (e.g. "about this about this …" ×30).
-
-    These are ASR artifacts, not speech, so removing them isn't "changing the
-    speaker's words" — the speaker never said the phrase 30 times. We collapse a
-    phrase repeated ≥3× in a row to one copy, then drop consecutive segments that
-    became identical (a loop often spans several segments)."""
-    cleaned = []
-    prev_norm = None
-    for s in segments:
-        s.text = _collapse_repeats(s.text)
-        norm = re.sub(r"\s+", " ", s.text.strip().lower())
-        if norm and norm == prev_norm and len(norm.split()) <= 8:
-            continue   # consecutive duplicate from a loop
-        cleaned.append(s)
-        if norm:
-            prev_norm = norm
-    # renumber ids so downstream stays consistent
-    for i, s in enumerate(cleaned):
-        s.id = i
-    return cleaned
 
 
 def _collapse_repeats(text: str) -> str:

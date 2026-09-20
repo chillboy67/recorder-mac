@@ -13,8 +13,7 @@ user cares about:
 
 The cardinal rule across every mode: **never silently rewrite the speaker's
 words.** Whisper already transcribes faithfully; we do not run any LLM
-"correction" that paraphrases. Terminology fixes (classroom only) touch
-spelling of technical terms, not sentence structure.
+"correction" that paraphrases, and no dictionary pass that "fixes" spellings.
 """
 from __future__ import annotations
 
@@ -51,13 +50,17 @@ class Mode:
     # Keep it EMPTY unless the domain genuinely needs it — a wrong prompt
     # hurts accuracy more than it helps.
     initial_prompt: str = ""
-    # condition_on_previous_text carries context across 30s windows. Great for
-    # clean speech, but on noisy audio it can trigger repetition loops, so
-    # classroom turns it off.
-    condition_on_previous: bool = True
+    # condition_on_previous_text carries context across 30s windows, which helps
+    # clean prose but promotes repetition loops and drift toward smoothed text —
+    # the repetitions it collapses are exactly the disfluency we must preserve.
+    # Off by default; errors are diagnostic data, not noise.
+    condition_on_previous: bool = False
 
     # --- audio pre-processing ---
     denoise: bool = False          # ffmpeg afftdn + highpass (classroom)
+    # Gate for denoise: only run the filter chain when the measured noise floor
+    # (volumedetect proxy, dB) is louder than this. Clean audio is left untouched.
+    denoise_noise_floor_db: float = -45.0
 
     # --- speaker handling ---
     diarize: bool = False          # split speakers (ielts: examiner vs candidate)
@@ -68,9 +71,6 @@ class Mode:
     analyze_ielts: bool = False    # pronunciation / grammar / phrasing report
     summarize: bool = False        # classroom: extract key points / summary
 
-    # --- terminology ---
-    fix_terminology: bool = False  # classroom only; spelling of domain terms
-
     formats: list[str] = field(default_factory=lambda: ["txt", "md", "srt", "json"])
 
 
@@ -80,7 +80,6 @@ GENERAL = Mode(
     description="最高精度、忠实原文的语音转文字。中英混合自动识别。",
     language=None,
     initial_prompt="",
-    condition_on_previous=True,
     formats=["txt", "md", "docx"],
 )
 
@@ -90,7 +89,6 @@ CLASSROOM = Mode(
     description="空旷/有回声的教室：降噪、聚焦主讲人、排除旁人；自动提取重点并生成总结。",
     language=None,
     initial_prompt="",
-    condition_on_previous=False,   # noisy → avoid repetition loops
     denoise=True,
     keep_main_speaker_only=True,
     summarize=True,                # extract key points + summary
@@ -105,7 +103,6 @@ IELTS = Mode(
     chunk_sec=60.0,            # smaller chunks → finer turn/language separation
     language=None,
     initial_prompt="",
-    condition_on_previous=True,
     diarize=True,
     expected_speakers=2,
     analyze_ielts=True,

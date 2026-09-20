@@ -228,7 +228,8 @@ def mlx_spy(monkeypatch):
     """Route Transcriber to a fake mlx engine and record which path runs."""
     calls = {"chunked": None, "single": False}
 
-    def fake_chunked(self, audio_path, initial_prompt, progress, chunk_sec, language):
+    def fake_chunked(self, audio_path, initial_prompt, progress, chunk_sec,
+                     language, temperature=None):
         calls["chunked"] = language
         return [], language or "en"
 
