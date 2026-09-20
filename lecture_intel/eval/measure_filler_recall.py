@@ -61,7 +61,9 @@ def find_audio(audio_dir: Path, entry_id: str) -> Path | None:
 def run_entry(audio: Path, out_dir: Path, model: str) -> str:
     """Transcribe one clip through the real general-mode pipeline; return text."""
     from core.engine import run
-    run(audio, out_dir, mode_key="general", model=model)
+    # General mode's default formats (txt/md/docx) exclude json; force the json
+    # export so the eval can read back full_text.
+    run(audio, out_dir, mode_key="general", model=model, formats=["json"])
     data = json.loads((out_dir / f"{audio.stem}.json").read_text(encoding="utf-8"))
     return data.get("full_text", "")
 

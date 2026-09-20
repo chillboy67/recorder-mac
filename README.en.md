@@ -33,8 +33,11 @@ never edited into the transcript body. The optional local LLM enhancement only t
 errors caused by unclear audio — it never polishes or rewrites.
 
 The boundaries are stated plainly: Whisper itself drops some filler words while decoding (upstream
-faster-whisper#901 and whisper.cpp#965 were reported and closed unfixed), so filler retention is
-measured against the eval set (see `lecture_intel/eval/README.md`).
+faster-whisper#901 and whisper.cpp#965 were reported and closed unfixed). Measured on our 50-clip
+eval set (TTS audio, large-v3, general mode): **92%** English and **90%** Chinese filler-word recall,
+**100%** half-word retention — losses are either swallowed words ("er"/"呃") or near-homophone
+mistranscriptions ("嗯"→"恨"), all upstream decoding losses. Details and the decision gate live in
+`lecture_intel/eval/README.md`.
 
 Classroom mode is the only mode that cleans up the transcript signal, and every cleanup is **auditable**:
 denoise parameters and the gating decision, dropped time intervals, and folded suspected loops all land
