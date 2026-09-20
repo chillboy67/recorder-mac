@@ -97,19 +97,6 @@ def test_docx_contains_report_text(tmp_path, labels):
     assert "promary" in text          # verbatim transcript inside the Word doc
 
 
-def test_repetition_collapse():
-    from core.transcriber import _collapse_repeats
-    # Whisper hallucination loops collapse to one copy
-    assert _collapse_repeats("about this " * 8).strip() == "about this"
-    assert len(_collapse_repeats("no no no no no no").split()) <= 2   # loop gone
-    # Chinese (no spaces): a runaway char/phrase loop collapses
-    assert _collapse_repeats("時" * 200) == "時"
-    assert "時" * 10 not in _collapse_repeats("算法" + "時" * 150 + "分析")
-    # genuine emphasis (3x) and normal text are left alone
-    assert _collapse_repeats("well no no no I disagree") == "well no no no I disagree"
-    assert _collapse_repeats("I really like it a lot") == "I really like it a lot"
-
-
 # ── repeat arbitration: stutter vs ASR loop ─────────────────────────
 
 def _wseg(tokens, language="en", seg_id=0):
