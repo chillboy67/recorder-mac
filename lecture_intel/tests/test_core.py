@@ -579,3 +579,55 @@ def test_repo_output_root_is_inside_the_checkout():
     out = paths.default_output_root()
     assert out == paths.clone_root() / "output"
     assert "Application Support" not in str(out)
+
+
+# ── fidelity annotations must surface, not just sit in meta.json ─────
+
+def _fidelity_asr(mode_key: str) -> ASRResult:
+    """A result whose only repeat run is an L1-confirmed asr_loop (frozen word
+    clock), so no audio is needed and only classroom folds it."""
+    from core.repeat_arbitration import arbitrate, apply_verdicts
+    toks = [("no" if i == 0 else " no", 1.0, 1.01) for i in range(4)]
+    toks += [(" I disagree", 1.6, 1.9)]
+    seg = _wseg(toks)
+    asr = ASRResult(segments=[seg], full_text=seg.text, language="en",
+                    model_used="t")
+    apply_verdicts(asr, arbitrate(asr, None, None), mode_key)
+    return asr
+
+
+def test_fidelity_tail_reports_annotations_without_touching_the_body(tmp_path):
+    """general mode: the .md/.txt tail carries the annotation while the
+    transcript keeps every word the speaker actually said."""
+    asr = _fidelity_asr("general")
+    assert asr.full_text == "no no no no I disagree"     # nothing folded
+    out = E.export_all(asr, tmp_path, "s", ["txt", "md"])
+    for key in ("txt", "md"):
+        text = out[key].read_text(encoding="utf-8")
+        body, _, tail = text.partition("忠实度标注")
+        assert "no no no no" in body        # still verbatim in the body
+        assert "疑似转写伪影" not in body    # annotations never enter the body
+        assert "疑似转写伪影" in tail and "正文原样保留" in tail
+        assert "L1" in tail                 # the evidence is quoted, checkably
+
+
+def test_classroom_fold_is_stated_and_the_original_is_kept(tmp_path):
+    asr = _fidelity_asr("classroom")
+    assert asr.full_text == "no I disagree"              # folded to one copy
+    (loop,) = [a for a in asr.annotations if a["verdict"] == "asr_loop"]
+    assert loop["folded"] is True      # the audit trail is self-describing
+    text = E.export_all(asr, tmp_path, "s", ["txt"])["txt"].read_text("utf-8")
+    assert "已在正文中折叠" in text
+    assert "原话「no no no no」" in text   # the discarded words survive
+    assert "正文原样保留" not in text      # general-mode wording not reused
+
+
+def test_dropped_segments_are_reported_in_the_tail(tmp_path):
+    """Classroom drops whole duplicate segments; the tail has to say so —
+    otherwise that loss is visible only inside meta.json."""
+    asr = _fidelity_asr("classroom")
+    out = E.export_all(asr, tmp_path, "s", ["txt"], dropped_segments=[
+        {"segment_id": 1, "start": 4.0, "end": 6.0, "text": "thanks thanks",
+         "duplicate_of": 0}])
+    text = out["txt"].read_text(encoding="utf-8")
+    assert "已整段剔除" in text and "thanks thanks" in text

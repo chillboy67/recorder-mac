@@ -356,10 +356,22 @@ def arbitrate(asr: ASRResult, wav_path, transcriber,
     return verdicts
 
 
+def _is_foldable(v: Verdict) -> bool:
+    """Only a run verified against word timestamps may lose text."""
+    return v.verdict == "asr_loop" and v.run is not None and v.run.verified
+
+
 def apply_verdicts(asr: ASRResult, verdicts: list[Verdict], mode_key: str) -> None:
     """Record every verdict as an annotation (all modes). Classroom also folds
     confirmed asr_loop runs — at word level, so the surviving text is the
-    speaker's own tokens; the original is always kept in the annotation."""
+    speaker's own tokens; the original is always kept in the annotation.
+
+    Each annotation carries ``folded`` so the audit trail is self-describing:
+    every reader (json / meta.json, the .md/.txt tail, the GUI) can tell which
+    spans actually lost text and which were merely flagged, without having to
+    know which mode produced the file.
+    """
+    folds = mode_key == "classroom"
     for v in verdicts:
         asr.annotations.append({
             "type": "repeat_arbitration",
@@ -368,13 +380,14 @@ def apply_verdicts(asr: ASRResult, verdicts: list[Verdict], mode_key: str) -> No
             "end": round(v.end, 3),
             "original": v.original,
             "verdict": v.verdict,
+            "folded": bool(folds and _is_foldable(v)),
             "evidence": v.evidence,
         })
-    if mode_key != "classroom":
+    if not folds:
         return
     drops: dict[int, list[Run]] = {}
     for v in verdicts:
-        if v.verdict == "asr_loop" and v.run is not None and v.run.verified:
+        if _is_foldable(v):
             drops.setdefault(v.segment_id, []).append(v.run)
     for seg in asr.segments:
         runs = drops.get(seg.id)

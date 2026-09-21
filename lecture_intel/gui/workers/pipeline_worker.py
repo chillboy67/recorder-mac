@@ -141,6 +141,7 @@ class PipelineWorker(QObject):
             "mode": summary.get("mode", "general"),
             "ielts": summary.get("ielts"),
             "classroom": summary.get("classroom"),
+            "fidelity": summary.get("fidelity"),
         })
 
     def _finish(self) -> None:

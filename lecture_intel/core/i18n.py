@@ -379,6 +379,18 @@ _CATALOG: dict[str, dict[str, str]] = {
     "res_section_files": {"zh": "导出文件", "en": "Exported files"},
     "res_output": {"zh": "输出：{dir}", "en": "Output: {dir}"},
     "res_read_error": {"zh": "[无法读取 {path}]", "en": "[Cannot read {path}]"},
+    # fidelity audit trail (repeat-arbitration annotations)
+    "res_tab_fidelity": {"zh": "忠实度标注", "en": "Fidelity"},
+    "res_section_fidelity": {"zh": "忠实度标注", "en": "FIDELITY"},
+    "res_fid_artifact": {"zh": "疑似伪影", "en": "Flagged"},
+    "res_fid_real": {"zh": "真实重复", "en": "Real repeats"},
+    "res_fid_uncertain": {"zh": "存疑", "en": "Uncertain"},
+    "res_fid_folded": {"zh": "已在正文折叠", "en": "Folded in transcript"},
+    "res_fid_dropped": {"zh": "已整段剔除", "en": "Segments dropped"},
+    "res_fid_none": {"zh": "未发现疑似伪影，正文未经改写",
+                     "en": "No flagged artifacts — transcript untouched"},
+    "res_fid_hint": {"zh": "逐条原话与依据见「{tab}」标签页。",
+                     "en": "Per-item detail is in the “{tab}” tab."},
     "lang_unknown": {"zh": "未知", "en": "Unknown"},
 
     # pipeline progress messages (emitted by the subprocess)
