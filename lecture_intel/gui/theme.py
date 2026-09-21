@@ -47,7 +47,8 @@ LIGHT = {
 DISPLAY_FAMILIES = ["Space Grotesk", "SF Pro Display", "Helvetica Neue"]
 QSS_DISPLAY = '"Space Grotesk", "SF Pro Display", "Helvetica Neue"'
 
-_state = {"mode": "auto", "app": None, "scheme": DARK, "is_dark": True}
+_state = {"mode": "auto", "app": None, "scheme": DARK, "is_dark": True,
+          "hooked": False}
 _CHECK_PNG = ""
 _DOT_PNG = ""
 _CHEVRON_PNG = ""
@@ -98,14 +99,19 @@ def apply(app: QApplication, mode: str | None = None) -> None:
     app.setPalette(_palette(c))
     app.setStyleSheet(_qss(c))
 
-    try:
-        sh = app.styleHints()
-        sh.colorSchemeChanged.disconnect(_on_system_scheme_changed)
-    except Exception:
-        pass
+    # Hook the system scheme only in "auto", and only once. Disconnecting a
+    # signal that was never connected raises *and* makes libpyside log a
+    # RuntimeWarning on every apply() — i.e. on every appearance toggle.
+    if _state.get("hooked"):
+        try:
+            app.styleHints().colorSchemeChanged.disconnect(_on_system_scheme_changed)
+        except Exception:
+            pass
+        _state["hooked"] = False
     if _state["mode"] == "auto":
         try:
             app.styleHints().colorSchemeChanged.connect(_on_system_scheme_changed)
+            _state["hooked"] = True
         except Exception:
             pass
 
