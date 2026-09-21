@@ -116,7 +116,14 @@ def _gen(prompt: str, system: str = "", *, model: str = DEFAULT_MODEL,
                         "num_predict": num_predict},
         }
         r = httpx.post(f"{host}/api/chat", json=payload, timeout=timeout)
-        r.raise_for_status()
+        if r.status_code >= 400:
+            # Ollama explains itself in the body — "model 'mistral' not found"
+            # for a model that was never pulled. `raise_for_status()` shows only
+            # "Client error '404 Not Found'", which hides the one fact that
+            # identifies the problem, so log the body instead.
+            logger.warning("LLM chat failed: HTTP %s from %s — %s",
+                           r.status_code, host, r.text.strip()[:200])
+            return None
         return (r.json().get("message", {}).get("content") or "").strip()
     except Exception as exc:
         logger.warning("LLM chat failed: %s", exc)

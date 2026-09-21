@@ -94,3 +94,68 @@ def test_resolve_first_degrades_through_installed_candidates(monkeypatch):
     # nothing pulled at all → None, and the caller skips enhancement
     monkeypatch.setattr(llm, "_installed", lambda host=None: [])
     assert llm.resolve_first(llm.NON_CHINESE_CANDIDATES) is None
+
+
+# ── _gen's error reporting ──────────────────────────────────────────
+
+class _FakeResponse:
+    def __init__(self, status: int, text: str, payload: dict | None = None):
+        self.status_code = status
+        self.text = text
+        self._payload = payload
+
+    def json(self):
+        assert self._payload is not None, "a failed body must never be parsed"
+        return self._payload
+
+
+def test_gen_surfaces_ollamas_error_body(monkeypatch, caplog):
+    """A model that was never pulled answers 404 with `model 'x' not found`.
+
+    `raise_for_status()` reports only "Client error '404 Not Found'", which
+    hides the one fact that identifies the problem — measured on a real machine
+    where the default `mistral` was absent and every generation looked like a
+    broken endpoint.
+    """
+    import httpx
+    from core import llm
+
+    monkeypatch.setattr(httpx, "post", lambda *a, **kw: _FakeResponse(
+        404, '{"error":"model \'mistral\' not found"}'))
+
+    with caplog.at_level("WARNING"):
+        assert llm._gen("hi", model="mistral") is None
+
+    assert "404" in caplog.text
+    assert "model 'mistral' not found" in caplog.text
+
+
+def test_gen_returns_the_message_content(monkeypatch):
+    import httpx
+    from core import llm
+
+    monkeypatch.setattr(httpx, "post", lambda *a, **kw: _FakeResponse(
+        200, "{}", {"message": {"role": "assistant", "content": "  hello  "}}))
+    assert llm._gen("hi", model="m") == "hello"
+
+
+def test_gen_returns_empty_string_when_content_is_missing(monkeypatch):
+    """A thinking model can return a response with no `content` at all; the
+    callers distinguish None (failed) from "" (ran, said nothing)."""
+    import httpx
+    from core import llm
+
+    monkeypatch.setattr(httpx, "post", lambda *a, **kw: _FakeResponse(
+        200, "{}", {"message": {"role": "assistant", "thinking": "..."}}))
+    assert llm._gen("hi", model="m") == ""
+
+
+def test_gen_returns_none_when_the_server_is_unreachable(monkeypatch):
+    import httpx
+    from core import llm
+
+    def boom(*a, **kw):
+        raise httpx.ConnectError("connection refused")
+
+    monkeypatch.setattr(httpx, "post", boom)
+    assert llm._gen("hi", model="m") is None
