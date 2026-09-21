@@ -23,6 +23,68 @@ _SPEAKER_ZH = {
 }
 
 
+# ── Fidelity annotations ─────────────────────────────────────────────────
+# The transcript body is never rewritten by this section. It is a report
+# *about* the transcript: which spans the three-level arbitration flagged, what
+# it decided, and on what evidence. Nothing here is part of the utterance.
+FIDELITY_HEADING = "忠实度标注（正文未改写）"
+FIDELITY_NOTE = ("正文一律保持说话人的原话。下列片段仅为标注；"
+                 "只有课堂模式会把已确认为转写伪影的词级重复折叠，折叠掉的原话记在每一条里。")
+
+_VERDICT_ZH = {
+    "asr_loop": "疑似转写伪影",
+    "real_speech": "真实重复",
+    "uncertain": "判定存疑",
+}
+
+
+def _evidence_brief(ev: dict) -> str:
+    """One short, checkable justification drawn from the arbitration evidence."""
+    if not ev:
+        return ""
+    level = ev.get("level")
+    if level == 1:
+        return (f"L1 词时间轴 {ev.get('span_sec')}s ≪ 应有的 {ev.get('expected_sec')}s"
+                "（解码时钟冻结）")
+    if level == 2:
+        return (f"L2 浊音段 {ev.get('voiced_bursts')} 个 ≥ 0.8×{ev.get('k')}"
+                "（每份拷贝都独立发声）")
+    if level == 3:
+        where = "降噪前原始音频" if ev.get("oracle") == "original" else "管道音频"
+        seeds = ev.get("seeds")
+        if seeds is None:
+            return f"L3 在{where}上重解码失败，证据不足"
+        return (f"L3 在{where}上 3 个温度种子复现 {seeds} 份拷贝"
+                f"（原文共 {ev.get('k')} 份）")
+    return str(ev.get("reason") or "")
+
+
+def fidelity_lines(asr, dropped_segments: Optional[list] = None) -> list[str]:
+    """Every fidelity annotation as one readable line.
+
+    Shared by the exported .md/.txt tail and the GUI tab so the file and the
+    screen can never drift apart. Qt-free on purpose.
+    """
+    out: list[str] = []
+    for a in asr.annotations:
+        kind = a.get("type")
+        ts = f"{_ts_short(a.get('start', 0))}–{_ts_short(a.get('end', 0))}"
+        if kind == "repeat_arbitration":
+            verdict = _VERDICT_ZH.get(a.get("verdict"), str(a.get("verdict", "?")))
+            state = "已在正文中折叠" if a.get("folded") else "正文原样保留"
+            ev = _evidence_brief(a.get("evidence") or {})
+            line = f"[{ts}] {verdict} · {state} ｜原话「{a.get('original', '')}」"
+            out.append(f"{line}｜依据：{ev}" if ev else line)
+        elif kind == "adjacent_duplicate_segment":
+            out.append(f"[{ts}] 相邻重复段 · 正文原样保留 ｜"
+                       f"「{a.get('text', '')}」与上一段重复")
+    for d in (dropped_segments or []):
+        ts = f"{_ts_short(d.get('start', 0))}–{_ts_short(d.get('end', 0))}"
+        out.append(f"[{ts}] 相邻重复段 · 已整段剔除 ｜"
+                   f"「{d.get('text', '')}」与上一段重复（原话见 meta.json）")
+    return out
+
+
 def export_all(
     asr: ASRResult,
     out_dir: Path,
@@ -31,6 +93,7 @@ def export_all(
     labels: Optional[dict[int, str]] = None,
     extra_markdown: Optional[str] = None,
     extra_markdown_suffix: str = "report",
+    dropped_segments: Optional[list] = None,
 ) -> dict[str, Path]:
     out_dir = Path(out_dir)
     try:
@@ -50,9 +113,9 @@ def export_all(
     for fmt in formats:
         try:
             if fmt == "txt":
-                outputs["txt"] = _txt(asr, out_dir, base, labels)
+                outputs["txt"] = _txt(asr, out_dir, base, labels, dropped_segments)
             elif fmt == "md":
-                outputs["md"] = _md(asr, out_dir, base, labels)
+                outputs["md"] = _md(asr, out_dir, base, labels, dropped_segments)
             elif fmt == "docx":
                 outputs["docx"] = _docx(asr, out_dir, base, labels, extra_markdown)
             elif fmt == "doc":
@@ -82,19 +145,25 @@ def _label(labels, seg_id) -> str:
     return _SPEAKER_ZH.get(raw, raw)
 
 
-def _txt(asr, out_dir, base, labels) -> Path:
+def _txt(asr, out_dir, base, labels, dropped_segments=None) -> Path:
     lines = []
     for s in asr.segments:
         ts = _ts_short(s.start)
         spk = _label(labels, s.id)
         prefix = f"[{ts}] " + (f"{spk}: " if spk else "")
         lines.append(prefix + s.text)
+    body = "\n".join(lines) if lines else asr.full_text
+    fidelity = fidelity_lines(asr, dropped_segments)
+    if fidelity:
+        # Appended after the transcript, never interleaved into it.
+        body += "\n\n" + "\n".join(
+            [FIDELITY_HEADING, "", FIDELITY_NOTE, ""] + fidelity)
     p = out_dir / f"{base}.txt"
-    p.write_text("\n".join(lines) if lines else asr.full_text, encoding="utf-8")
+    p.write_text(body, encoding="utf-8")
     return p
 
 
-def _md(asr, out_dir, base, labels) -> Path:
+def _md(asr, out_dir, base, labels, dropped_segments=None) -> Path:
     L = [f"# {base}", "", f"- 语言：{asr.language}", f"- 引擎：{asr.model_used}",
          f"- 时长：{asr.audio_duration_sec:.0f}s", "", "## 转写", ""]
     for s in asr.segments:
@@ -104,6 +173,11 @@ def _md(asr, out_dir, base, labels) -> Path:
             L.append(f"**{spk}** `[{ts}]` {s.text}")
         else:
             L.append(f"`[{ts}]` {s.text}")
+        L.append("")
+    fidelity = fidelity_lines(asr, dropped_segments)
+    if fidelity:
+        L.extend(["", f"## {FIDELITY_HEADING}", "", f"> {FIDELITY_NOTE}", ""])
+        L.extend(f"- {line}" for line in fidelity)
         L.append("")
     p = out_dir / f"{base}.md"
     p.write_text("\n".join(L), encoding="utf-8")

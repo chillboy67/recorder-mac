@@ -149,6 +149,7 @@ def run(
     # classroom keeps the old drop-the-copy behaviour (recorded in meta);
     # general/IELTS only annotate — the text stays in the transcript.
     dups = adjacent_duplicate_segments(asr)
+    dropped_segments: list[dict] = []
     if dups:
         if mode.key == "classroom":
             drop_ids = {d["segment_id"] for d in dups}
@@ -156,6 +157,7 @@ def run(
             for i, s in enumerate(asr.segments):
                 s.id = i
             asr.full_text = " ".join(s.text for s in asr.segments).strip()
+            dropped_segments = dups
             provenance.append_meta(output_dir, {
                 "name": "drop_duplicate_segments", "dropped": dups})
         else:
@@ -293,6 +295,7 @@ def run(
         labels=labels,
         extra_markdown=extra_md,
         extra_markdown_suffix=extra_suffix,
+        dropped_segments=dropped_segments,
     )
     report("export", t("eng_export_done"), 100, "done")
     provenance.append_meta(output_dir, {
@@ -319,9 +322,39 @@ def run(
                       if classroom_report else None),
         "tidy_markdown": ("# AI 校对版（本地大模型）\n\n" + general_tidy_md) if general_tidy_md else None,
         "llm_used": bool(llm_on),
+        # The fidelity audit trail used to stop at meta.json, which meant the
+        # GUI could never show it (general/IELTS don't even export json by
+        # default). Surfacing it in the summary is what puts it on screen.
+        "annotations": asr.annotations,
+        "fidelity": _fidelity_summary(asr, dropped_segments),
     }
     logger.info("Engine done in %.1fs (%s)", elapsed, mode.key)
     return summary
+
+
+def _fidelity_summary(asr, dropped_segments: list[dict]) -> dict:
+    """Counts + the ready-to-render lines for the fidelity audit trail.
+
+    `lines` is produced by ``core.export.fidelity_lines`` — the same function
+    that writes the .md/.txt tail, so the screen and the file always agree.
+    The full record stays in ``asr.annotations`` and meta.json.
+    """
+    repeats = [a for a in asr.annotations
+               if a.get("type") == "repeat_arbitration"]
+    folded = [a for a in repeats if a.get("folded")]
+    return {
+        "asr_loop": sum(1 for a in repeats if a.get("verdict") == "asr_loop"),
+        "real_speech": sum(1 for a in repeats
+                           if a.get("verdict") == "real_speech"),
+        "uncertain": sum(1 for a in repeats if a.get("verdict") == "uncertain"),
+        "adjacent_duplicates": sum(
+            1 for a in asr.annotations
+            if a.get("type") == "adjacent_duplicate_segment"),
+        "folded_count": len(folded) + len(dropped_segments),
+        "dropped_count": len(dropped_segments),
+        "total": len(asr.annotations) + len(dropped_segments),
+        "lines": exporter.fidelity_lines(asr, dropped_segments),
+    }
 
 
 def _ielts_summary(r) -> dict:
