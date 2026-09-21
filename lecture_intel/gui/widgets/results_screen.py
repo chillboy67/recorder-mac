@@ -144,6 +144,7 @@ class ResultsScreen(QWidget):
         stats = result_info.get("stats", {})
         ielts = result_info.get("ielts")
         classroom = result_info.get("classroom")
+        fidelity = result_info.get("fidelity")
         mode = result_info.get("mode", "general")
 
         file_by_ext: dict[str, str] = {}
@@ -174,6 +175,11 @@ class ResultsScreen(QWidget):
         tidy = stats.get("tidy_markdown")
         if tidy:
             self._add_text_tab(t("res_tab_tidy"), tidy)
+        # The fidelity audit trail: what the repeat arbitration flagged, and
+        # which spans actually lost text. Same lines as the exported md/txt.
+        if fidelity and fidelity.get("total"):
+            self._add_text_tab(t("res_tab_fidelity"),
+                               "\n".join(fidelity.get("lines") or []))
         for ext in ("md", "txt", "srt", "json"):
             if ext in file_by_ext:
                 self._add_file_tab(ext, file_by_ext[ext])
@@ -196,13 +202,17 @@ class ResultsScreen(QWidget):
                 cl = QVBoxLayout(cell)
                 cl.setContentsMargins(12, 10, 12, 10)
                 cl.setSpacing(2)
-                v = QLabel(value)
-                v.setFont(theme.display_font(18, QFont.Weight.Medium))
-                v.setStyleSheet(f"color: {c[key]};")
-                t = QLabel(label)
-                t.setStyleSheet(f"font-size: 11px; color: {c['ink2']};")
-                cl.addWidget(v)
-                cl.addWidget(t)
+                # NOTE: never name these `t` — that shadows the i18n `t()`
+                # imported at module level, which makes it a function-local
+                # everywhere in load_results() and breaks every other t(...)
+                # call in it with UnboundLocalError.
+                val_lbl = QLabel(value)
+                val_lbl.setFont(theme.display_font(18, QFont.Weight.Medium))
+                val_lbl.setStyleSheet(f"color: {c[key]};")
+                key_lbl = QLabel(label)
+                key_lbl.setStyleSheet(f"font-size: 11px; color: {c['ink2']};")
+                cl.addWidget(val_lbl)
+                cl.addWidget(key_lbl)
                 stat_row.addWidget(cell)
             host = QWidget()
             host.setLayout(stat_row)
@@ -218,6 +228,8 @@ class ResultsScreen(QWidget):
         if classroom:
             self._add_rail_kv(t("res_key_emphasis"), str(classroom.get("emphasis_count", 0)))
             self._add_rail_kv(t("res_key_definitions"), str(classroom.get("definition_count", 0)))
+        if fidelity:
+            self._add_fidelity_card(fidelity, c)
 
         names = QLabel("\n".join(Path(f).name for f in files))
         names.setProperty("mono", True)
@@ -260,6 +272,55 @@ class ResultsScreen(QWidget):
         rl.addWidget(k)
         rl.addWidget(v, stretch=1)
         self._rail.addWidget(row)
+
+    def _add_fidelity_card(self, fid: dict, c: dict) -> None:
+        """At-a-glance counts for the fidelity layer.
+
+        Until this existed the annotations reached only meta.json and the
+        optional json export, so a user could not tell that e.g. "打打打打" had
+        been flagged — or folded — by the classroom mode. The prose for every
+        entry lives in the tab, produced by the same formatter the exported
+        md/txt use (``core.export.fidelity_lines``).
+        """
+        self._rail.addWidget(self._rail_section(t("res_section_fidelity")))
+        if not fid.get("total"):
+            none_lbl = QLabel(t("res_fid_none"))
+            none_lbl.setWordWrap(True)
+            none_lbl.setStyleSheet(f"font-size: 12px; color: {c['ink3']};")
+            self._rail.addWidget(none_lbl)
+            return
+        row = QHBoxLayout()
+        row.setSpacing(10)
+        for value, label, key in (
+            (str(fid.get("asr_loop", 0)), t("res_fid_artifact"), "danger"),
+            (str(fid.get("real_speech", 0)), t("res_fid_real"), "ok"),
+            (str(fid.get("uncertain", 0)), t("res_fid_uncertain"), "warn"),
+        ):
+            cell = QFrame()
+            cell.setObjectName("modeCard")
+            cl = QVBoxLayout(cell)
+            cl.setContentsMargins(12, 10, 12, 10)
+            cl.setSpacing(2)
+            val_lbl = QLabel(value)
+            val_lbl.setFont(theme.display_font(18, QFont.Weight.Medium))
+            val_lbl.setStyleSheet(f"color: {c[key]};")
+            key_lbl = QLabel(label)
+            key_lbl.setStyleSheet(f"font-size: 11px; color: {c['ink2']};")
+            cl.addWidget(val_lbl)
+            cl.addWidget(key_lbl)
+            row.addWidget(cell)
+        host = QWidget()
+        host.setLayout(row)
+        self._rail.addWidget(host)
+
+        if fid.get("folded_count"):
+            self._add_rail_kv(t("res_fid_folded"), str(fid["folded_count"]))
+        if fid.get("dropped_count"):
+            self._add_rail_kv(t("res_fid_dropped"), str(fid["dropped_count"]))
+        hint = QLabel(t("res_fid_hint", tab=t("res_tab_fidelity")))
+        hint.setWordWrap(True)
+        hint.setStyleSheet(f"font-size: 11px; color: {c['ink3']};")
+        self._rail.addWidget(hint)
 
     def _clear_rail(self) -> None:
         while self._rail.count():
