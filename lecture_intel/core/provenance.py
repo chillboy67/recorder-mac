@@ -77,7 +77,13 @@ def _write(output_dir: str | Path, data: dict) -> None:
 
 
 def append_meta(output_dir: str | Path, step: dict) -> dict:
-    """Append one processing step to meta.json; return the full meta dict."""
+    """Append one processing step to meta.json; return the full meta dict.
+
+    ``output_dir`` must already exist — this does not create it (unlike
+    ``archive_input``). The engine relies on that ordering: archive_input runs
+    as step 0, so every later append_meta call finds the directory in place.
+    A corrupt or non-dict meta.json is discarded rather than propagated.
+    """
     data = _load(output_dir)
     step = dict(step)
     step.setdefault("timestamp",
