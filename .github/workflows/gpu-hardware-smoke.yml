@@ -1,0 +1,125 @@
+name: Build and test whisper.cpp on GPU runner
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Custom self-hosted runner label. Runner must match the named OS/vendor/GPU backend.
+        type: choice
+        required: true
+        options:
+          - linux-vulkan-intel
+          - linux-vulkan-amd
+          - windows-vulkan-intel
+          - windows-vulkan-amd
+          - linux-openvino-intel
+          - windows-openvino-intel
+
+permissions:
+  contents: read
+
+jobs:
+  gpu-smoke:
+    name: ${{ inputs.target }}
+    runs-on: [self-hosted, "${{ inputs.target }}"]
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: ggml-org/whisper.cpp
+          path: whisper.cpp
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Verify target runner prerequisites (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v cmake
+          command -v c++
+          command -v ffmpeg
+          test -n "${RECORDER_GPU_TEST_AUDIO:-}" || { echo 'Set RECORDER_GPU_TEST_AUDIO on this self-hosted runner to a local speech fixture.'; exit 1; }
+          test -f "$RECORDER_GPU_TEST_AUDIO"
+          if [[ "${{ inputs.target }}" == *openvino* ]]; then
+            test -n "${OpenVINO_DIR:-}" || { echo 'OpenVINO_DIR must be configured on this runner.'; exit 1; }
+          else
+            command -v vulkaninfo || test -n "${VULKAN_SDK:-}"
+          fi
+      - name: Verify target runner prerequisites (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (-not (Get-Command cmake -ErrorAction SilentlyContinue)) { throw 'Install CMake on this runner.' }
+          if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) { throw 'Install ffmpeg and add it to PATH.' }
+          if (-not $env:RECORDER_GPU_TEST_AUDIO -or -not (Test-Path $env:RECORDER_GPU_TEST_AUDIO)) { throw 'Set RECORDER_GPU_TEST_AUDIO to a local speech fixture on this runner.' }
+          if ('${{ inputs.target }}' -like '*openvino*' -and -not $env:OpenVINO_DIR) { throw 'Install OpenVINO and configure OpenVINO_DIR on this runner.' }
+          if ('${{ inputs.target }}' -like '*vulkan*' -and -not $env:VULKAN_SDK) { throw 'Install the Vulkan SDK and configure VULKAN_SDK on this runner.' }
+      - name: Build backend (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          target='${{ inputs.target }}'
+          if [[ "$target" == *openvino* ]]; then
+            cmake -S whisper.cpp -B whisper.cpp/build -DCMAKE_BUILD_TYPE=Release -DWHISPER_OPENVINO=1 -DCMAKE_PREFIX_PATH="$OpenVINO_DIR"
+          else
+            cmake -S whisper.cpp -B whisper.cpp/build -DCMAKE_BUILD_TYPE=Release -DGGML_VULKAN=1
+          fi
+          cmake --build whisper.cpp/build --config Release --target whisper-cli --parallel
+          binary="$(find whisper.cpp/build -type f -name whisper-cli -perm -u+x -print -quit)"
+          test -n "$binary"
+          backend=vulkan
+          [[ "$target" == *openvino* ]] && backend=openvino
+          printf 'RECORDER_WHISPER_CPP_%s=%s\n' "${backend^^}" "$PWD/$binary" >> "$GITHUB_ENV"
+      - name: Build backend (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if ('${{ inputs.target }}' -like '*openvino*') {
+            cmake -S whisper.cpp -B whisper.cpp/build -A x64 -DWHISPER_OPENVINO=1 -DCMAKE_PREFIX_PATH="$env:OpenVINO_DIR"
+          } else {
+            cmake -S whisper.cpp -B whisper.cpp/build -A x64 -DGGML_VULKAN=1
+          }
+          if ($LASTEXITCODE -ne 0) { throw 'CMake configuration failed.' }
+          cmake --build whisper.cpp/build --config Release --target whisper-cli --parallel
+          if ($LASTEXITCODE -ne 0) { throw 'whisper.cpp build failed.' }
+          $Binary = Get-ChildItem whisper.cpp/build -Filter whisper-cli.exe -Recurse | Select-Object -First 1
+          if (-not $Binary) { throw 'Built whisper-cli.exe was not found.' }
+          $Backend = if ('${{ inputs.target }}' -like '*openvino*') { 'OPENVINO' } else { 'VULKAN' }
+          "RECORDER_WHISPER_CPP_${Backend}=$($Binary.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Install Recorder dependencies and matching model
+        working-directory: lecture_intel
+        shell: bash
+        run: |
+          python -m pip install -r requirements.txt
+          backend=cpp-vulkan
+          [[ "${{ inputs.target }}" == *openvino* ]] && backend=cpp-openvino
+          python download_models.py --engine "$backend" small --hf
+      - name: Run forced GPU and CPU comparison (Linux)
+        if: runner.os == 'Linux'
+        working-directory: lecture_intel
+        shell: bash
+        run: |
+          set -euo pipefail
+          backend=whisper.cpp-vulkan
+          [[ "${{ inputs.target }}" == *openvino* ]] && backend=whisper.cpp-openvino
+          python eval/backend_benchmark.py "$RECORDER_GPU_TEST_AUDIO" \
+            --engines "faster-whisper,$backend" --model small \
+            --warmups 1 --repeats 3 --output eval/backend_benchmark.json
+      - name: Run forced GPU and CPU comparison (Windows)
+        if: runner.os == 'Windows'
+        working-directory: lecture_intel
+        shell: pwsh
+        run: |
+          $Backend = if ('${{ inputs.target }}' -like '*openvino*') { 'whisper.cpp-openvino' } else { 'whisper.cpp-vulkan' }
+          python eval/backend_benchmark.py $env:RECORDER_GPU_TEST_AUDIO --engines "faster-whisper,$Backend" --model small --warmups 1 --repeats 3 --output eval/backend_benchmark.json
+      - name: Upload benchmark report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gpu-benchmark-${{ inputs.target }}-${{ github.run_id }}
+          path: lecture_intel/eval/backend_benchmark.json
+          if-no-files-found: ignore
+          retention-days: 30

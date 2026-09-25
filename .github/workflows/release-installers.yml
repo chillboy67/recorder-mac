@@ -1,0 +1,86 @@
+name: Package Windows and Linux installers
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  test-and-package:
+    name: Test and package (${{ matrix.os_name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            os_name: linux
+          - os: windows-latest
+            os_name: windows
+    steps:
+      - uses: actions/checkout@v4
+      - if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg libegl1 libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: lecture_intel/requirements.txt
+      - name: Install app and test dependencies
+        run: python -m pip install -r lecture_intel/requirements.txt pytest
+      - name: Run platform tests
+        working-directory: lecture_intel
+        run: python -m pytest -q tests -k "not test_export_all_formats"
+      - name: Run offscreen GUI tests
+        working-directory: lecture_intel
+        env:
+          RECORDER_GUI_TESTS: "1"
+          QT_QPA_PLATFORM: offscreen
+        run: python -m pytest -q tests/test_gui.py
+      - name: Create Linux bootstrap archive
+        if: runner.os == 'Linux'
+        shell: bash
+        run: tar -czf "Recorder-Linux-${GITHUB_REF_NAME}.tar.gz" lecture_intel
+      - name: Create Windows bootstrap archive
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Compress-Archive -Path lecture_intel -DestinationPath "Recorder-Windows-$env:GITHUB_REF_NAME.zip"
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Linux'
+        with:
+          name: installer-linux
+          path: Recorder-Linux-${{ github.ref_name }}.tar.gz
+          if-no-files-found: error
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Windows'
+        with:
+          name: installer-windows
+          path: Recorder-Windows-${{ github.ref_name }}.zip
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: test-and-package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: installer-*
+          path: release-assets
+          merge-multiple: true
+      - name: Publish tested bootstrap archives
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          body: |
+            Windows/Linux source bootstrap packages. These are not self-contained executables: install Python 3.10+, extract the archive, then follow `install_windows.ps1` or `install_linux.sh` in `lecture_intel/`. ffmpeg and optional GPU runtimes are installed separately. See `lecture_intel/docs/GPU_BACKENDS.md`.
+          files: release-assets/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

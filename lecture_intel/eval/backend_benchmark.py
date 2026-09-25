@@ -108,6 +108,7 @@ def run_once(
         console_file.seek(0)
         console = console_file.read()
     output_file = output_dir / f"{audio.stem}.json"
+    safe_console = console.replace(str(audio), audio.name)
     row: dict[str, Any] = {
         "requested_engine": engine,
         "actual_engine": None,
@@ -122,12 +123,12 @@ def run_once(
         "error": None,
     }
     if child.returncode != 0:
-        row["error"] = console[-4000:] or f"CLI exited with {child.returncode}"
+        row["error"] = safe_console[-4000:] or f"CLI exited with {child.returncode}"
         return row
     try:
         result = json.loads(output_file.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
-        row["error"] = f"Could not read CLI JSON result: {exc}; {console[-1000:]}"
+        row["error"] = f"Could not read CLI JSON result: {exc}; {safe_console[-1000:]}"
         return row
 
     actual_engine, _, actual_model = result.get("model", "").partition(":")
@@ -225,7 +226,7 @@ def main(argv: list[str] | None = None) -> int:
 
     measured = [row for row in rows if not row["warmup"]]
     payload = {
-        "audio": str(args.audio.resolve()),
+        "audio": args.audio.name,
         "model": args.model,
         "warmups": args.warmups,
         "repeats": args.repeats,

@@ -19,6 +19,8 @@ backend/.venv/
 
 # ── 评测产物（生成数据，不入库）──────────────────────────────
 lecture_intel/eval/report*.md
+lecture_intel/eval/backend_benchmark.json
+lecture_intel/eval/backend_benchmark_runs/
 lecture_intel/eval/e2e_out/
 
 # ── 编译产物 ─────────────────────────────────────────────────
