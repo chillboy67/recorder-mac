@@ -47,6 +47,23 @@ cd lecture_intel
 模式，检查：通用/雅思只标注不动正文；课堂只折叠确认的 ASR 循环伪影、
 保留真口吃；`meta.json` 全程留痕。
 
+## CPU / GPU 后端对比
+
+在 `lecture_intel/` 目录用同一段本地音频比较 CPU 与 whisper.cpp 后端；如有
+人工校订的参考文本，可同时计算近似误差率：
+
+```bash
+.venv/bin/python eval/backend_benchmark.py path/to/sample.wav \
+  --engines faster-whisper,whisper.cpp-vulkan \
+  --model small --warmups 1 --repeats 3 --reference path/to/reference.txt
+```
+
+OpenVINO 用 `whisper.cpp-openvino` 替换 Vulkan。每次会记录请求/实际后端；GPU
+请求回退 CPU 时明确标记不合格。JSON 报告含端到端耗时、RTF、中位数和可选 RSS
+（安装 `psutil` 后采样），不等同于纯模型推理速度。参考文本分数是英文词级近似，
+中文/日文按字符计算；请结合逐字稿人工审听，不要只凭单个分数判断质量。完整说明见
+[`docs/GPU_BACKENDS.md`](../docs/GPU_BACKENDS.md)。
+
 ## 决策门（跑完按数字执行）
 
 | 结果 | 动作 |

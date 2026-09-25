@@ -121,6 +121,26 @@ do **not** prove hardware acceleration. For each machine/backend, record:
    verify the actual engine in the result; verify the graceful CPU fallback with
    a backend that is absent or fails runtime GPU confirmation.
 
+Recorder includes a repeatable harness for these comparisons. From
+`lecture_intel/`, pass the same fixture and optional human-reviewed reference to
+all runs:
+
+```sh
+python eval/backend_benchmark.py path/to/sample.wav \
+  --engines faster-whisper,whisper.cpp-vulkan \
+  --model small --warmups 1 --repeats 3 --reference path/to/reference.txt
+```
+
+For OpenVINO use `--engines faster-whisper,whisper.cpp-openvino`. The harness
+writes `eval/backend_benchmark.json` by default with each run, actual backend,
+wall time, RTF, and median plus min/max ranges. GPU backend mismatches (including CPU
+fallback) are explicitly marked and make the command fail. Peak RSS is sampled
+using optional `psutil`; install it in the app environment if memory data is
+needed (`python -m pip install psutil`). The reference score is a token WER
+proxy; CJK uses character-level units, so inspect the transcript and don't treat
+that value as a human-quality judgment. Keep fixture, model and power conditions
+identical across backend runs.
+
 Vulkan must be tested separately on at least one Intel iGPU and one AMD iGPU
 system to claim coverage. OpenVINO must be tested separately on Intel GPU
 hardware. Windows and Linux should each get at least one run before claiming
