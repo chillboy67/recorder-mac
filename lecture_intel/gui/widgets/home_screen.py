@@ -261,6 +261,9 @@ class HomeScreen(QWidget):
         root.addLayout(cards_row)
 
         # ---- settings row ----
+        engine_row = QHBoxLayout()
+        engine_row.setSpacing(10)
+        engine_row.setAlignment(Qt.AlignHCenter)
         srow = QHBoxLayout()
         self._srow = srow
         srow.setSpacing(18)
@@ -288,10 +291,8 @@ class HomeScreen(QWidget):
             self._engine_combo.addItem(t(key), userData=value)
         self._engine_combo.setToolTip(t("home_engine_tooltip"))
         self._engine_combo.currentIndexChanged.connect(self._save_prefs)
-        srow.addWidget(self._lbl_engine)
-        srow.addWidget(self._engine_combo)
-
-        srow.addWidget(self._divider())
+        engine_row.addWidget(self._lbl_engine)
+        engine_row.addWidget(self._engine_combo)
 
         self._lbl_lang = QLabel(t("home_language"))
         self._lbl_lang.setProperty("tone", "hint")
@@ -328,6 +329,7 @@ class HomeScreen(QWidget):
         srow.addWidget(self._cb_llm)
 
         root.addLayout(srow)
+        root.addLayout(engine_row)
 
     def resizeEvent(self, event) -> None:  # noqa: N802 (Qt naming)
         super().resizeEvent(event)
