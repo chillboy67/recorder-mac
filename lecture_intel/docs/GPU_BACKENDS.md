@@ -16,6 +16,12 @@ runtime logs, Recorder rejects the result as GPU and falls back to
 `faster-whisper` CPU when available. The result's engine field and warning report
 the actual backend used.
 
+For source-based Windows/Linux bootstrap installs, run `install_windows.ps1` or
+`bash install_linux.sh` inside `lecture_intel/`. Tag pushes matching `v*` run
+Windows/Linux tests and publish source bootstrap archives via
+`.github/workflows/release-installers.yml`; these are not standalone binaries.
+The `platform-ci.yml` workflow runs the same OS test matrix on pushes and PRs.
+
 ## Build whisper.cpp
 
 Use an upstream checkout and build on the target operating system. Build/install
@@ -146,6 +152,21 @@ system to claim coverage. OpenVINO must be tested separately on Intel GPU
 hardware. Windows and Linux should each get at least one run before claiming
 cross-platform validation. Current development-host tests cannot substitute for
 these device tests.
+
+A manual GitHub Actions hardware workflow is provided at
+`.github/workflows/gpu-hardware-smoke.yml`. Register self-hosted runners with one
+of its exact labels (`linux-vulkan-intel`, `linux-vulkan-amd`,
+`windows-vulkan-intel`, `windows-vulkan-amd`, `linux-openvino-intel`, or
+`windows-openvino-intel`) and dispatch the workflow selecting that same target.
+Each runner needs CMake, a C++ toolchain, Python 3.11, ffmpeg, a local speech
+fixture exposed as `RECORDER_GPU_TEST_AUDIO`, and the appropriate Vulkan SDK or
+OpenVINO installation. For OpenVINO set `OpenVINO_DIR`; driver/runtime libraries
+must also be available in the runner process environment. Vulkan Linux runners
+need Vulkan development headers/loader and a working GPU driver. The workflow
+builds whisper.cpp on the selected machine, runs the forced GPU-vs-CPU benchmark,
+and uploads only the metrics JSON (not the transcript/output directory). Do not
+register a runner with personal audio on a public repository unless you accept
+that workflow code from the repository can execute on that machine.
 
 ## Known limitation
 

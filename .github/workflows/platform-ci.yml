@@ -1,0 +1,50 @@
+name: Windows and Linux CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "lecture_intel/**"
+      - ".github/workflows/platform-ci.yml"
+  pull_request:
+    paths:
+      - "lecture_intel/**"
+      - ".github/workflows/platform-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: ${{ matrix.os }} / Python 3.11
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg libegl1 libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: lecture_intel/requirements.txt
+      - name: Install app and test dependencies
+        run: python -m pip install -r lecture_intel/requirements.txt pytest
+      - name: Compile Python sources
+        working-directory: lecture_intel
+        run: python -m compileall -q core gui eval
+      - name: Run core tests
+        working-directory: lecture_intel
+        run: python -m pytest -q tests -k "not test_export_all_formats"
+      - name: Run offscreen GUI tests
+        working-directory: lecture_intel
+        env:
+          RECORDER_GUI_TESTS: "1"
+          QT_QPA_PLATFORM: offscreen
+        run: python -m pytest -q tests/test_gui.py

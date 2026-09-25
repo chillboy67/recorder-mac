@@ -18,20 +18,44 @@ python app.py
 python transcribe.py audio.m4a -m ielts
 ```
 
-`make_app.sh` remains a macOS-only launcher installer. Windows/Linux packaging
-and system-audio loopback recording are not provided yet. On Windows/Linux,
-optional whisper.cpp Vulkan acceleration supports compatible Intel/AMD GPUs;
-Intel GPU acceleration is also available through the separately configured
-OpenVINO backend. Apple Silicon uses MLX/Metal when available; Intel Macs use
-the CPU path. See [docs/GPU_BACKENDS.md](docs/GPU_BACKENDS.md) for build,
-configuration, and real-hardware acceptance steps.
+`make_app.sh` installs the macOS launcher. Windows/Linux can use the source
+bootstrap installers (`install_windows.ps1` / `install_linux.sh`); these create a
+local Python environment and are not self-contained binaries. System-audio
+loopback recording remains macOS-only. On Windows/Linux, optional whisper.cpp
+Vulkan acceleration supports compatible Intel/AMD GPUs; Intel GPU acceleration
+is also available through the separately configured OpenVINO backend. Apple
+Silicon uses MLX/Metal when available; Intel Macs use the CPU path. See
+[docs/GPU_BACKENDS.md](docs/GPU_BACKENDS.md) for build, configuration, hardware
+validation and release workflow details.
+
+### Windows / Linux source bootstrap
+
+Extract a tagged `Recorder-Windows-*.zip` or `Recorder-Linux-*.tar.gz` release
+(or clone the repository), then from `lecture_intel/`:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\install_windows.ps1 -DownloadCpuModel
+powershell -NoProfile -ExecutionPolicy Bypass -File .\run_windows.ps1
+```
+
+```bash
+bash install_linux.sh --download-cpu-model
+./run_linux.sh
+```
+
+The optional flag pre-downloads the small CPU model for offline transcription.
+Install ffmpeg separately if it is not already available. GPU acceleration is
+optional and requires a matching external whisper.cpp build, drivers, and model;
+follow [docs/GPU_BACKENDS.md](docs/GPU_BACKENDS.md). These are bootstrap/source
+archives, not signed standalone executables. The release workflow runs the
+Windows/Linux tests before publishing the archives on a `v*` tag.
 
 ## Architecture
 
 ```
 app.py            PySide6 GUI entry (double-click target)
 transcribe.py     CLI entry
-make_app.sh        builds dist/Recorder.app (lightweight launcher → venv)
+make_app.sh        installs /Applications/Recorder.app (launcher → venv)
 
 core/             ← the engine (mode-driven)
 
