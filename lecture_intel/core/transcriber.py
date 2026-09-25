@@ -11,9 +11,9 @@ Design decisions that matter for accuracy (these fix the old pipeline's
    carry-over (``condition_on_previous_text``) and its own VAD/no-speech
    handling — so we just hand it the entire file.
 
-2. **mlx-whisper large-v3 first** (Apple-Silicon Metal acceleration → roughly
-   real-time on an M-series), **faster-whisper as a CPU fallback** so the app
-   still works if MLX is unavailable.
+2. **MLX on Apple Silicon when available**, **faster-whisper on CPU everywhere
+   else**. The automatic CPU profile uses a smaller model to keep first-run
+   latency and memory practical; users can still select a larger model.
 
 3. **Word-level timestamps + probabilities always on.** Confidence is what lets
    the IELTS mode flag *likely* mispronunciations, and the per-word timing is
@@ -27,6 +27,9 @@ Design decisions that matter for accuracy (these fix the old pipeline's
 from __future__ import annotations
 
 import logging
+import os
+import platform
+import shutil
 import time
 from pathlib import Path
 from typing import Callable, Optional
@@ -34,6 +37,9 @@ from typing import Callable, Optional
 from modules import ASRResult, ASRSegment, ASRWord
 
 from core.i18n import t
+from core.model_cache import (faster_whisper_cache_dir, find_faster_whisper_model,
+                              mlx_cache_dir, whisper_cpp_model_available,
+                              whisper_cpp_model_path)
 from core.languages import (detect_language, disambiguate_latin_language,
                             english_function_words_dominate, _LATIN_LANGS)
 
@@ -66,11 +72,12 @@ class Transcriber:
 
     def __init__(
         self,
-        model: str = "large-v3",
+        model: str = "auto",
         engine: str = "auto",        # auto | mlx-whisper | faster-whisper
         beam_size: int = 5,
         compute_type: str = "int8",  # faster-whisper CPU precision
     ):
+        self.requested_model = model
         self.model = model
         self.requested_engine = engine
         self.beam_size = beam_size
@@ -104,11 +111,17 @@ class Transcriber:
         stays on the GPU (mlx's single pass locks to one global language).
         """
         engine = self._resolve_engine()
+        self.model = self._resolved_model(engine)
         logger.info("Transcribing with %s (model=%s, chunked=%s)", engine, self.model, chunked)
         if progress:
             progress(0.0, t("tr_load_model", model=self.model, engine=engine))
 
         warnings: list[str] = []
+        if engine == "faster-whisper" and self.requested_engine != "faster-whisper":
+            if self._mlx_supported_host():
+                warnings.append(t("tr_warn_mlx_unavailable"))
+            elif self.requested_engine == "mlx-whisper":
+                warnings.append(t("tr_warn_mlx_unsupported"))
         t0 = time.time()
         if engine == "mlx-whisper" and chunked:
             # Chunking stays on even for a pinned language: it is what bounds
@@ -119,12 +132,19 @@ class Transcriber:
                     audio_path, initial_prompt, progress, chunk_sec, language,
                     temperature,
                 )
-            except Exception as exc:
-                logger.warning("chunked mlx failed (%s); falling back to single-pass", exc)
-                raw_segments, detected_lang = self._transcribe_mlx(
-                    audio_path, language, initial_prompt, condition_on_previous,
-                    progress, temperature,
-                )
+            except Exception as chunk_exc:
+                logger.warning("chunked mlx failed (%s); retrying single-pass", chunk_exc)
+                try:
+                    raw_segments, detected_lang = self._transcribe_mlx(
+                        audio_path, language, initial_prompt, condition_on_previous,
+                        progress, temperature,
+                    )
+                except Exception as mlx_exc:
+                    raw_segments, detected_lang = self._fallback_to_faster(
+                        audio_path, language, initial_prompt, condition_on_previous,
+                        progress, temperature, warnings,
+                        RuntimeError(f"chunked MLX failed: {chunk_exc}; single-pass MLX failed: {mlx_exc}"),
+                    )
         elif engine == "mlx-whisper":
             try:
                 raw_segments, detected_lang = self._transcribe_mlx(
@@ -132,24 +152,31 @@ class Transcriber:
                     progress, temperature,
                 )
             except Exception as exc:
-                # mlx failed mid-run (e.g. model download interrupted) — don't
-                # leave the user stranded; fall back to the CPU engine.
                 logger.warning("mlx-whisper failed (%s); falling back to faster-whisper", exc)
-                if not self._faster_available():
-                    raise
-                warnings.append(t("tr_warn_fallback", exc=exc))
-                self._engine = engine = "faster-whisper"
-                if progress:
-                    progress(0.05, t("tr_mlx_fallback"))
-                raw_segments, detected_lang = self._transcribe_faster(
+                raw_segments, detected_lang = self._fallback_to_faster(
                     audio_path, language, initial_prompt, condition_on_previous,
-                    progress, temperature,
+                    progress, temperature, warnings, exc, backend="MLX",
+                )
+        elif engine in ("whisper.cpp-vulkan", "whisper.cpp-openvino"):
+            try:
+                raw_segments, detected_lang = self._transcribe_whisper_cpp(
+                    engine, audio_path, language, initial_prompt,
+                    condition_on_previous,
+                )
+                if chunked and language is None:
+                    warnings.append(t("tr_cpp_language_warning"))
+            except Exception as exc:
+                logger.warning("%s failed (%s); falling back to CPU", engine, exc)
+                raw_segments, detected_lang = self._fallback_to_faster(
+                    audio_path, language, initial_prompt, condition_on_previous,
+                    progress, temperature, warnings, exc, backend=engine,
                 )
         else:
             raw_segments, detected_lang = self._transcribe_faster(
                 audio_path, language, initial_prompt, condition_on_previous,
                 progress, temperature,
             )
+        engine = self._engine or engine
         dt = time.time() - t0
 
         segments = self._to_segments(raw_segments, detected_lang)
@@ -181,6 +208,26 @@ class Transcriber:
             return self._engine
         if self.requested_engine in ("auto", "mlx-whisper") and self._mlx_available():
             self._engine = "mlx-whisper"
+        elif self.requested_engine in ("auto", "whisper.cpp-vulkan", "whisper.cpp-openvino"):
+            requested_cpp = (self.requested_engine.removeprefix("whisper.cpp-")
+                             if self.requested_engine.startswith("whisper.cpp-") else None)
+            backends = (requested_cpp,) if requested_cpp else ("vulkan", "openvino")
+            for backend in backends:
+                if self._whisper_cpp_available(backend, configured_only=requested_cpp is None):
+                    self._engine = f"whisper.cpp-{backend}"
+                    break
+            if self._engine:
+                return self._engine
+            if requested_cpp:
+                raise RuntimeError(
+                    f"whisper.cpp {requested_cpp} is not ready. Configure "
+                    f"RECORDER_WHISPER_CPP_{requested_cpp.upper()} and download its "
+                    f"model with 'python download_models.py --engine cpp-{requested_cpp} {self._resolved_model('faster-whisper')}'."
+                )
+            if self._faster_available():
+                self._engine = "faster-whisper"
+            else:
+                raise RuntimeError("No configured whisper.cpp GPU backend or CPU ASR engine is available.")
         elif self._faster_available():
             self._engine = "faster-whisper"
             if self.requested_engine == "mlx-whisper":
@@ -194,7 +241,84 @@ class Transcriber:
         return self._engine
 
     @staticmethod
+    def _mlx_supported_host() -> bool:
+        return (platform.system() == "Darwin"
+                and platform.machine().lower() in ("arm64", "aarch64"))
+
+    def _resolved_model(self, engine: str) -> str:
+        if self.requested_model != "auto":
+            return self.requested_model
+        return "large-v3" if engine == "mlx-whisper" else "small"
+
+    def _whisper_cpp_available(self, backend: str, *, configured_only: bool) -> bool:
+        variable = f"RECORDER_WHISPER_CPP_{backend.upper()}"
+        configured = os.environ.get(variable)
+        if configured:
+            binary = Path(configured).expanduser()
+            if not binary.is_file():
+                return False
+        elif configured_only:
+            return False
+        else:
+            found = shutil.which("whisper-cli") or shutil.which("whisper-cpp")
+            if not found:
+                return False
+            binary = Path(found)
+        model = self._resolved_model(f"whisper.cpp-{backend}")
+        return whisper_cpp_model_available(model, backend)
+
+    def _whisper_cpp_binary(self, backend: str) -> str:
+        variable = f"RECORDER_WHISPER_CPP_{backend.upper()}"
+        configured = os.environ.get(variable)
+        if configured:
+            path = Path(configured).expanduser()
+            if path.is_file():
+                return str(path)
+        found = shutil.which("whisper-cli") or shutil.which("whisper-cpp")
+        if found:
+            return found
+        raise RuntimeError(f"whisper.cpp binary is not configured ({variable})")
+
+    def _transcribe_whisper_cpp(self, engine, audio_path, language, initial_prompt,
+                                condition_on_previous):
+        from core.whisper_cpp import WhisperCppTranscriber
+
+        backend = engine.removeprefix("whisper.cpp-")
+        runner = WhisperCppTranscriber(
+            self._whisper_cpp_binary(backend), backend,
+            whisper_cpp_model_path(self.model), beam_size=self.beam_size,
+            threads=max(1, min(8, os.cpu_count() or 4)),
+        )
+        segments = runner.transcribe(
+            audio_path, language=language, prompt=initial_prompt,
+            condition_on_previous=condition_on_previous,
+        )
+        return segments, runner.detected_language or language or "en"
+
+    def _fallback_to_faster(
+        self, audio_path, language, initial_prompt, condition_on_previous,
+        progress, temperature, warnings, cause, backend="MLX",
+    ):
+        if not self._faster_available():
+            raise RuntimeError(
+                f"{backend} transcription failed ({cause}) and faster-whisper is unavailable. "
+                "Install the CPU dependencies or choose a supported backend."
+            ) from cause
+        if self.requested_model == "auto":
+            self.model = self._resolved_model("faster-whisper")
+        warnings.append(t("tr_warn_fallback", backend=backend, exc=cause))
+        self._engine = "faster-whisper"
+        if progress:
+            progress(0.05, t("tr_backend_fallback", backend=backend, model=self.model))
+        return self._transcribe_faster(
+            audio_path, language, initial_prompt, condition_on_previous,
+            progress, temperature,
+        )
+
+    @staticmethod
     def _mlx_available() -> bool:
+        if not Transcriber._mlx_supported_host():
+            return False
         try:
             import mlx_whisper  # noqa: F401
             return True
@@ -361,11 +485,24 @@ class Transcriber:
     def _load_faster(self):
         if self._faster_model is None:
             from faster_whisper import WhisperModel
-            logger.info("Loading faster-whisper %s (%s, CPU)…", self.model, self.compute_type)
-            self._faster_model = WhisperModel(
-                self.model, device="cpu", compute_type=self.compute_type,
-                cpu_threads=max(4, 0), num_workers=1,
-            )
+            cached_model = find_faster_whisper_model(self.model)
+            model_ref = str(cached_model) if cached_model else self.model
+            threads = max(1, min(8, os.cpu_count() or 4))
+            logger.info("Loading faster-whisper %s (%s, CPU, %d threads)…",
+                        self.model, self.compute_type, threads)
+            try:
+                self._faster_model = WhisperModel(
+                    model_ref, device="cpu", compute_type=self.compute_type,
+                    cpu_threads=threads, num_workers=1,
+                    download_root=str(faster_whisper_cache_dir()),
+                )
+            except Exception as exc:
+                raise RuntimeError(
+                    f"Could not load the CPU Whisper model '{self.model}'. "
+                    "Check the network connection or pre-download it with "
+                    f"'python download_models.py --engine cpu {self.model}'. "
+                    f"Original error: {exc}"
+                ) from exc
         return self._faster_model
 
     def _transcribe_faster(
@@ -464,6 +601,7 @@ def _local_model_dir(model: str):
     name = f"whisper-{model}-mlx"
     candidates = [
         _P.home() / "Library" / "Application Support" / "Recorder" / "models" / name,
+        mlx_cache_dir() / name,
         _P(__file__).resolve().parent.parent / "models" / name,
     ]
     for d in candidates:

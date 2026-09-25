@@ -231,8 +231,8 @@ _CATALOG: dict[str, dict[str, str]] = {
         "en": "Can’t start — the following dependencies are missing:\n\n{missing}\n\n"
               "In the project folder, run:\n  uv pip install -r requirements.txt",
     },
-    "deps_whisper": {"zh": "mlx-whisper 或 faster-whisper（二者至少装一个）",
-                     "en": "mlx-whisper or faster-whisper (install at least one)"},
+    "deps_whisper": {"zh": "faster-whisper CPU 引擎未安装，请重新安装项目依赖",
+                     "en": "The faster-whisper CPU engine is missing; reinstall the app dependencies."},
 
     # left step rail
     "rail_input": {"zh": "输入", "en": "Input"},
@@ -247,6 +247,16 @@ _CATALOG: dict[str, dict[str, str]] = {
     "home_start": {"zh": "开 始 转 写", "en": "Start Transcription"},
     "home_remove": {"zh": "移除", "en": "Remove"},
     "home_model": {"zh": "识别模型", "en": "Model"},
+    "home_engine": {"zh": "转写后端", "en": "Backend"},
+    "home_engine_tooltip": {
+        "zh": "自动选择可用后端；Vulkan 支持兼容的 Intel/AMD GPU，OpenVINO 用于 Intel GPU。需先按 GPU_BACKENDS.md 安装并下载模型。",
+        "en": "Auto selects an available backend. Vulkan supports compatible Intel/AMD GPUs; OpenVINO targets Intel GPUs. Install and download models per GPU_BACKENDS.md first.",
+    },
+    "engine_auto": {"zh": "自动", "en": "Auto"},
+    "engine_mlx": {"zh": "MLX / Metal", "en": "MLX / Metal"},
+    "engine_cpu": {"zh": "CPU", "en": "CPU"},
+    "engine_vulkan": {"zh": "Vulkan GPU", "en": "Vulkan GPU"},
+    "engine_openvino": {"zh": "OpenVINO GPU", "en": "OpenVINO GPU"},
     "home_language": {"zh": "识别语言", "en": "Recognition language"},
     "lang_auto": {"zh": "自动检测", "en": "Auto"},
     "lang_auto_short": {"zh": "Auto", "en": "Auto"},
@@ -275,6 +285,12 @@ _CATALOG: dict[str, dict[str, str]] = {
     "source_both": {"zh": "麦克风＋电脑声音", "en": "Mic + System Audio"},
 
     # model picker
+    "model_auto": {"zh": "自动 auto", "en": "Auto · recommended"},
+    "model_auto_word": {"zh": "自动", "en": "Auto"},
+    "model_auto_help": {
+        "zh": "自动选择：Apple Silicon 的 MLX 使用 large-v3；CPU 使用 small，降低内存和等待时间。可手动选择其他模型。",
+        "en": "Automatic: MLX uses large-v3 on Apple Silicon; CPU uses small to reduce memory and wait time. Choose another model to override.",
+    },
     "model_large": {"zh": "最准 large-v3", "en": "Accurate · large-v3"},
     "model_large_word": {"zh": "最准", "en": "Accurate"},
     "model_turbo": {"zh": "均衡 large-v3-turbo", "en": "Balanced · large-v3-turbo"},
@@ -432,14 +448,24 @@ _CATALOG: dict[str, dict[str, str]] = {
     # transcriber progress messages
     "tr_load_model": {"zh": "加载 {model} 模型 ({engine})…",
                       "en": "Loading the {model} model ({engine})…"},
-    "tr_mlx_fallback": {"zh": "MLX 失败，改用 CPU 引擎…",
-                        "en": "MLX failed — switching to the CPU engine…"},
+    "tr_backend_fallback": {"zh": "{backend} 不可用，改用 CPU faster-whisper（{model}）…",
+                             "en": "{backend} unavailable — switching to CPU faster-whisper ({model})…"},
     "tr_done": {"zh": "转写完成", "en": "Transcription complete"},
     "tr_mlx": {"zh": "转写中（MLX 加速）…", "en": "Transcribing (MLX accelerated)…"},
     "tr_gpu_chunk": {"zh": "转写中（GPU 分块）…", "en": "Transcribing (GPU, chunked)…"},
     "tr_cpu": {"zh": "转写中（CPU）…", "en": "Transcribing (CPU)…"},
-    "tr_warn_fallback": {"zh": "mlx-whisper 失败，已回退 faster-whisper：{exc}",
-                         "en": "mlx-whisper failed; fell back to faster-whisper: {exc}"},
+    "tr_warn_fallback": {"zh": "{backend} 运行失败，已回退 CPU faster-whisper：{exc}",
+                         "en": "{backend} failed; fell back to CPU faster-whisper: {exc}"},
+    "tr_cpp_language_warning": {
+        "zh": "whisper.cpp 当前为整段统一语种检测；中英混说可能不如逐块检测。",
+        "en": "whisper.cpp currently detects one language for the full recording; mixed-language accuracy may differ from per-chunk detection.",
+    },
+    "tr_warn_mlx_unavailable": {"zh": "Apple GPU 加速不可用，已使用 CPU 转写。",
+                                "en": "Apple GPU acceleration is unavailable; using CPU transcription."},
+    "tr_warn_mlx_unsupported": {"zh": "此设备不支持 MLX，已使用 CPU 转写。",
+                                "en": "MLX is not supported on this device; using CPU transcription."},
+    "res_key_model": {"zh": "识别引擎 / 模型", "en": "Engine / model"},
+    "res_key_warnings": {"zh": "运行提示", "en": "Run warnings"},
 
     # local-LLM progress messages
     "llm_proofreading": {"zh": "校对中 {i}/{n}", "en": "Proofreading {i}/{n}"},

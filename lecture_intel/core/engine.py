@@ -38,7 +38,7 @@ def run(
     output_dir: str | Path,
     mode_key: str = "general",
     *,
-    model: str = "large-v3",
+    model: str = "auto",
     engine: Optional[str] = None,   # None → use the mode's preferred engine
     language: Optional[str] = None,  # None → mode default; "auto"/"" → detect per chunk
     initial_prompt: Optional[str] = None,
@@ -126,10 +126,13 @@ def run(
     )
     warnings.extend(asr.warnings)
     report("asr", t("eng_asr_done", count=len(asr.segments)), 76, "done")
+    actual_engine, _, actual_model = asr.model_used.partition(":")
     provenance.append_meta(output_dir, {
         "name": "transcribe",
         "input_sha256": provenance.sha256_file(wav_path),
-        "params": {"model": model, "engine": engine or mode.engine,
+        "params": {"requested_model": model,
+                   "model": actual_model or asr.model_used,
+                   "engine": actual_engine or (engine or mode.engine),
                    "language": lang,
                    "temperature_ladder": list(TEMPERATURE_LADDER),
                    "condition_on_previous": mode.condition_on_previous},

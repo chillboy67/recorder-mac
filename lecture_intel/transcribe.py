@@ -24,10 +24,13 @@ def main() -> int:
     ap.add_argument("-m", "--mode", default="general",
                     choices=["general", "classroom", "ielts"])
     ap.add_argument("-o", "--output", default=None, help="output dir (default: <input>_output)")
-    ap.add_argument("--model", default="large-v3",
-                    help="large-v3 | large-v3-turbo | medium | small")
+    ap.add_argument("--model", default="auto",
+                    choices=["auto", "large-v3", "large-v3-turbo", "medium", "small"],
+                    help="auto selects large-v3 on Apple Silicon MLX and small on CPU")
     ap.add_argument("--engine", default="auto",
-                    choices=["auto", "mlx-whisper", "faster-whisper"])
+                    choices=["auto", "mlx-whisper", "faster-whisper",
+                             "whisper.cpp-vulkan", "whisper.cpp-openvino"],
+                    help="GPU backends require a matching whisper.cpp binary and pre-downloaded model")
     ap.add_argument("-l", "--language", default=None, metavar="CODE",
                     help="pin the spoken language (zh en ja ko fr de es…). "
                          "Default: auto-detect, which also enables per-chunk "
@@ -66,6 +69,8 @@ def main() -> int:
           f"engine={summary['model']}")
     print(f"  segments={summary['segment_count']}  "
           f"time={summary['total_time_s']:.1f}s")
+    for warning in summary.get("warnings", []):
+        print(f"  warning: {warning}")
     for fmt, path in summary["output_files"].items():
         print(f"    {fmt:6s} → {path}")
     if summary.get("ielts"):
