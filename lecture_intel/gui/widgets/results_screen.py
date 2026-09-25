@@ -225,6 +225,15 @@ class ResultsScreen(QWidget):
         self._add_rail_kv(t("res_key_duration"), f"{dur:.0f}s")
         total_s = stats.get("total_time_s", 0)
         self._add_rail_kv(t("res_key_elapsed"), f"{total_s:.0f}s")
+        if stats.get("model"):
+            self._add_rail_kv(t("res_key_model"), str(stats["model"]))
+        warnings = stats.get("warnings") or []
+        if warnings:
+            self._rail.addWidget(self._rail_section(t("res_key_warnings")))
+            warning_label = QLabel("\n".join(str(item) for item in warnings))
+            warning_label.setWordWrap(True)
+            warning_label.setProperty("tone", "danger")
+            self._rail.addWidget(warning_label)
         if classroom:
             self._add_rail_kv(t("res_key_emphasis"), str(classroom.get("emphasis_count", 0)))
             self._add_rail_kv(t("res_key_definitions"), str(classroom.get("definition_count", 0)))

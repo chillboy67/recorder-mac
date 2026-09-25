@@ -45,8 +45,16 @@ faster-whisper#901、whisper.cpp#965 报告后均未修复）。50 条评测集�
 ## 核心特性
 
 - **完全离线**。Whisper 模型跑在本机，首次下载后可以断网使用。没有账号、没有上传。
-- **Apple Silicon GPU 加速**。默认 `mlx-whisper`（Metal），不可用时自动回退
-  `faster-whisper`（CPU）。
+- **Apple Silicon GPU 加速**。默认 `mlx-whisper`（Metal）；不可用时自动回退
+  `faster-whisper`（CPU）。纯 CPU 推理依赖已按平台整理，CPU 设备的自动档使用
+  `small` 模型，且支持预下载后离线运行。
+- **跨平台与加速后端**：App/CLI 已接入可选 whisper.cpp Vulkan（兼容的
+  Intel/AMD GPU）和 Intel OpenVINO GPU 后端，未配置或未能确认 GPU 执行时回退
+  faster-whisper CPU。构建/配置及真实设备实测尚待 Windows/Linux 用户验证；欢迎
+  Windows/Linux 用户 fork 本项目、按指南测试并提交 PR（附机器、驱动、构建参数及
+  对比数据）。在完成真实硬件验证前，不将其描述为已验证支持。Apple Silicon
+  使用 MLX/Metal；Intel Mac 使用 CPU 路径。见
+  [GPU 后端实测指南](lecture_intel/docs/GPU_BACKENDS.md)。
 - **中英混合（code-switching）不偏科**。中文段落保持中文、英文段落保持英文，
   不会被"翻译"成单一语言（实现见下方"工程要点"）。
 - **两种录音来源**：麦克风、**电脑内部声音**（线上课/网页视频，戴耳机也能录），

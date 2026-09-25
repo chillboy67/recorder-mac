@@ -44,6 +44,7 @@ SUPPORTED_EXTENSIONS: set[str] = {
 MODES = [GENERAL, CLASSROOM, IELTS]
 # (value, i18n key) — labels resolve through t() so they follow the UI language.
 MODELS = [
+    ("auto", "model_auto"),
     ("large-v3", "model_large"),
     ("large-v3-turbo", "model_turbo"),
     ("small", "model_small"),
@@ -51,6 +52,7 @@ MODELS = [
 # compact closed-state icons, colour emoji on purpose: direct hit =
 # accurate, scale = balanced, bolt = fast (emoji presentation selectors)
 MODEL_ICONS = {
+    "model_auto": "A",
     "model_large": chr(127919),              # 🎯
     "model_turbo": chr(9878) + chr(65039),   # ⚖️
     "model_small": chr(9889) + chr(65039),   # ⚡️
@@ -275,6 +277,20 @@ class HomeScreen(QWidget):
         srow.addWidget(self._lbl_model)
         srow.addWidget(self._model_combo)
 
+        self._lbl_engine = QLabel(t("home_engine"))
+        self._lbl_engine.setProperty("tone", "hint")
+        self._engine_combo = NoScrollComboBox()
+        for value, key in (("auto", "engine_auto"),
+                           ("mlx-whisper", "engine_mlx"),
+                           ("faster-whisper", "engine_cpu"),
+                           ("whisper.cpp-vulkan", "engine_vulkan"),
+                           ("whisper.cpp-openvino", "engine_openvino")):
+            self._engine_combo.addItem(t(key), userData=value)
+        self._engine_combo.setToolTip(t("home_engine_tooltip"))
+        self._engine_combo.currentIndexChanged.connect(self._save_prefs)
+        srow.addWidget(self._lbl_engine)
+        srow.addWidget(self._engine_combo)
+
         srow.addWidget(self._divider())
 
         self._lbl_lang = QLabel(t("home_language"))
@@ -329,9 +345,11 @@ class HomeScreen(QWidget):
 
     def _refresh_model_tooltip(self) -> None:
         # the icon-only closed combo keeps its meaning on hover
+        key = MODELS[self._model_combo.currentIndex()][1]
         if self._compact:
-            key = MODELS[self._model_combo.currentIndex()][1]
             self._model_combo.setToolTip(t(key + "_word"))
+        elif self._model_combo.currentData() == "auto":
+            self._model_combo.setToolTip(t("model_auto_help"))
         else:
             self._model_combo.setToolTip("")
 
@@ -446,6 +464,7 @@ class HomeScreen(QWidget):
         return {
             "mode": self.current_mode(),
             "model": self._model_combo.currentData(),
+            "engine": self._engine_combo.currentData(),
             "language": self._lang_combo.currentData(),
             "formats": formats,
             "use_llm": self._cb_llm.isChecked(),
@@ -455,6 +474,7 @@ class HomeScreen(QWidget):
         s = self.get_settings()
         self._prefs.setValue("mode", s["mode"])
         self._prefs.setValue("model", s["model"])
+        self._prefs.setValue("engine", s["engine"])
         self._prefs.setValue("language", s["language"])
         self._prefs.setValue("formats", s["formats"])
         self._prefs.setValue("use_llm", s["use_llm"])
@@ -465,7 +485,8 @@ class HomeScreen(QWidget):
         # to overwrite the stored model/language/formats/LLM prefs with
         # defaults before they were read back — resetting them every launch.
         mode = self._prefs.value("mode", "general")
-        model = self._prefs.value("model", "large-v3")
+        model = self._prefs.value("model", "auto")
+        engine = self._prefs.value("engine", "auto")
         lang = self._prefs.value("language", "auto")
         fmts = self._prefs.value("formats", ["txt", "md", "docx"])
         if isinstance(fmts, str):
@@ -477,6 +498,11 @@ class HomeScreen(QWidget):
         for i in range(self._model_combo.count()):
             if self._model_combo.itemData(i) == model:
                 self._model_combo.setCurrentIndex(i)
+                break
+
+        for i in range(self._engine_combo.count()):
+            if self._engine_combo.itemData(i) == engine:
+                self._engine_combo.setCurrentIndex(i)
                 break
 
         for i in range(self._lang_combo.count()):
@@ -573,6 +599,11 @@ class HomeScreen(QWidget):
             if card is not None:
                 card.set_texts(t(f"mode_{m.key}_title"), t(f"mode_{m.key}_desc"))
         self._lbl_model.setText(t("home_model"))
+        self._lbl_engine.setText(t("home_engine"))
+        self._engine_combo.setToolTip(t("home_engine_tooltip"))
+        for i, key in enumerate(("engine_auto", "engine_mlx", "engine_cpu",
+                                 "engine_vulkan", "engine_openvino")):
+            self._engine_combo.setItemText(i, t(key))
         self._lbl_lang.setText(t("home_language"))
         self._lbl_fmt.setText(t("home_export"))
         self._lang_combo.setToolTip(t("home_lang_tooltip"))

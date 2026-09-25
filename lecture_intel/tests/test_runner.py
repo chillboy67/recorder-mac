@@ -69,7 +69,8 @@ def test_result_is_reported_with_progress_messages(tmp_path, monkeypatch):
 
 def test_settings_are_mapped_onto_the_engine_kwargs(tmp_path, stub_engine):
     settings = {
-        "mode": "classroom", "model": "small", "language": "zh",
+        "mode": "classroom", "model": "small", "engine": "whisper.cpp-vulkan",
+        "language": "zh",
         "formats": ["txt", "md"], "use_llm": True,
         "llm_model": "mistral", "chinese_model": "qwen3", "ui_lang": "en",
     }
@@ -79,6 +80,7 @@ def test_settings_are_mapped_onto_the_engine_kwargs(tmp_path, stub_engine):
     assert stub_engine["output_dir"] == str(tmp_path)
     assert stub_engine["mode_key"] == "classroom"
     assert stub_engine["model"] == "small"
+    assert stub_engine["engine"] == "whisper.cpp-vulkan"
     assert stub_engine["language"] == "zh"
     assert stub_engine["formats"] == ["txt", "md"]
     assert stub_engine["use_llm"] is True
@@ -90,7 +92,8 @@ def test_missing_settings_fall_back_to_documented_defaults(tmp_path, stub_engine
     run_pipeline_subprocess("in.wav", str(tmp_path), {}, FakeQueue())
 
     assert stub_engine["mode_key"] == "general"
-    assert stub_engine["model"] == "large-v3"
+    assert stub_engine["model"] == "auto"
+    assert stub_engine["engine"] == "auto"
     assert stub_engine["use_llm"] is False
     assert stub_engine["language"] is None
     assert stub_engine["llm_model"] == llm_mod.DEFAULT_MODEL

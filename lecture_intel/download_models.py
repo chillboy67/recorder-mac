@@ -1,31 +1,32 @@
 #!/usr/bin/env python3
 """
-Download all Whisper models Recorder offers — into a local folder, via curl.
-
-Why curl (not huggingface_hub)? On some networks (notably mainland China) the
-huggingface_hub transfer layer (xet / LFS negotiation) stalls at 0 bytes, while
-a plain HTTPS GET to the resolve URL streams fine. So we fetch each repo's files
-directly with curl + resume, through the hf-mirror.com mirror by default.
-
-Models land in:  <this dir>/models/whisper-<name>-mlx/
-The app loads them from there automatically (fully offline, no HF call at runtime).
+Download Whisper models for MLX or faster-whisper into separate local caches.
 
 Usage:
-    python download_models.py                 # all models, via hf-mirror.com
-    python download_models.py --hf            # use huggingface.co instead
-    python download_models.py small medium     # only these
+    python download_models.py                     # MLX on Apple Silicon, CPU elsewhere
+    python download_models.py --engine cpu small  # portable CTranslate2 model
+    python download_models.py --engine mlx --hf   # Apple Silicon, Hugging Face directly
+    python download_models.py --engine all small  # both formats for one model
 """
 from __future__ import annotations
 
+import argparse
 import json
+import os
+import platform
+import shutil
 import subprocess
 import sys
 import urllib.request
+import zipfile
 from pathlib import Path
 
-# Shared install location so both the dev tree and the installed Recorder.app
-# find the models (the transcriber checks here first).
-MODELS_DIR = Path.home() / "Library" / "Application Support" / "Recorder" / "models"
+from core.model_cache import (faster_whisper_cache_dir, is_faster_whisper_model,
+                              mlx_cache_dir, whisper_cpp_model_available,
+                              whisper_cpp_model_dir)
+
+# MLX and faster-whisper use different model formats and separate cache folders.
+MODELS_DIR = mlx_cache_dir()
 
 # UI model name → HF repo
 REPOS = {
@@ -87,15 +88,126 @@ def fetch_model(name: str, use_hf: bool) -> bool:
     return ok
 
 
-def main() -> int:
-    args = [a for a in sys.argv[1:] if not a.startswith("-")]
-    use_hf = "--hf" in sys.argv
-    names = args or list(REPOS)
-    results = {n: fetch_model(n, use_hf) for n in names if n in REPOS}
+def _set_hf_endpoint(use_hf: bool) -> None:
+    if use_hf:
+        os.environ["HF_ENDPOINT"] = "https://huggingface.co"
+    else:
+        os.environ.setdefault("HF_ENDPOINT", "https://hf-mirror.com")
+
+
+def fetch_cpu_model(name: str, use_hf: bool = False) -> bool:
+    """Pre-download a CTranslate2 model into faster-whisper's isolated cache."""
+    _set_hf_endpoint(use_hf)
+    from faster_whisper.utils import download_model
+
+    print(f"\n=== {name} (faster-whisper / CPU) ===", flush=True)
+    try:
+        path = Path(download_model(name, cache_dir=str(faster_whisper_cache_dir())))
+    except Exception as exc:
+        print(f"  ✗ download failed: {exc}", flush=True)
+        return False
+    if not is_faster_whisper_model(path):
+        print(f"  ✗ incomplete model files: {path}", flush=True)
+        return False
+    size = sum(f.stat().st_size for f in path.iterdir() if f.is_file()) / 1e6
+    print(f"  ✓ {name} ready ({size:.0f} MB) at {path}", flush=True)
+    return True
+
+
+def fetch_whisper_cpp_model(name: str, backend: str, use_hf: bool = False) -> bool:
+    """Fetch ggml model files for Vulkan or the Intel OpenVINO encoder."""
+    _set_hf_endpoint(use_hf)
+    from huggingface_hub import hf_hub_download
+
+    out_dir = whisper_cpp_model_dir(name)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        if backend == "vulkan":
+            hf_hub_download(
+                repo_id="ggerganov/whisper.cpp",
+                filename=f"ggml-{name}.bin",
+                local_dir=str(out_dir),
+            )
+        elif backend == "openvino":
+            archive = hf_hub_download(
+                repo_id="Intel/whisper.cpp-openvino-models",
+                filename=f"ggml-{name}-models.zip",
+                local_dir=str(out_dir),
+            )
+            wanted = {
+                f"ggml-{name}.bin",
+                f"ggml-{name}-encoder-openvino.xml",
+                f"ggml-{name}-encoder-openvino.bin",
+            }
+            with zipfile.ZipFile(archive) as bundle:
+                for member in bundle.infolist():
+                    if Path(member.filename).name in wanted and not member.is_dir():
+                        destination = out_dir / Path(member.filename).name
+                        with bundle.open(member) as source, destination.open("wb") as target:
+                            shutil.copyfileobj(source, target)
+        else:
+            raise ValueError(f"Unknown whisper.cpp backend: {backend}")
+    except Exception as exc:
+        print(f"  ✗ download failed: {exc}", flush=True)
+        return False
+
+    if not whisper_cpp_model_available(name, backend):
+        print(f"  ✗ incomplete {backend} model files in {out_dir}", flush=True)
+        return False
+    print(f"  ✓ {name} ready for whisper.cpp {backend} at {out_dir}", flush=True)
+    return True
+
+
+def _default_engine() -> str:
+    if (platform.system() == "Darwin"
+            and platform.machine().lower() in ("arm64", "aarch64")):
+        return "mlx"
+    return "cpu"
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Download Recorder Whisper models")
+    parser.add_argument("--engine", choices=("auto", "mlx", "cpu", "cpp-vulkan", "cpp-openvino", "all"),
+                        default="auto", help="model format/backend (default: platform-appropriate)")
+    parser.add_argument("--hf", action="store_true",
+                        help="use huggingface.co instead of hf-mirror.com for model downloads")
+    parser.add_argument("models", nargs="*", help="model names (default: small for CPU, all for MLX)")
+    args = parser.parse_args(argv)
+
+    if args.engine == "auto":
+        engines = ("mlx", "cpu") if _default_engine() == "mlx" else ("cpu",)
+    elif args.engine == "all":
+        engines = ("mlx", "cpu")
+    else:
+        engines = (args.engine,)
+    names_by_engine = {
+        backend: (args.models or (list(REPOS) if backend == "mlx" else ["small"]))
+        for backend in engines
+    }
+    unknown = sorted({name for names in names_by_engine.values() for name in names}
+                     - set(REPOS))
+    if unknown:
+        parser.error(f"unknown model(s): {', '.join(unknown)}")
+
+    results: dict[str, bool] = {}
+    for backend in engines:
+        if backend == "mlx" and not _default_engine() == "mlx":
+            print("MLX models require Apple Silicon macOS; skipping MLX download.", flush=True)
+            continue
+        for name in names_by_engine[backend]:
+            if backend == "mlx":
+                ok = fetch_model(name, args.hf)
+            elif backend == "cpu":
+                ok = fetch_cpu_model(name, args.hf)
+            else:
+                cpp_backend = backend.removeprefix("cpp-")
+                ok = fetch_whisper_cpp_model(name, cpp_backend, args.hf)
+            results[f"{backend}:{name}"] = ok
+
     print("\n=== summary ===", flush=True)
-    for n, ok in results.items():
-        print(f"  {'✓' if ok else '✗'} {n}", flush=True)
-    return 0 if all(results.values()) else 1
+    for name, ok in results.items():
+        print(f"  {'✓' if ok else '✗'} {name}", flush=True)
+    return 0 if results and all(results.values()) else 1
 
 
 if __name__ == "__main__":

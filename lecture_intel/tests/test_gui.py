@@ -43,6 +43,7 @@ from PySide6.QtWidgets import QApplication, QLabel  # noqa: E402
 
 from gui import theme  # noqa: E402
 from gui.widgets.results_screen import ResultsScreen  # noqa: E402
+from gui.widgets.home_screen import HomeScreen  # noqa: E402
 
 FIDELITY = {
     "asr_loop": 1, "real_speech": 2, "uncertain": 1, "adjacent_duplicates": 0,
@@ -86,6 +87,25 @@ def _result(mode: str, **over) -> dict:
     }
     res.update(over)
     return res
+
+
+# ── engine selection ─────────────────────────────────────────────────
+
+def test_home_screen_exposes_persistent_engine_setting(qapp):
+    settings = QSettings("LucasLab", "Recorder")
+    settings.remove("engine")
+    home = HomeScreen()
+    try:
+        home._engine_combo.setCurrentIndex(
+            home._engine_combo.findData("whisper.cpp-vulkan"))
+        assert home.get_settings()["engine"] == "whisper.cpp-vulkan"
+        assert settings.value("engine") == "whisper.cpp-vulkan"
+        home._engine_combo.setCurrentIndex(
+            home._engine_combo.findData("whisper.cpp-openvino"))
+        assert home.get_settings()["engine"] == "whisper.cpp-openvino"
+    finally:
+        settings.remove("engine")
+        home.close()
 
 
 # ── theme ───────────────────────────────────────────────────────────

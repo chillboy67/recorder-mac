@@ -1,6 +1,6 @@
 # Recorder — runtime dependencies
-# macOS · Apple Silicon · mlx-whisper (Metal) with faster-whisper CPU fallback
-# All free & open-source, completely offline after the initial model download.
+# Cross-platform CPU baseline; MLX is installed only on Apple Silicon.
+# Download models once for offline use; optional GPU backends are platform-specific.
 #
 # Only what the live tree actually imports (core/ gui/ app.py transcribe.py
 # download_models.py eval/). The legacy pipeline's dependencies were removed
@@ -12,11 +12,10 @@ librosa>=0.10.1            # resampling + silence splitting (10x faster than sci
 numpy>=1.24.0
 
 # ── ASR ──────────────────────────────────────────────────────
-# Primary engine is mlx-whisper (Apple Silicon GPU / Metal). faster-whisper is
-# the CPU fallback used when mlx is unavailable. Both are required: dropping
-# mlx-whisper silently degrades the default `auto` engine to CPU.
-mlx-whisper>=0.4.0
-faster-whisper>=1.0.0
+# MLX is optional and only installable/useful on Apple Silicon macOS.
+mlx-whisper>=0.4.0; sys_platform == "darwin" and platform_machine == "arm64"
+# CPU inference is the portable baseline and fallback on every platform.
+faster-whisper>=1.1.0
 
 # ── Speaker separation (diarization) ─────────────────────────
 # Imported lazily by core/diarize.py — a missing package does NOT raise, it
@@ -24,8 +23,8 @@ faster-whisper>=1.0.0
 resemblyzer>=0.1.3
 scikit-learn>=1.3.0
 
-# torch is required at runtime by BOTH resemblyzer (>=1.0.1) and mlx-whisper,
-# so it always arrives transitively. Listed explicitly to pin our tested floor:
+# torch is required at runtime by resemblyzer (>=1.0.1), including CPU-only installs.
+# Listed explicitly to pin our tested floor:
 # the old requirements.txt carried a stale `torchaudio`/`deepfilternet` pair
 # instead, which nothing in the live tree imports.
 torch>=2.1.0
