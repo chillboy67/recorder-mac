@@ -19,6 +19,11 @@ sys.path.insert(0, str(ROOT))
 
 from core import sysaudio as S  # noqa: E402
 
+pytestmark = pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="ScreenCaptureKit helper and POSIX signal control are not supported on Windows",
+)
+
 
 @pytest.fixture
 def no_helper(tmp_path, monkeypatch):

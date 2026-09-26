@@ -168,19 +168,23 @@ def test_docx_without_a_report_is_the_transcript(tmp_path):
 
 
 def test_doc_raises_a_clear_error_without_textutil(tmp_path, monkeypatch):
+    monkeypatch.setattr("tempfile.tempdir", str(tmp_path))
     monkeypatch.setattr("shutil.which", lambda name: None)
     with pytest.raises(RuntimeError):
         E._doc(sample_asr(), tmp_path, "s", None, None)
+    assert list(tmp_path.glob("recorder_*.docx")) == []
 
 
 def test_doc_raises_when_textutil_fails(tmp_path, monkeypatch):
     from types import SimpleNamespace
+    monkeypatch.setattr("tempfile.tempdir", str(tmp_path))
     monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/textutil")
     monkeypatch.setattr("subprocess.run",
                         lambda *a, **kw: SimpleNamespace(returncode=1,
                                                          stderr="boom"))
     with pytest.raises(RuntimeError):
         E._doc(sample_asr(), tmp_path, "s", None, None)
+    assert list(tmp_path.glob("recorder_*.docx")) == []
 
 
 # ── export_all orchestration ────────────────────────────────────────

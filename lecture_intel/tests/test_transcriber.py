@@ -24,11 +24,17 @@ from core import transcriber as T  # noqa: E402
 def sandbox(tmp_path, monkeypatch):
     """Redirect ~ (install candidate) and __file__ (dev-tree candidate)."""
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setenv("RECORDER_MODEL_CACHE_DIR", str(tmp_path / "model-cache"))
     monkeypatch.setattr(T, "__file__", str(tmp_path / "fake" / "core" / "transcriber.py"))
     return tmp_path
 
 
 def install_dir(home: Path, model: str) -> Path:
+    return (home / "model-cache" / "mlx" / f"whisper-{model}-mlx")
+
+
+def legacy_macos_install_dir(home: Path, model: str) -> Path:
     return (home / "Library" / "Application Support" / "Recorder" / "models"
             / f"whisper-{model}-mlx")
 
@@ -52,6 +58,11 @@ def test_no_model_anywhere_resolves_to_none(sandbox):
 
 def test_the_installed_copy_is_used(sandbox):
     d = make_model_dir(install_dir(sandbox, "large-v3"))
+    assert T._local_model_dir("large-v3") == d
+
+
+def test_legacy_macos_install_copy_is_still_used(sandbox):
+    d = make_model_dir(legacy_macos_install_dir(sandbox, "large-v3"))
     assert T._local_model_dir("large-v3") == d
 
 

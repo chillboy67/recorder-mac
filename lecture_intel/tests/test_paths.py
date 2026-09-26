@@ -23,6 +23,7 @@ from core import paths  # noqa: E402
 def fake_home(tmp_path, monkeypatch):
     """Redirect ~ so these tests never touch the real ~/Documents."""
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
     return tmp_path
 
 
