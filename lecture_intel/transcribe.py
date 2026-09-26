@@ -18,7 +18,16 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 
+def _configure_output_encoding() -> None:
+    """Keep localized progress output usable on legacy Windows consoles."""
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            reconfigure(encoding="utf-8", errors="replace")
+
+
 def main() -> int:
+    _configure_output_encoding()
     ap = argparse.ArgumentParser(description="Recorder — local speech-to-text")
     ap.add_argument("input", help="audio file")
     ap.add_argument("-m", "--mode", default="general",
