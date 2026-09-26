@@ -70,7 +70,7 @@ jobs:
         working-directory: lecture_intel
         run: |
           ./build_windows_helper.ps1
-          $capabilities = & ./native/system_audio_recorder.exe --capabilities
+          $capabilities = & ./native/system_audio_recorder.exe --capabilities | Out-String
           if ($capabilities -notmatch 'STDIN_CONTROL_V1') {
             throw "Helper is missing the control-protocol marker: $capabilities"
           }
