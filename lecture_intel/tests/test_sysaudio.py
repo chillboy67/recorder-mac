@@ -57,8 +57,10 @@ class FakeProc:
 
 @pytest.fixture
 def no_helper(tmp_path, monkeypatch):
-    """Use Windows path rules so helper discovery is deterministic on every OS."""
+    """Windows rules keep discovery deterministic on every OS: both the
+    installed dir and the (fake) source tree live inside tmp_path."""
     monkeypatch.setattr(S, "_platform_key", lambda: "win32")
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "local"))
     monkeypatch.setattr(S, "__file__", str(tmp_path / "fake" / "core" / "sysaudio.py"))
     return tmp_path
 
@@ -92,6 +94,7 @@ def test_wrong_platform_helper_name_is_ignored(no_helper):
 
 def test_linux_availability_requires_capture_backend(tmp_path, monkeypatch):
     monkeypatch.setattr(S, "_platform_key", lambda: "linux")
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "share"))
     monkeypatch.setattr(S, "__file__", str(tmp_path / "fake" / "core" / "sysaudio.py"))
     helper = tmp_path / "fake" / "native" / "SystemAudioRecorderLinux.py"
     helper.parent.mkdir(parents=True)
@@ -106,9 +109,11 @@ def test_linux_availability_requires_capture_backend(tmp_path, monkeypatch):
 
 def test_darwin_prefers_the_installed_copy_over_the_tree(tmp_path, monkeypatch):
     """The .app bundle runs from ~/Library/Application Support, so a rebuilt
-    tree helper must not shadow the installed one."""
+    tree helper must not shadow the installed one. Path.home() is patched
+    because Windows ignores the HOME environment variable (it prefers
+    USERPROFILE), so setenv("HOME") alone is not portable."""
     monkeypatch.setattr(S, "_platform_key", lambda: "darwin")
-    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(S.Path, "home", classmethod(lambda _cls: tmp_path))
     monkeypatch.setattr(S, "__file__", str(tmp_path / "fake" / "core" / "sysaudio.py"))
     tree = tmp_path / "fake" / "native" / "system_audio_recorder"
     tree.parent.mkdir(parents=True)
