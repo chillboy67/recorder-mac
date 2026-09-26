@@ -12,10 +12,12 @@ See the top-level [../README.md](../README.md) for the product overview.
 
 - **macOS Apple Silicon:** MLX/Metal primary path, CPU fallback, double-click app installer.
 - **macOS Intel:** faster-whisper CPU path.
-- **Windows/Linux:** core and offscreen-GUI tests pass on GitHub-hosted runners; source-bootstrap installers are provided.
+- **Windows/Linux:** core, offscreen-GUI, and uploaded-audio transcription smoke tests pass on GitHub-hosted runners; source-bootstrap installers are provided.
 - **Intel/AMD GPU on Windows/Linux:** Vulkan and Intel OpenVINO integration is present, but real-device acceptance
   remains pending until the self-hosted hardware workflow passes on the corresponding machines.
-- **System audio capture:** macOS only; microphone and file transcription are cross-platform.
+- **System audio capture:** platform helpers are wired for macOS (ScreenCaptureKit), Windows (WASAPI
+  loopback), and Linux (PipeWire/PulseAudio monitor). Microphone and uploaded-file transcription are
+  cross-platform; Windows/Linux loopback still needs real-device playback and a non-silent WAV check.
 
 ## Run
 
@@ -31,8 +33,9 @@ python transcribe.py audio.m4a -m ielts
 
 `make_app.sh` installs the macOS launcher. Windows/Linux can use the source
 bootstrap installers (`install_windows.ps1` / `install_linux.sh`); these create a
-local Python environment and are not self-contained binaries. System-audio
-loopback recording remains macOS-only. On Windows/Linux, optional whisper.cpp
+local Python environment and are not self-contained binaries. Existing-audio upload
+transcription uses the same offline pipeline on every platform. System-audio loopback
+on Windows/Linux still requires real-device validation. On Windows/Linux, optional whisper.cpp
 Vulkan acceleration supports compatible Intel/AMD GPUs; Intel GPU acceleration
 is also available through the separately configured OpenVINO backend. Apple
 Silicon uses MLX/Metal when available; Intel Macs use the CPU path. See
