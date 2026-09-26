@@ -36,6 +36,13 @@ jobs:
           cache-dependency-path: lecture_intel/requirements.txt
       - name: Install app and test dependencies
         run: python -m pip install -r lecture_intel/requirements.txt pytest
+      - name: Transcribe an uploaded audio fixture
+        working-directory: lecture_intel
+        shell: bash
+        run: |
+          python -c "import math,struct,wave; w=wave.open('ci-upload.wav','wb'); w.setparams((1,2,16000,0,'NONE','not compressed')); w.writeframes(b''.join(struct.pack('<h',int(12000*math.sin(2*math.pi*440*i/16000))) for i in range(16000))); w.close()"
+          python transcribe.py ci-upload.wav --engine faster-whisper --model small -f txt -f json -o ci-upload-output
+          python -c "from pathlib import Path; import json,wave; p=Path('ci-upload-output'); assert (p/'ci-upload.txt').is_file(); assert (p/'ci-upload.json').is_file(); json.loads((p/'ci-upload.json').read_text()); assert wave.open('ci-upload.wav').getnframes() > 0"
       - name: Compile Python sources
         working-directory: lecture_intel
         run: python -m compileall -q core gui eval
