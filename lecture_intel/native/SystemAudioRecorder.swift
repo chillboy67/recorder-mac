@@ -4,8 +4,9 @@
 // needs no virtual-audio driver — only the one-time "Screen Recording" permission.
 //
 // Usage:  SystemAudioRecorder <output.wav>
-//         records until it receives SIGINT/SIGTERM, then finalizes the file.
-//         SIGUSR1 pauses (samples are dropped), SIGUSR2 resumes.
+//         records until stdin receives STOP (or SIGINT/SIGTERM), then finalizes.
+//         stdin PAUSE/RESUME drops samples while paused. SIGUSR1/SIGUSR2 remain
+//         supported for compatibility with older parent processes.
 // Prints "RECORDING" / "PAUSED" / "RESUMED" / "STOPPED" / "ERROR ..." to stderr
 // for the parent process.
 import Foundation
@@ -149,21 +150,33 @@ func log(_ s: String) {
     FileHandle.standardError.write((s + "\n").data(using: .utf8)!)
 }
 
+let protocolMarker = "STDIN_CONTROL_V1"
 let args = CommandLine.arguments
+if args.count == 2 && args[1] == "--capabilities" {
+    print("\(protocolMarker) PAUSE RESUME STOP")
+    exit(0)
+}
 guard args.count >= 2 else { log("usage: SystemAudioRecorder <out.wav>"); exit(2) }
 
 guard #available(macOS 13.0, *) else { log("ERROR requires macOS 13+"); exit(3) }
 let recorder = SysAudioRecorder(outputPath: args[1])
+var stopping = false
 
-// Stop cleanly on SIGINT/SIGTERM (the parent app sends these to stop recording).
-// SIGUSR1/SIGUSR2 pause/resume the capture (parent app's pause button).
+func requestStop() {
+    DispatchQueue.main.async {
+        guard !stopping else { return }
+        stopping = true
+        Task { await recorder.stop(); exit(0) }
+    }
+}
+
+// Keep signal control for old app builds, but use the same stdin protocol as
+// Windows/Linux for all newly compiled helpers.
 signal(SIGINT, SIG_IGN)
 signal(SIGTERM, SIG_IGN)
 signal(SIGUSR1, SIG_IGN)
 signal(SIGUSR2, SIG_IGN)
-let stopHandler: () -> Void = {
-    Task { await recorder.stop(); exit(0) }
-}
+let stopHandler: () -> Void = { requestStop() }
 let s1 = DispatchSource.makeSignalSource(signal: SIGINT, queue: .main)
 let s2 = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
 s1.setEventHandler(handler: stopHandler); s1.resume()
@@ -172,6 +185,24 @@ let p1 = DispatchSource.makeSignalSource(signal: SIGUSR1, queue: .main)
 let p2 = DispatchSource.makeSignalSource(signal: SIGUSR2, queue: .main)
 p1.setEventHandler { recorder.setPaused(true) }; p1.resume()
 p2.setEventHandler { recorder.setPaused(false) }; p2.resume()
+
+DispatchQueue.global(qos: .utility).async {
+    while let raw = readLine() {
+        switch raw.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() {
+        case "PAUSE":
+            DispatchQueue.main.async { recorder.setPaused(true) }
+        case "RESUME":
+            DispatchQueue.main.async { recorder.setPaused(false) }
+        case "STOP":
+            requestStop()
+            return
+        default:
+            continue
+        }
+    }
+    // The parent closed its control pipe; finalize instead of becoming orphaned.
+    requestStop()
+}
 
 Task {
     do { try await recorder.start() }

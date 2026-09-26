@@ -2,12 +2,13 @@
 RecordingScreen — live capture stage with the AURA glow ring.
 
 Owns the capture pipeline (ported from the old RecordTab): Qt Multimedia for
-the mic, the native ScreenCaptureKit helper for system audio, ffmpeg amix for
-"both". Emits recording_ready(path, meta) when a usable file exists, or
+the mic, a platform helper for system audio, and ffmpeg amix for "both".
+Emits recording_ready(path, meta) when a usable file exists, or
 recording_aborted() if nothing was captured.
 """
 from __future__ import annotations
 
+import sys
 import tempfile
 from pathlib import Path
 
@@ -139,9 +140,8 @@ class RecordingScreen(QWidget):
         self._pending_mix = (source == "both")
 
         # Pausing needs every active capture path to support it. The mic
-        # (QMediaRecorder) always does; system audio only if the compiled
-        # native helper handles the pause signals (old builds would die on
-        # SIGUSR1 instead).
+        # (QMediaRecorder) always does; system audio only if its helper exposes
+        # stdin control (legacy macOS builds may still use guarded signals).
         can_pause = source == "mic" or self._sys_rec.can_pause()
         self._pause_btn.setVisible(can_pause)
 
@@ -218,12 +218,18 @@ class RecordingScreen(QWidget):
         if not self._is_recording:
             return
         if not self._sys_rec.is_running:
-            err = self._sys_rec.error_text()
+            err = self._sys_rec.error_text().strip()
             self._abort()
-            if "TCC" in err or "拒絕" in err or "denied" in err.lower() or not err:
+            permission_error = (
+                sys.platform == "darwin"
+                and ("TCC" in err or "拒絕" in err
+                     or "denied" in err.lower() or not err)
+            )
+            if permission_error:
                 self._fail(t("rec_sys_perm"))
             else:
-                self._fail(t("rec_sys_fail", err=err[:200]))
+                detail = err[:400] if err else t("rec_sys_ended")
+                self._fail(t("rec_sys_fail", err=detail))
 
     def _on_state_change(self, state: QMediaRecorder.RecorderState) -> None:
         if state == QMediaRecorder.RecorderState.RecordingState:
@@ -281,7 +287,13 @@ class RecordingScreen(QWidget):
             return
         path = self._maybe_save_recording(path)
         size_mb = Path(path).stat().st_size / 1_048_576
-        meta = f"{_format_time(self._elapsed_s)} · {size_mb:.1f} MB · 48 kHz WAV"
+        try:
+            import wave
+            with wave.open(path, "rb") as wav:
+                format_label = f"{wav.getframerate() / 1000:g} kHz WAV"
+        except Exception:
+            format_label = "WAV"
+        meta = f"{_format_time(self._elapsed_s)} · {size_mb:.1f} MB · {format_label}"
         self.recording_ready.emit(path, meta)
 
     def _maybe_save_recording(self, temp_path: str) -> str:

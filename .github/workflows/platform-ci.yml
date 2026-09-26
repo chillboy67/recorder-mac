@@ -28,7 +28,7 @@ jobs:
       - if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg libegl1 libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1
+          sudo apt-get install -y ffmpeg libegl1 libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1 pipewire-bin pulseaudio-utils
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -39,6 +39,22 @@ jobs:
       - name: Compile Python sources
         working-directory: lecture_intel
         run: python -m compileall -q core gui eval
+      - name: Check Linux system-audio helper
+        if: runner.os == 'Linux'
+        working-directory: lecture_intel
+        run: |
+          sudo apt-get install -y pipewire-bin pulseaudio-utils
+          python native/SystemAudioRecorderLinux.py --capabilities
+      - name: Configure MSVC
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+      - name: Build Windows system-audio helper
+        if: runner.os == 'Windows'
+        working-directory: lecture_intel
+        shell: pwsh
+        run: |
+          .\build_windows_helper.ps1
+          .\native\system_audio_recorder.exe --capabilities
       - name: Run core tests
         working-directory: lecture_intel
         run: python -m pytest -q tests -k "not test_export_all_formats"
@@ -48,3 +64,20 @@ jobs:
           RECORDER_GUI_TESTS: "1"
           QT_QPA_PLATFORM: offscreen
         run: python -m pytest -q tests/test_gui.py
+      - name: Build and smoke-test the Windows system-audio helper
+        if: runner.os == 'Windows'
+        shell: pwsh
+        working-directory: lecture_intel
+        run: |
+          ./build_windows_helper.ps1
+          $capabilities = & ./native/system_audio_recorder.exe --capabilities
+          if ($capabilities -notmatch 'STDIN_CONTROL_V1') {
+            throw "Helper is missing the control-protocol marker: $capabilities"
+          }
+          Write-Host "capabilities: $capabilities"
+      - name: Smoke-test the Linux system-audio helper
+        if: runner.os == 'Linux'
+        working-directory: lecture_intel
+        run: |
+          python native/SystemAudioRecorderLinux.py --capabilities
+          python -c "import sys; sys.path.insert(0, '.'); from core import sysaudio; assert sysaudio.available(), sysaudio.binary_path(); print('available:', sysaudio.binary_path())"

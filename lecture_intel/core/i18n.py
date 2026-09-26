@@ -330,9 +330,10 @@ _CATALOG: dict[str, dict[str, str]] = {
     "rec_dialog_title": {"zh": "录音", "en": "Recording"},
     "rec_error": {"zh": "错误：{err}", "en": "Error: {err}"},
     "rec_sys_missing": {
-        "zh": "系统音频组件缺失，请重新运行 make_app.sh 编译后再试。",
-        "en": "The system-audio component is missing. Re-run make_app.sh to "
-              "compile it, then try again.",
+        "zh": "系统音频组件不可用。请重新运行当前平台安装脚本；Linux 还需安装 "
+              "pw-record（PipeWire）或 parec（PulseAudio）。",
+        "en": "System-audio capture is unavailable. Re-run this platform's installer; "
+              "on Linux, also install pw-record (PipeWire) or parec (PulseAudio).",
     },
     "rec_sys_perm": {
         "zh": "无法录制电脑声音：需要「屏幕录制」权限。\n\n"
@@ -345,6 +346,11 @@ _CATALOG: dict[str, dict[str, str]] = {
     },
     "rec_sys_fail": {"zh": "录制电脑声音失败：\n{err}",
                      "en": "Failed to capture system audio:\n{err}"},
+    "rec_sys_ended": {
+        "zh": "系统音频组件在录制开始前退出。请检查默认输出设备和音频服务。",
+        "en": "The system-audio helper exited before capture started. Check the "
+              "default output device and audio service.",
+    },
     "rec_no_audio": {"zh": "没有录到声音。请检查来源或权限后重试。",
                      "en": "No audio was captured. Check the source or permissions "
                            "and try again."},
@@ -476,9 +482,10 @@ _CATALOG: dict[str, dict[str, str]] = {
 
     # core component errors (surface in dialogs / tracebacks)
     "sys_component_missing": {
-        "zh": "系统音频录制组件缺失，请重新运行 make_app.sh 编译。",
-        "en": "The system-audio recording component is missing. Re-run "
-              "make_app.sh to compile it.",
+        "zh": "系统音频录制组件不可用。请重新运行当前平台安装脚本；Linux 需安装 "
+              "pw-record 或 parec。",
+        "en": "The system-audio recording component is unavailable. Re-run the "
+              "platform installer; Linux also requires pw-record or parec.",
     },
     "export_textutil_missing": {
         "zh": "textutil 不可用（仅 macOS 支持 .doc 导出）",

@@ -18,6 +18,18 @@ if ! command -v ffmpeg >/dev/null 2>&1; then
   echo "Warning: ffmpeg was not found. Install it with your Linux package manager for audio decoding." >&2
 fi
 
+NATIVE_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/Recorder/native"
+mkdir -p "$NATIVE_DIR"
+install -m 0755 native/SystemAudioRecorderLinux.py "$NATIVE_DIR/SystemAudioRecorderLinux.py"
+if command -v pw-record >/dev/null 2>&1; then
+  echo "Linux system-audio backend: pw-record"
+elif command -v parec >/dev/null 2>&1; then
+  echo "Linux system-audio backend: parec"
+else
+  echo "Warning: neither pw-record nor parec was found; system-audio capture is unavailable." >&2
+  echo "Install pipewire-bin or pulseaudio-utils with your Linux package manager." >&2
+fi
+
 if [[ ! -x .venv/bin/python ]]; then
   "$PYTHON" -m venv .venv
 fi
