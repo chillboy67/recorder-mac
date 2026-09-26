@@ -1,8 +1,10 @@
-# Recorder — 本地离线录音转文字（macOS）
+# Recorder — 本地离线录音转文字
 
 中文 | [English](README.en.md)
 
-一个跑在 MacBook 本地、**双击即开**的录音转文字桌面 App。
+[![Windows and Linux CI](https://github.com/chillboy67/recorder-mac/actions/workflows/platform-ci.yml/badge.svg)](https://github.com/chillboy67/recorder-mac/actions/workflows/platform-ci.yml)
+
+一个本地运行的录音转文字桌面 App：macOS 可安装为双击 App，Windows/Linux 提供源码引导安装与启动脚本。
 全程离线，不调用任何云 API，音频与文字都不出本机。
 
 以**转写准确性**为根基，之上提供三种专业模式：
@@ -48,21 +50,20 @@ faster-whisper#901、whisper.cpp#965 报告后均未修复）。50 条评测集�
 - **Apple Silicon GPU 加速**。默认 `mlx-whisper`（Metal）；不可用时自动回退
   `faster-whisper`（CPU）。纯 CPU 推理依赖已按平台整理，CPU 设备的自动档使用
   `small` 模型，且支持预下载后离线运行。
-- **跨平台与加速后端**：App/CLI 已接入可选 whisper.cpp Vulkan（兼容的
-  Intel/AMD GPU）和 Intel OpenVINO GPU 后端，未配置或未能确认 GPU 执行时回退
-  faster-whisper CPU。Windows/Linux 的代码测试由 GitHub Actions 托管 runner 执行；真实 GPU 验收通过配置好的
-  GitHub Actions 自托管硬件 workflow 运行。在对应作业全部通过前，不将其描述为已验证支持。Apple Silicon
-  使用 MLX/Metal；Intel Mac 使用 CPU 路径。见
+- **跨平台与加速后端**：Windows/Linux 的核心与 GUI 离屏测试已在 GitHub 托管 runner 上通过。App/CLI
+  已接入可选 whisper.cpp Vulkan（兼容的 Intel/AMD GPU）和 Intel OpenVINO GPU；未配置或未能确认 GPU
+  执行时回退 faster-whisper CPU。真实 GPU 验收通过自托管硬件 workflow 执行，在对应 Intel/AMD 作业通过前
+  不宣称 GPU 已实机验证。Apple Silicon 使用 MLX/Metal；Intel Mac 使用 CPU。见
   [GPU 后端实测指南](lecture_intel/docs/GPU_BACKENDS.md)。
 - **中英混合（code-switching）不偏科**。中文段落保持中文、英文段落保持英文，
   不会被"翻译"成单一语言（实现见下方"工程要点"）。
-- **两种录音来源**：麦克风、**电脑内部声音**（线上课/网页视频，戴耳机也能录），
-  以及两者混录。
+- **录音来源**：各平台支持麦克风和已有音频文件；macOS 额外支持**电脑内部声音**
+  （线上课/网页视频，戴耳机也能录）及麦克风混录。
 - **逐词置信度**始终开启——这是雅思模式识别"疑似发音问题"的依据。
 - **长录音稳**。2 小时录音在 16GB 机器上按静音分块处理，内存有界、进度真实。
 - **崩溃安全**。转写在独立子进程中运行，即使模型进程被系统杀掉，界面不会崩、
   已录下的音频不会丢。
-- **导出** txt / md / doc / docx，带时间戳与说话人标签；json 导出附带忠实度标注。
+- **导出** txt / md / docx，带时间戳与说话人标签；json 导出附带忠实度标注；旧版 `.doc` 转换仅 macOS 可用。
 - **深浅色主题**，跟随系统。
 - **可选本地大模型（Ollama）**。装本机后可做校对 / 课堂总结 / 雅思点评；按语言选用模型。  
   选型与安装见 [lecture_intel/docs/LLM_MODELS.md](lecture_intel/docs/LLM_MODELS.md)。
@@ -117,21 +118,32 @@ ffmpeg 预处理（高通去低频隆隆 + 自适应降噪 + 响度归一，**�
 
 ## 快速开始
 
-需要 macOS（Apple Silicon 最佳）与 [ffmpeg](https://ffmpeg.org)（`brew install ffmpeg`）。
+需要 Python 3.10+ 与 [ffmpeg](https://ffmpeg.org)。进入 `lecture_intel/` 后按平台安装：
+
+### macOS
 
 ```bash
-cd lecture_intel
-
-# 1) 环境
 uv venv
 uv pip install -r requirements.txt
-
-# 2) 打包成双击 App（会安装到 /Applications/Recorder.app）
-./make_app.sh
-
-# 或者直接跑 GUI
-.venv/bin/python3 app.py
+./make_app.sh                    # 安装到 /Applications/Recorder.app
 ```
+
+### Windows（PowerShell）
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\install_windows.ps1 -DownloadCpuModel
+powershell -NoProfile -ExecutionPolicy Bypass -File .\run_windows.ps1
+```
+
+### Linux
+
+```bash
+bash install_linux.sh --download-cpu-model
+./run_linux.sh
+```
+
+Windows/Linux 当前发布形式是源码引导安装，不是签名的独立可执行安装包。系统声音录制目前仅支持 macOS；
+Vulkan/OpenVINO 的真实 GPU 状态见[验收指南](lecture_intel/docs/GPU_BACKENDS.md)。
 
 ### 预下载模型（推荐，尤其是国内网络）
 
