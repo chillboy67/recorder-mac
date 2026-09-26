@@ -58,8 +58,12 @@ QSS_DISPLAY = '"Space Grotesk", "SF Pro Display", "Helvetica Neue"'
 - **偏好持久化键**：`QSettings("LucasLab", "Recorder")`
   （`app.py:64`、`gui/main_window.py:56`、`gui/widgets/home_screen.py:127`）。
   **键名不要改**，否则老用户偏好全部丢失。
-- **三种录音来源**：麦克风（Qt Multimedia）/ 电脑内部声音（ScreenCaptureKit）/
+- **录音来源**：麦克风（Qt Multimedia）/ 电脑内部声音（平台原生 helper）/
   混录（ffmpeg `amix`）。权限提示与"保存到哪"的询问逻辑照旧。
+- **跨平台验收边界**：已有音频文件上传转录走同一条离线流水线；系统声音采集另走平台原生
+  helper。macOS 的 ScreenCaptureKit 已可用，Windows 的 WASAPI loopback 与 Linux 的
+  PipeWire/PulseAudio monitor 需要在对应真机播放声音后检查 WAV 非静音，不能用 CI 的编译或
+  `--capabilities` 启动检查替代。
 - **菜单栏与快捷键**：`Cmd+O`（`QKeySequence.Open`）、`Cmd+Shift+O`、
   `Cmd+R`（`gui/main_window.py:89/94/103`）。
 - **外观跟随系统**；**转写完成发通知**；**窗口几何记忆**。
