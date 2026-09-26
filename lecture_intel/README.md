@@ -6,6 +6,17 @@ historical.)
 
 See the top-level [../README.md](../README.md) for the product overview.
 
+[![Windows and Linux CI](https://github.com/chillboy67/recorder-mac/actions/workflows/platform-ci.yml/badge.svg)](https://github.com/chillboy67/recorder-mac/actions/workflows/platform-ci.yml)
+
+## Platform status
+
+- **macOS Apple Silicon:** MLX/Metal primary path, CPU fallback, double-click app installer.
+- **macOS Intel:** faster-whisper CPU path.
+- **Windows/Linux:** core and offscreen-GUI tests pass on GitHub-hosted runners; source-bootstrap installers are provided.
+- **Intel/AMD GPU on Windows/Linux:** Vulkan and Intel OpenVINO integration is present, but real-device acceptance
+  remains pending until the self-hosted hardware workflow passes on the corresponding machines.
+- **System audio capture:** macOS only; microphone and file transcription are cross-platform.
+
 ## Run
 
 Install the platform-appropriate dependencies with `python -m pip install -r requirements.txt`.

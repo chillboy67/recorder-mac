@@ -1,5 +1,12 @@
 # GPU backends for Windows and Linux
 
+## Current validation status
+
+- GitHub-hosted Windows and Ubuntu jobs pass Recorder's core and offscreen-GUI test suites.
+- The installer scripts and release workflows are configured, but are source-bootstrap packaging rather than signed standalone apps.
+- Vulkan on Intel/AMD GPUs and OpenVINO on Intel GPUs remain **hardware-unverified** until the matching self-hosted
+  GPU workflow completes successfully. Hosted CI does not provide those integrated GPUs.
+
 Recorder keeps Apple Silicon on MLX/Metal and Intel Macs on the `faster-whisper`
 CPU path. On Windows/Linux, the optional `whisper.cpp` backends provide:
 
@@ -149,9 +156,9 @@ identical across backend runs.
 
 Vulkan must be tested separately on at least one Intel iGPU and one AMD iGPU
 system to claim coverage. OpenVINO must be tested separately on Intel GPU
-hardware. Windows and Linux should each get at least one run before claiming
-cross-platform validation. Current development-host tests cannot substitute for
-these device tests.
+hardware. Windows and Linux should each get at least one real-device run before
+claiming cross-platform **GPU** validation. Passing hosted Windows/Linux code CI
+cannot substitute for these device tests.
 
 A manual GitHub Actions hardware workflow is provided at
 `.github/workflows/gpu-hardware-smoke.yml`. Register self-hosted runners with one

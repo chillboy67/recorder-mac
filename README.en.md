@@ -1,9 +1,12 @@
-# Recorder — Local, Offline Speech-to-Text (macOS)
+# Recorder — Local, Offline Speech-to-Text
 
 [中文](README.md) | English
 
-A double-click-to-launch, fully local audio-to-text desktop app for MacBook.
-Everything runs offline — no cloud API calls, audio and text never leave the machine.
+[![Windows and Linux CI](https://github.com/chillboy67/recorder-mac/actions/workflows/platform-ci.yml/badge.svg)](https://github.com/chillboy67/recorder-mac/actions/workflows/platform-ci.yml)
+
+A fully local audio-to-text desktop app. macOS has a double-click app installer;
+Windows and Linux have source-bootstrap install and launch scripts. Everything
+runs offline — no cloud API calls, and audio and text never leave the machine.
 
 Built on **transcription accuracy** as the foundation, with three purpose-built modes on top:
 
@@ -49,19 +52,21 @@ the annotation. General and IELTS modes only annotate suspected artifacts and ne
 ## Core features
 
 - **Fully offline.** The Whisper model runs on-device; once downloaded, no network is needed. No accounts, no uploads.
-- **Apple Silicon GPU acceleration.** Defaults to `mlx-whisper` (Metal), automatically falling back to
-  `faster-whisper` (CPU) when unavailable.
+- **Platform-aware acceleration.** Apple Silicon defaults to `mlx-whisper` (Metal). Windows/Linux core and
+  offscreen-GUI tests pass on GitHub-hosted runners; optional whisper.cpp Vulkan and Intel OpenVINO backends
+  are integrated, with `faster-whisper` CPU fallback. Real Intel/AMD GPU acceptance still requires the configured
+  self-hosted hardware workflow and is not claimed until those jobs pass.
 - **Chinese/English code-switching without bias.** Chinese segments stay Chinese, English segments stay English —
   never silently "translated" into a single language (see "Engineering notes" below for how).
-- **Two recording sources**: microphone, **system audio capture** (online classes/web video, works even with
-  headphones on), plus a mixed-source mode.
+- **Recording sources**: microphone and existing audio files on every platform; macOS additionally supports
+  **system audio capture** (online classes/web video, including mixed mic + system recording).
 - **Per-word confidence scores** are always on — this is what powers the IELTS mode's "possible pronunciation issue" flags.
 - **Stable on long recordings.** A 2-hour recording is processed in silence-bounded chunks on a 16GB machine,
   with bounded memory and genuine progress reporting.
 - **Crash-safe.** Transcription runs in an isolated subprocess — even if the model process gets killed by the
   system, the UI stays up and the recorded audio is never lost.
-- **Export** to txt / md / doc / docx, with timestamps and speaker labels; the json export carries the
-  fidelity annotations.
+- **Export** to txt / md / docx with timestamps and speaker labels; JSON carries fidelity annotations.
+  Legacy `.doc` conversion is available on macOS only.
 - **Light/dark theme**, follows the system setting.
 - **Optional local LLM (Ollama)** for tidy-up / classroom summary / IELTS notes.  
   Model picks and install: [lecture_intel/docs/LLM_MODELS.md](lecture_intel/docs/LLM_MODELS.md).
@@ -123,21 +128,33 @@ coherence / vocabulary / grammar / pronunciation), with the full transcript embe
 
 ## Quick start
 
-Requires macOS (Apple Silicon recommended) and [ffmpeg](https://ffmpeg.org) (`brew install ffmpeg`).
+Requires Python 3.10+ and [ffmpeg](https://ffmpeg.org). Enter `lecture_intel/`, then use the platform installer.
+
+### macOS
 
 ```bash
-cd lecture_intel
-
-# 1) Environment
 uv venv
 uv pip install -r requirements.txt
-
-# 2) Build the double-click app (installs to /Applications/Recorder.app)
-./make_app.sh
-
-# Or just run the GUI directly
-.venv/bin/python3 app.py
+./make_app.sh                    # installs /Applications/Recorder.app
 ```
+
+### Windows (PowerShell)
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\install_windows.ps1 -DownloadCpuModel
+powershell -NoProfile -ExecutionPolicy Bypass -File .\run_windows.ps1
+```
+
+### Linux
+
+```bash
+bash install_linux.sh --download-cpu-model
+./run_linux.sh
+```
+
+Windows/Linux releases are currently source-bootstrap packages, not signed standalone installers. System-audio
+capture is macOS-only. See the [GPU acceptance guide](lecture_intel/docs/GPU_BACKENDS.md) for the real-hardware
+status of Vulkan and OpenVINO.
 
 ### Pre-download models (recommended)
 
