@@ -290,22 +290,26 @@ def _doc(asr, out_dir, base, labels, report_md) -> Path:
 
     # Build a docx first (reuse formatting), then convert.
     doc = _build_docx_document(asr, base, labels, report_md)
-    tmp_docx = Path(tempfile.mkstemp(suffix=".docx", prefix="recorder_")[1])
-    doc.save(str(tmp_docx))
+    with tempfile.NamedTemporaryFile(suffix=".docx", prefix="recorder_",
+                                     delete=False) as tmp:
+        tmp_docx = Path(tmp.name)
+    try:
+        doc.save(str(tmp_docx))
 
-    out = out_dir / f"{base}.doc"
-    textutil = shutil.which("textutil")
-    if not textutil:
-        raise RuntimeError(t("export_textutil_missing"))
-    proc = subprocess.run(
-        [textutil, "-convert", "doc", str(tmp_docx), "-output", str(out)],
-        capture_output=True, text=True, check=False,
-    )
-    tmp_docx.unlink(missing_ok=True)
-    if proc.returncode != 0 or not out.exists():
-        raise RuntimeError(
-            t("export_textutil_failed", err=proc.stderr.strip()[:160]))
-    return out
+        out = out_dir / f"{base}.doc"
+        textutil = shutil.which("textutil")
+        if not textutil:
+            raise RuntimeError(t("export_textutil_missing"))
+        proc = subprocess.run(
+            [textutil, "-convert", "doc", str(tmp_docx), "-output", str(out)],
+            capture_output=True, text=True, check=False,
+        )
+        if proc.returncode != 0 or not out.exists():
+            raise RuntimeError(
+                t("export_textutil_failed", err=proc.stderr.strip()[:160]))
+        return out
+    finally:
+        tmp_docx.unlink(missing_ok=True)
 
 
 def _ts_short(sec: float) -> str:

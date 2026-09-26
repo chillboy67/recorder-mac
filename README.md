@@ -50,9 +50,8 @@ faster-whisper#901、whisper.cpp#965 报告后均未修复）。50 条评测集�
   `small` 模型，且支持预下载后离线运行。
 - **跨平台与加速后端**：App/CLI 已接入可选 whisper.cpp Vulkan（兼容的
   Intel/AMD GPU）和 Intel OpenVINO GPU 后端，未配置或未能确认 GPU 执行时回退
-  faster-whisper CPU。构建/配置及真实设备实测尚待 Windows/Linux 用户验证；欢迎
-  Windows/Linux 用户 fork 本项目、按指南测试并提交 PR（附机器、驱动、构建参数及
-  对比数据）。在完成真实硬件验证前，不将其描述为已验证支持。Apple Silicon
+  faster-whisper CPU。Windows/Linux 的代码测试由 GitHub Actions 托管 runner 执行；真实 GPU 验收通过配置好的
+  GitHub Actions 自托管硬件 workflow 运行。在对应作业全部通过前，不将其描述为已验证支持。Apple Silicon
   使用 MLX/Metal；Intel Mac 使用 CPU 路径。见
   [GPU 后端实测指南](lecture_intel/docs/GPU_BACKENDS.md)。
 - **中英混合（code-switching）不偏科**。中文段落保持中文、英文段落保持英文，
