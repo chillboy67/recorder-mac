@@ -43,9 +43,32 @@ if ($LASTEXITCODE -ne 0) { throw 'Failed to upgrade pip.' }
 & $VenvPython -m pip install -r (Join-Path $Root 'requirements.txt')
 if ($LASTEXITCODE -ne 0) { throw 'Failed to install Recorder dependencies.' }
 
+
 if ($DownloadCpuModel) {
     & $VenvPython (Join-Path $Root 'download_models.py') --engine cpu small
     if ($LASTEXITCODE -ne 0) { throw 'CPU model download failed.' }
+}
+
+$BuildScript = Join-Path $Root 'build_windows_helper.ps1'
+$HelperExe = Join-Path $Root 'native\system_audio_recorder.exe'
+if (Test-Path -LiteralPath $BuildScript -PathType Leaf) {
+    Write-Host 'Building the system-audio helper (WASAPI loopback)...'
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $BuildScript
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warning ('System audio will be unavailable. Install Visual Studio Build Tools ' +
+            'with the "Desktop development with C++" workload, then run ' +
+            '.\build_windows_helper.ps1 and re-run this installer.')
+    }
+}
+
+if (Test-Path -LiteralPath $HelperExe -PathType Leaf) {
+    $NativeInstallDir = Join-Path $env:LOCALAPPDATA 'Recorder\native'
+    New-Item -ItemType Directory -Force -Path $NativeInstallDir | Out-Null
+    Copy-Item -LiteralPath $HelperExe `
+        -Destination (Join-Path $NativeInstallDir 'system_audio_recorder.exe') -Force
+    Write-Host 'System-audio helper installed.'
+} else {
+    Write-Warning 'System audio ("电脑声音") is unavailable: native\system_audio_recorder.exe was not built.'
 }
 
 if (-not $NoShortcut) {
