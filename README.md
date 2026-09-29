@@ -125,6 +125,14 @@ ffmpeg 预处理（高通去低频隆隆 + 自适应降噪 + 响度归一，**�
 
 ### macOS
 
+> **不想折腾？直接下 Release**：在 [Releases](https://github.com/chillboy67/recorder-mac/releases/latest) 下载
+> `Recorder-macOS-arm64-*.zip`（Apple Silicon），解压后把 `Recorder.app` 拖进「应用程序」再双击。不用自己装 Python：
+> 首次打开会联网安装运行环境，几分钟后自动打开；ffmpeg 仍需另装（`brew install ffmpeg`）。App 未签名，若被系统拦截，
+> 到「系统设置 → 隐私与安全性」点「仍要打开」，或运行 `xattr -dr com.apple.quarantine /Applications/Recorder.app`。
+> Intel Mac 请用下面的源码安装。
+
+从源码安装：
+
 ```bash
 uv venv
 uv pip install -r requirements.txt
