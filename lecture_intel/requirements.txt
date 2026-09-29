@@ -22,6 +22,9 @@ faster-whisper>=1.1.0
 # silently drops speaker labels. Keep both declared.
 resemblyzer>=0.1.3
 scikit-learn>=1.3.0
+# resemblyzer's webrtcvad does `import pkg_resources`, which setuptools removed
+# in 82 — newer setuptools makes resemblyzer fail to import.
+setuptools<82
 
 # torch is required at runtime by resemblyzer (>=1.0.1), including CPU-only installs.
 # Listed explicitly to pin our tested floor:
