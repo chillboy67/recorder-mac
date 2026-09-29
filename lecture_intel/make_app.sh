@@ -50,8 +50,8 @@ cat > "$APP/Contents/Info.plist" << PLIST
   <key>CFBundleName</key>            <string>Recorder</string>
   <key>CFBundleDisplayName</key>     <string>Recorder</string>
   <key>CFBundleIdentifier</key>      <string>com.lucaslab.recorder</string>
-  <key>CFBundleVersion</key>         <string>2.0.0</string>
-  <key>CFBundleShortVersionString</key><string>2.0</string>
+  <key>CFBundleVersion</key>         <string>2.1.0</string>
+  <key>CFBundleShortVersionString</key><string>2.1</string>
   <key>CFBundlePackageType</key>     <string>APPL</string>
   <key>CFBundleExecutable</key>      <string>Recorder</string>
   <key>NSMicrophoneUsageDescription</key>
@@ -124,6 +124,12 @@ setup() {
   requirements_hash > "$READY"
 }
 
+prune_webengine() {
+  [[ -x "$VENV/bin/python3" && -f "$APP_HOME/prune_qt_webengine.py" ]] || return 0
+  "$VENV/bin/python3" "$APP_HOME/prune_qt_webengine.py" || \
+    echo "[Recorder] warning: could not remove unused Qt WebEngine files"
+}
+
 if code_stale || venv_stale; then
   LOCK="$APP_HOME/.setup.lock"   # a second double-click must not install concurrently
   if ! mkdir "$LOCK" 2>/dev/null; then
@@ -142,6 +148,8 @@ if code_stale || venv_stale; then
   fi
 fi
 
+prune_webengine
+
 [[ -n "${RECORDER_BOOTSTRAP_ONLY:-}" ]] && exit 0
 cd "$APP_HOME"
 exec "$VENV/bin/python3" "$APP_HOME/app.py"
@@ -152,7 +160,7 @@ chmod +x "$APP/Contents/MacOS/Recorder"
 
 # --- 2) Embed the code (small) ----------------------------------------------
 echo "→ embedding code…"
-for item in core gui modules app.py transcribe.py download_models.py requirements.txt README.md; do
+for item in core gui modules app.py transcribe.py download_models.py prune_qt_webengine.py requirements.txt README.md; do
   if [[ -e "$item" ]]; then
     rsync -a --exclude '.venv' --exclude 'dist' --exclude '__pycache__' \
       --exclude '*.pyc' --exclude 'models' --exclude 'output' "$item" "$CODE/"

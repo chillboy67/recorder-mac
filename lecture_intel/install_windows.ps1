@@ -42,6 +42,8 @@ if (-not (Test-Path $VenvPython)) {
 if ($LASTEXITCODE -ne 0) { throw 'Failed to upgrade pip.' }
 & $VenvPython -m pip install -r (Join-Path $Root 'requirements.txt')
 if ($LASTEXITCODE -ne 0) { throw 'Failed to install Recorder dependencies.' }
+& $VenvPython (Join-Path $Root 'prune_qt_webengine.py')
+if ($LASTEXITCODE -ne 0) { Write-Warning 'Could not remove unused Qt WebEngine files.' }
 
 
 if ($DownloadCpuModel) {

@@ -3,7 +3,7 @@
 Download Whisper models for MLX or faster-whisper into separate local caches.
 
 Usage:
-    python download_models.py                     # MLX on Apple Silicon, CPU elsewhere
+    python download_models.py                     # MLX large-v3 on Apple Silicon, CPU small elsewhere
     python download_models.py --engine cpu small  # portable CTranslate2 model
     python download_models.py --engine mlx --hf   # Apple Silicon, Hugging Face directly
     python download_models.py --engine all small  # both formats for one model
@@ -37,6 +37,10 @@ REPOS = {
 }
 
 SKIP = {".gitattributes", "README.md"}
+
+# Automatic prefetch. Other sizes stay available when named explicitly.
+DEFAULT_MLX_MODELS = ("large-v3",)
+DEFAULT_CPU_MODELS = ("small",)
 
 
 def endpoint(use_hf: bool) -> str:
@@ -171,7 +175,10 @@ def main(argv: list[str] | None = None) -> int:
                         default="auto", help="model format/backend (default: platform-appropriate)")
     parser.add_argument("--hf", action="store_true",
                         help="use huggingface.co instead of hf-mirror.com for model downloads")
-    parser.add_argument("models", nargs="*", help="model names (default: small for CPU, all for MLX)")
+    parser.add_argument(
+        "models", nargs="*",
+        help="model names (default: large-v3 for MLX, small otherwise)",
+    )
     args = parser.parse_args(argv)
 
     if args.engine == "auto":
@@ -180,10 +187,14 @@ def main(argv: list[str] | None = None) -> int:
         engines = ("mlx", "cpu")
     else:
         engines = (args.engine,)
-    names_by_engine = {
-        backend: (args.models or (list(REPOS) if backend == "mlx" else ["small"]))
-        for backend in engines
-    }
+    names_by_engine = {}
+    for backend in engines:
+        if args.models:
+            names_by_engine[backend] = list(args.models)
+        elif backend == "mlx":
+            names_by_engine[backend] = list(DEFAULT_MLX_MODELS)
+        else:
+            names_by_engine[backend] = list(DEFAULT_CPU_MODELS)
     unknown = sorted({name for names in names_by_engine.values() for name in names}
                      - set(REPOS))
     if unknown:

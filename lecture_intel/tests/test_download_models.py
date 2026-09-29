@@ -6,7 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from download_models import REPOS, main
+from download_models import main
 
 
 def test_auto_prepares_mlx_and_cpu_fallback_on_apple_silicon(monkeypatch):
@@ -18,7 +18,7 @@ def test_auto_prepares_mlx_and_cpu_fallback_on_apple_silicon(monkeypatch):
                         lambda name, use_hf=False: calls.append(("cpu", name)) or True)
 
     assert main([]) == 0
-    assert {name for backend, name in calls if backend == "mlx"} == set(REPOS)
+    assert [name for backend, name in calls if backend == "mlx"] == ["large-v3"]
     assert ("cpu", "small") in calls
 
 
