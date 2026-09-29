@@ -97,7 +97,7 @@ faster-whisper use different model formats and separate platform cache folders.
 Set `RECORDER_MODEL_CACHE_DIR` to move both caches to another writable volume.
 
 ```bash
-python download_models.py                     # MLX + CPU fallback on Apple Silicon; CPU elsewhere
+python download_models.py                     # MLX large-v3 + CPU small on Apple Silicon; CPU small elsewhere
 python download_models.py --engine cpu small  # pre-download CPU weights
 python download_models.py --engine mlx --hf   # use huggingface.co for MLX files
 python download_models.py --engine all small  # download MLX + CPU formats

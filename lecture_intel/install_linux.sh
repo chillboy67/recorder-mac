@@ -35,6 +35,7 @@ if [[ ! -x .venv/bin/python ]]; then
 fi
 .venv/bin/python -m pip install --upgrade pip
 .venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python prune_qt_webengine.py || echo "Warning: could not remove unused Qt WebEngine files." >&2
 
 if [[ "${1:-}" == "--download-cpu-model" ]]; then
   .venv/bin/python download_models.py --engine cpu small
