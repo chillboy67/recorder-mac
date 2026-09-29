@@ -56,7 +56,7 @@ def main() -> None:
     app = QApplication(sys.argv)
     app.setApplicationName("Recorder")
     app.setOrganizationName("LucasLab")
-    app.setApplicationVersion("2.0.0")
+    app.setApplicationVersion("2.1.0")
 
     from PySide6.QtCore import QSettings
     from core.i18n import detect_system_language, set_language, t
