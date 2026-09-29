@@ -134,6 +134,15 @@ Requires Python 3.10+ and [ffmpeg](https://ffmpeg.org). Enter `lecture_intel/`, 
 
 ### macOS
 
+> **Don't want the hassle? Grab a Release**: download `Recorder-macOS-arm64-*.zip` (Apple Silicon) from
+> [Releases](https://github.com/chillboy67/recorder-mac/releases/latest), unzip it, drag `Recorder.app` into Applications
+> and open it. No Python install needed: the first launch downloads the runtime and opens the app a few minutes later;
+> install ffmpeg separately (`brew install ffmpeg`). The app is not signed — if macOS blocks it, use System Settings →
+> Privacy & Security → Open Anyway, or run `xattr -dr com.apple.quarantine /Applications/Recorder.app`.
+> Intel Macs: install from source below.
+
+From source:
+
 ```bash
 uv venv
 uv pip install -r requirements.txt

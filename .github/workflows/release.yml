@@ -1,0 +1,88 @@
+name: Release macOS app
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build Recorder.app (macOS arm64)
+    runs-on: macos-latest
+    timeout-minutes: 60
+    env:
+      ASSET: Recorder-macOS-arm64-${{ github.ref_name }}.zip
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: false
+      - name: Build Recorder.app with make_app.sh
+        working-directory: lecture_intel
+        run: |
+          test "$(uname -m)" = arm64
+          ./make_app.sh
+      - name: Check the bundle
+        run: |
+          set -euo pipefail
+          app=/Applications/Recorder.app
+          code="$app/Contents/Resources/Recorder"
+          if grep -qF "$HOME" "$app/Contents/MacOS/Recorder"; then
+            echo "::error::The launcher has a build-machine path baked in."
+            exit 1
+          fi
+          "$code/bin/uv" --version
+          ls "$code"/wheels/webrtcvad-*.whl
+          caps="$("$code/native/system_audio_recorder" --capabilities)"
+          [[ "$caps" == *STDIN_CONTROL_V1* ]]
+      - name: Zip Recorder.app
+        run: ditto -c -k --sequesterRsrc --keepParent /Applications/Recorder.app "$ASSET"
+      - name: First launch of the zipped app on a clean account
+        run: |
+          set -euo pipefail
+          ditto -x -k "$ASSET" "$RUNNER_TEMP/unzipped"
+          fresh="$RUNNER_TEMP/fresh-home"
+          mkdir -p "$fresh"
+          # Users may have no compiler (Xcode Command Line Tools): forbid sdist builds.
+          printf '[pip]\nno-build = true\n' > "$RUNNER_TEMP/no-build.toml"
+          HOME="$fresh" PATH=/usr/bin:/bin:/usr/sbin:/sbin \
+            UV_CONFIG_FILE="$RUNNER_TEMP/no-build.toml" RECORDER_BOOTSTRAP_ONLY=1 \
+            "$RUNNER_TEMP/unzipped/Recorder.app/Contents/MacOS/Recorder"
+          # mlx needs a Metal GPU at run time, so only check that it installed.
+          "$fresh/Library/Application Support/Recorder/.venv/bin/python3" -c \
+            "import importlib.metadata as m, PySide6.QtWidgets, faster_whisper, torch, resemblyzer; print('mlx-whisper', m.version('mlx-whisper'))"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: recorder-macos
+          path: ${{ env.ASSET }}
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    # Shared with release-installers.yml so the two never edit the same release at once.
+    concurrency:
+      group: github-release-${{ github.ref_name }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: recorder-macos
+      - name: Publish Recorder.app
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          append_body: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          body: |
+            **macOS (Apple Silicon)**: download `Recorder-macOS-arm64-${{ github.ref_name }}.zip`, unzip it, drag `Recorder.app` into Applications and open it. The first launch downloads the runtime (no Python install needed; uv is bundled) and opens the app when done; install ffmpeg separately (`brew install ffmpeg`). The app is not signed: if macOS blocks it, use System Settings → Privacy & Security → Open Anyway, or run `xattr -dr com.apple.quarantine /Applications/Recorder.app`. Intel Macs: install from source (see README).
+          files: Recorder-macOS-arm64-${{ github.ref_name }}.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
