@@ -96,6 +96,10 @@ jobs:
   publish:
     needs: test-and-package
     runs-on: ubuntu-latest
+    # Shared with release.yml so the two never edit the same release at once.
+    concurrency:
+      group: github-release-${{ github.ref_name }}
+      cancel-in-progress: false
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -106,6 +110,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
+          append_body: true
           body: |
             Windows/Linux source bootstrap packages. These are not self-contained executables: install Python 3.10+, extract the archive, then follow `install_windows.ps1` or `install_linux.sh` in `lecture_intel/`. ffmpeg and optional GPU runtimes are installed separately. See `lecture_intel/docs/GPU_BACKENDS.md`.
           files: release-assets/*
