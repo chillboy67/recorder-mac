@@ -63,6 +63,7 @@ bash install_linux.sh --download-cpu-model
 ```
 
 The optional flag pre-downloads the small CPU model for offline transcription.
+On Linux, see [docs/INSTALL_LINUX.md](docs/INSTALL_LINUX.md) for the system packages a fresh install needs.
 Install ffmpeg separately if it is not already available. GPU acceleration is
 optional and requires a matching external whisper.cpp build, drivers, and model;
 follow [docs/GPU_BACKENDS.md](docs/GPU_BACKENDS.md). These are bootstrap/source
