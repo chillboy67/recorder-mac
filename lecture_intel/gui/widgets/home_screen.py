@@ -12,10 +12,11 @@ Signals:
 """
 from __future__ import annotations
 
+import platform
 from pathlib import Path
 
-from PySide6.QtCore import QSettings, Qt, Signal
-from PySide6.QtGui import QCursor, QDragEnterEvent, QDropEvent
+from PySide6.QtCore import QSettings, QSize, Qt, Signal
+from PySide6.QtGui import QCursor, QDragEnterEvent, QDropEvent, QFont, QFontMetrics
 from PySide6.QtMultimedia import QMediaDevices
 from PySide6.QtWidgets import (
     QButtonGroup,
@@ -118,6 +119,34 @@ class _PopupWordCombo(NoScrollComboBox):
             self.word_provider(False)
 
 
+class _SegButton(QPushButton):
+    """Source segment. QSS draws the checked one semibold, but Qt sizes it
+    from the regular font; reserve the semibold width so selecting a segment
+    cannot clip its label (visible with DejaVu Sans on Linux)."""
+
+    def sizeHint(self) -> QSize:  # noqa: N802 (Qt naming)
+        hint = super().sizeHint()
+        bold = QFont(self.font())
+        bold.setWeight(QFont.Weight.DemiBold)
+        extra = (QFontMetrics(bold).horizontalAdvance(self.text())
+                 - self.fontMetrics().horizontalAdvance(self.text()))
+        return QSize(hint.width() + max(0, extra), hint.height())
+
+    def minimumSizeHint(self) -> QSize:  # noqa: N802 (Qt naming)
+        return self.sizeHint()
+
+
+def _apple_silicon() -> bool:
+    return (platform.system() == "Darwin"
+            and platform.machine().lower() in ("arm64", "aarch64"))
+
+
+def _compact_combo_width(combo: QComboBox, floor: int) -> int:
+    """Width that shows the combo's current (short) text in full: the text
+    plus the QSS padding (2 × 11), drop-down (24) and border (2)."""
+    return max(floor, combo.fontMetrics().horizontalAdvance(combo.currentText()) + 48)
+
+
 class HomeScreen(QWidget):
     record_requested = Signal(str, object)
     process_requested = Signal(str, dict)
@@ -134,11 +163,21 @@ class HomeScreen(QWidget):
 
     def _build_ui(self) -> None:
         self._compact: bool | None = None
-        root = QVBoxLayout(self)
+        # Centre the content with stretches, not root.setAlignment(): an
+        # aligned layout only ever gets its sizeHint height, which ignores the
+        # extra line a mode-card description wraps onto with wider fonts
+        # (DejaVu Sans on Linux), so that line was taken out of the input card
+        # and clipped its buttons.
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+        root = QVBoxLayout()
         self._root_lay = root
         root.setContentsMargins(48, 12, 48, 24)
         root.setSpacing(24)
-        root.setAlignment(Qt.AlignCenter)
+        outer.addStretch(1)
+        outer.addLayout(root)
+        outer.addStretch(1)
 
         # ---- input card (drop state) ----
         self._drop_card = QFrame()
@@ -185,7 +224,7 @@ class HomeScreen(QWidget):
         self._src_group = QButtonGroup(self)
         self._src_buttons: dict[str, QPushButton] = {}
         for key, label_key in SOURCES:
-            b = QPushButton(t(label_key))
+            b = _SegButton(t(label_key))
             b.setObjectName("seg")
             b.setCheckable(True)
             b.setCursor(Qt.PointingHandCursor)
@@ -295,6 +334,9 @@ class HomeScreen(QWidget):
                            ("whisper.cpp-vulkan", "engine_vulkan"),
                            ("whisper.cpp-openvino", "engine_openvino")):
             self._engine_combo.addItem(t(key), userData=value)
+        if not _apple_silicon():
+            # MLX needs Apple Silicon; elsewhere picking it only falls back to CPU.
+            self._engine_combo.model().item(1).setEnabled(False)
         self._engine_combo.setToolTip(t("home_engine_tooltip"))
         self._engine_combo.currentIndexChanged.connect(self._save_prefs)
         srow.addWidget(self._lbl_engine)
@@ -367,7 +409,7 @@ class HomeScreen(QWidget):
             # an icon needs only a stub of width; pinning it keeps the
             # row inside the window so nothing clips at the minimum size
             self._model_combo.setFixedWidth(68)
-            self._lang_combo.setFixedWidth(76)
+            self._lang_combo.setFixedWidth(_compact_combo_width(self._lang_combo, 76))
         else:
             for cb in (self._model_combo, self._lang_combo):
                 cb.setMinimumWidth(0)
@@ -479,7 +521,8 @@ class HomeScreen(QWidget):
                 break
 
         for i in range(self._engine_combo.count()):
-            if self._engine_combo.itemData(i) == engine:
+            if (self._engine_combo.itemData(i) == engine
+                    and self._engine_combo.model().item(i).isEnabled()):
                 self._engine_combo.setCurrentIndex(i)
                 break
 
