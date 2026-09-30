@@ -466,6 +466,77 @@ def test_pipeline_worker_starts_idle(qapp):
         assert hasattr(worker, signal_name)
 
 
+# ── cross-platform desktop actions ──────────────────────────────────
+# "open" and "osascript" exist only on macOS; the app also runs on Windows
+# and Linux, so folders/files go through QDesktopServices and notifications
+# must never raise out of the finished-job slot.
+
+@pytest.fixture
+def opened_urls(monkeypatch):
+    from PySide6.QtGui import QDesktopServices
+    calls = []
+    monkeypatch.setattr(QDesktopServices, "openUrl",
+                        lambda url: calls.append(url) or True)
+    return calls
+
+
+@pytest.fixture
+def main_window(qapp, isolated_prefs):
+    from gui.main_window import MainWindow
+    window = MainWindow()
+    yield window
+    window.close()
+    window.deleteLater()
+
+
+def test_reveal_output_opens_the_saved_folder(main_window, opened_urls, tmp_path):
+    out = tmp_path / "results"
+    out.mkdir()
+    main_window._prefs.setValue("output_dir", str(out))
+    main_window._reveal_output()
+    assert [u.toLocalFile() for u in opened_urls] == [out.as_posix()]
+
+
+def test_open_readme_opens_the_bundled_readme(main_window, opened_urls):
+    main_window._open_readme()
+    readme = ROOT / "README.md"
+    expected = [readme.as_posix()] if readme.exists() else []
+    assert [u.toLocalFile() for u in opened_urls] == expected
+
+
+def test_results_open_folder_opens_the_output_dir(qapp, opened_urls, tmp_path):
+    screen = ResultsScreen()
+    screen.load_results(_result("general", output_dir=str(tmp_path)))
+    screen._open_folder()
+    assert [u.toLocalFile() for u in opened_urls] == [tmp_path.as_posix()]
+
+
+@pytest.mark.parametrize("platform", ["darwin", "win32", "linux"])
+def test_notification_never_raises_without_osascript(main_window, monkeypatch,
+                                                     platform):
+    import subprocess
+    from gui import main_window as mw
+
+    def missing(*args, **kwargs):
+        raise FileNotFoundError("osascript")
+
+    monkeypatch.setattr(mw.sys, "platform", platform)
+    monkeypatch.setattr(subprocess, "run", missing)
+    main_window._send_notification("Recorder", 'done "quoted"')
+
+
+def test_on_finished_survives_a_failing_notification(main_window, monkeypatch,
+                                                     tmp_path):
+    import subprocess
+
+    def missing(*args, **kwargs):
+        raise FileNotFoundError("osascript")
+
+    monkeypatch.setattr(subprocess, "run", missing)
+    main_window._on_finished(_result("general", output_dir=str(tmp_path)))
+    assert main_window._results._output_dir == str(tmp_path)
+
+
 # ── first-run strip ─────────────────────────────────────────────────
 
 def test_peak_level_reads_every_sample_format():

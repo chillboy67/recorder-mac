@@ -14,10 +14,11 @@ from __future__ import annotations
 import logging
 import re
 import subprocess
+import sys
 from pathlib import Path
 
-from PySide6.QtCore import QSettings, Qt
-from PySide6.QtGui import QAction, QActionGroup, QKeySequence
+from PySide6.QtCore import QSettings, Qt, QUrl
+from PySide6.QtGui import QAction, QActionGroup, QDesktopServices, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
     QFileDialog,
@@ -27,6 +28,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QStackedWidget,
+    QSystemTrayIcon,
     QVBoxLayout,
     QWidget,
 )
@@ -414,7 +416,7 @@ class MainWindow(QMainWindow):
     def _reveal_output(self) -> None:
         target = self._saved_output_dir() or default_output_root()
         target.mkdir(parents=True, exist_ok=True)
-        subprocess.run(["open", str(target)])
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(target)))
 
     # ── output location ──────────────────────────────────
 
@@ -457,7 +459,7 @@ class MainWindow(QMainWindow):
     def _open_readme(self) -> None:
         readme = Path(__file__).parent.parent / "README.md"
         if readme.exists():
-            subprocess.run(["open", str(readme)])
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(readme)))
 
     def _export_diagnostics(self) -> None:
         from core.diagnostics import default_bundle_name, export_bundle
@@ -474,11 +476,28 @@ class MainWindow(QMainWindow):
             return
         QMessageBox.information(self, t("diag_save_title"), t("diag_saved", path=saved))
 
-    @staticmethod
-    def _send_notification(title: str, message: str) -> None:
-        script = (f'display notification "{message}"'
-                  f' with title "{title}" sound name "Glass"')
-        subprocess.run(["osascript", "-e", script], capture_output=True)
+    def _send_notification(self, title: str, message: str) -> None:
+        """Best-effort desktop notification; a failure never reaches the slot.
+
+        macOS uses osascript (with the "Glass" sound); elsewhere a visible
+        system tray icon shows the message if the window has one, otherwise
+        the notification is skipped.
+        """
+        try:
+            if sys.platform == "darwin":
+                def quote(s: str) -> str:
+                    return s.replace("\\", "\\\\").replace('"', '\\"')
+                script = (f'display notification "{quote(message)}"'
+                          f' with title "{quote(title)}" sound name "Glass"')
+                subprocess.run(["osascript", "-e", script],
+                               capture_output=True, timeout=5)
+                return
+            tray = self.findChild(QSystemTrayIcon)
+            if (tray is not None and tray.isVisible()
+                    and QSystemTrayIcon.supportsMessages()):
+                tray.showMessage(title, message)
+        except Exception:
+            pass
 
     # ── geometry ────────────────────────────────────────────
 
