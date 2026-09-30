@@ -21,10 +21,9 @@ from modules import ASRResult
 from modules.audio_loader import AudioLoader
 
 from core import export as exporter
-from core import llm as llm_mod
 from core import provenance
 from core.i18n import t
-from core.languages import normalize_language, prefers_asian_model
+from core.languages import normalize_language
 from core.modes import Mode, get_mode
 from core.transcriber import TEMPERATURE_LADDER, Transcriber
 
@@ -44,9 +43,6 @@ def run(
     initial_prompt: Optional[str] = None,
     formats: Optional[list[str]] = None,
     languagetool_url: str = "http://127.0.0.1:8010/v2/check",
-    use_llm: bool = False,
-    llm_model: str = llm_mod.DEFAULT_MODEL,            # head of the non-Chinese candidates
-    chinese_model: str = llm_mod.DEFAULT_CHINESE_MODEL,  # head of the Chinese candidates
     progress: Optional[ProgressCB] = None,
 ) -> dict:
     """Run the full pipeline for one file. Returns a result summary dict."""
@@ -176,27 +172,6 @@ def run(
     ielts_report = None
     classroom_report = None
     classroom_md: Optional[str] = None
-    general_tidy_md: Optional[str] = None
-
-    # Is the local LLM usable, and which one? Route by the detected language:
-    # CJK audio → the Chinese candidates; everything else → the multilingual
-    # ones. Neither role is a single hardcoded name: the caller's preferred
-    # model heads the list, then each role degrades through whatever else the
-    # user happens to have pulled, so installing "the wrong" family still works.
-    llm_on = False
-    if use_llm:
-        asian = prefers_asian_model(asr.language)
-        head = chinese_model if asian else llm_model
-        own = llm_mod.CHINESE_CANDIDATES if asian else llm_mod.NON_CHINESE_CANDIDATES
-        other = llm_mod.NON_CHINESE_CANDIDATES if asian else llm_mod.CHINESE_CANDIDATES
-        resolved = llm_mod.resolve_first((head,) + own + other)
-        if resolved:
-            llm_model = resolved
-            llm_on = True
-            logger.info("LLM on: language=%s → model=%s", asr.language, llm_model)
-        else:
-            warnings.append(t("eng_llm_unavailable"))
-            logger.warning("use_llm requested but no Ollama model available")
 
     # 4) Speaker handling ----------------------------------------------------
     if mode.diarize:
@@ -240,47 +215,14 @@ def run(
             other_seconds=getattr(dia_obj, "other_seconds", 0.0),
             languagetool_url=languagetool_url,
         )
-        # LLM-enhanced examiner-style feedback on the candidate's English.
-        if llm_on:
-            report("analyze", t("eng_llm_feedback"), 91)
-            fb = llm_mod.ielts_feedback(ielts_report.transcript_candidate, model=llm_model)
-            if fb:
-                ielts_report.markdown += (
-                    "\n\n---\n\n# 🤖 AI 考官点评（本地大模型）\n\n" + fb + "\n")
         report("analyze", t("eng_analyze_done"), 94, "done")
 
-    # 5b) Classroom: AI-corrected transcript (context-aware) + key-point summary
+    # 5b) Classroom: key-point summary from the transcript
     if mode.summarize:
         from core import classroom as classroom_mod
-        classroom_report = classroom_mod.summarize(asr)   # always have a fallback
-        if llm_on:
-            report("analyze", t("eng_correct_start"), 90)
-            def _corr_prog(frac, msg):
-                report("analyze", msg, 88 + int(frac * 4))
-            corrected = llm_mod.correct_transcript(
-                asr.full_text, context=_lecture_context(asr.language),
-                language=asr.language, model=llm_model,
-                progress=_corr_prog)
-            report("analyze", t("eng_extract_start"), 93)
-            summary_md = llm_mod.summarize_lecture(
-                corrected or asr.full_text, language=asr.language, model=llm_model)
-            parts = ["# 课堂重点总结（本地大模型）", ""]
-            if summary_md:
-                parts.append(summary_md)
-            parts += ["", "## 校对后全文（AI 据上课内容判断）", "", corrected or asr.full_text]
-            classroom_md = "\n".join(parts)
-        if classroom_md is None:
-            classroom_md = classroom_report.markdown   # heuristic fallback
+        classroom_report = classroom_mod.summarize(asr)
+        classroom_md = classroom_report.markdown
         report("analyze", t("eng_extract_done"), 94, "done")
-
-    # 5c) General: AI determines the true transcript (accuracy-focused correction)
-    if (not mode.analyze_ielts and not mode.summarize) and llm_on:
-        report("analyze", t("eng_general_correct"), 90)
-        def _corr_prog(frac, msg):
-            report("analyze", msg, 88 + int(frac * 6))
-        general_tidy_md = llm_mod.correct_transcript(
-            asr.full_text, language=asr.language, model=llm_model, progress=_corr_prog)
-        report("analyze", t("eng_general_done"), 94, "done")
 
     # 6) Export --------------------------------------------------------------
     report("export", t("eng_export_start"), 96)
@@ -289,8 +231,6 @@ def run(
         extra_md, extra_suffix = ielts_report.markdown, "ielts"
     elif classroom_md:
         extra_md, extra_suffix = classroom_md, "summary"
-    elif general_tidy_md:
-        extra_md, extra_suffix = ("# AI 校对版（本地大模型）\n\n" + general_tidy_md), "corrected"
     else:
         extra_md, extra_suffix = None, "report"
     outputs = exporter.export_all(
@@ -319,12 +259,9 @@ def run(
         "warnings": warnings,
         "ielts": _ielts_summary(ielts_report) if ielts_report else None,
         "classroom": ({"markdown": classroom_md,
-                       "llm": bool(llm_on),
                        "emphasis_count": len(classroom_report.emphasis_points),
                        "definition_count": len(classroom_report.definitions)}
                       if classroom_report else None),
-        "tidy_markdown": ("# AI 校对版（本地大模型）\n\n" + general_tidy_md) if general_tidy_md else None,
-        "llm_used": bool(llm_on),
         # The fidelity audit trail used to stop at meta.json, which meant the
         # GUI could never show it (general/IELTS don't even export json by
         # default). Surfacing it in the summary is what puts it on screen.
@@ -370,11 +307,3 @@ def _ielts_summary(r) -> dict:
         "naturalness_count": len(r.naturalness),
         "markdown": r.markdown,
     }
-
-
-def _lecture_context(language: str) -> str:
-    """Background hint for the correction prompt, in the transcript's language
-    (code-switching transcripts keep the Chinese hint, matching their prompt)."""
-    if not language or language in ("zh", "mixed"):
-        return "一节课的课堂录音"
-    return "a classroom lecture recording"

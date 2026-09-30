@@ -174,7 +174,7 @@ _CATALOG: dict[str, dict[str, str]] = {
     "menu_help_docs": {"zh": "打开说明", "en": "Open Documentation"},
 
     # top strip
-    "btn_output_folder": {"zh": "输出文件夹", "en": "Output Folder"},
+    "btn_output_folder": {"zh": "保存文件夹", "en": "Save Folder"},
     "theme_tooltip": {"zh": "点击切换：跟随系统 → 深色 → 浅色",
                       "en": "Click to cycle: Follow System → Dark → Light"},
     "appearance_btn_auto": {"zh": "◐ 外观 · 跟随系统", "en": "◐ Appearance · System"},
@@ -218,11 +218,11 @@ _CATALOG: dict[str, dict[str, str]] = {
     "worker_crash": {
         "zh": "处理进程意外退出{code}，很可能是内存不足或模型过大。\n\n"
               "你的录音文件已安全保存，没有丢失。\n"
-              "建议在「识别模型」里选「均衡」或「最快」后重试。",
+              "建议在「识别模型」里选「快速」后重试。",
         "en": "The processing process quit unexpectedly{code} — most likely out "
               "of memory, or a model that is too large.\n\n"
               "Your recording is safely on disk and was not lost.\n"
-              "Try picking “Balanced” or “Fastest” under Model, then run it again.",
+              "Try picking “Fast” under Model, then run it again.",
     },
     "deps_title": {"zh": "缺少依赖", "en": "Missing Dependencies"},
     "deps_body": {
@@ -246,11 +246,11 @@ _CATALOG: dict[str, dict[str, str]] = {
     "home_record": {"zh": "●  实时录音", "en": "●  Record Live"},
     "home_start": {"zh": "开 始 转 写", "en": "Start Transcription"},
     "home_remove": {"zh": "移除", "en": "Remove"},
-    "home_model": {"zh": "识别模型", "en": "Model"},
-    "home_engine": {"zh": "转写后端", "en": "Backend"},
+    "home_model": {"zh": "识别模型", "en": "Recognition model"},
+    "home_engine": {"zh": "转写后端", "en": "Transcription backend"},
     "home_engine_tooltip": {
-        "zh": "自动选择可用后端；Vulkan 支持兼容的 Intel/AMD GPU，OpenVINO 用于 Intel GPU。需先按 GPU_BACKENDS.md 安装并下载模型。",
-        "en": "Auto selects an available backend. Vulkan supports compatible Intel/AMD GPUs; OpenVINO targets Intel GPUs. Install and download models per GPU_BACKENDS.md first.",
+        "zh": "自动选用。显卡后端需另行安装。",
+        "en": "Auto. GPU backends need a separate install.",
     },
     "engine_auto": {"zh": "自动", "en": "Auto"},
     "engine_mlx": {"zh": "MLX / Metal", "en": "MLX / Metal"},
@@ -261,18 +261,10 @@ _CATALOG: dict[str, dict[str, str]] = {
     "lang_auto": {"zh": "自动检测", "en": "Auto"},
     "lang_auto_short": {"zh": "Auto", "en": "Auto"},
     "home_lang_tooltip": {
-        "zh": "默认自动检测：中英等混说按静音分块逐块识别。指定语言可纠正识别"
-              "不稳的音频，但会关闭逐块语种切换。",
-        "en": "Auto-detect by default: mixed speech (say, Chinese and English) is "
-              "split at silences and recognized chunk by chunk. Pinning a language "
-              "helps with unstable audio, but turns off per-chunk language switching.",
+        "zh": "默认自动。选定后固定语种。",
+        "en": "Auto by default. A chosen language stays fixed.",
     },
     "home_export": {"zh": "导出", "en": "Export"},
-    "home_llm": {"zh": "本地大模型增强", "en": "Local LLM"},
-    "home_llm_tooltip": {
-        "zh": "未安装 Ollama 时自动跳过。",
-        "en": "Skipped when Ollama isn’t installed.",
-    },
     "home_browse_title": {"zh": "选择音频文件", "en": "Choose an audio file"},
 
     # source segmented control
@@ -287,16 +279,16 @@ _CATALOG: dict[str, dict[str, str]] = {
     # model picker
     "model_auto": {"zh": "自动 auto", "en": "Auto · recommended"},
     "model_auto_word": {"zh": "自动", "en": "Auto"},
-    "model_auto_help": {
-        "zh": "自动选择：Apple Silicon 的 MLX 使用 large-v3；CPU 使用 small，降低内存和等待时间。可手动选择其他模型。",
-        "en": "Automatic: MLX uses large-v3 on Apple Silicon; CPU uses small to reduce memory and wait time. Choose another model to override.",
+    "model_auto_tip": {
+        "zh": "苹果芯片用准确，否则用快速",
+        "en": "Accurate on Apple chips, otherwise Fast",
     },
-    "model_large": {"zh": "最准 large-v3", "en": "Accurate · large-v3"},
-    "model_large_word": {"zh": "最准", "en": "Accurate"},
-    "model_turbo": {"zh": "均衡 large-v3-turbo", "en": "Balanced · large-v3-turbo"},
-    "model_turbo_word": {"zh": "均衡", "en": "Balanced"},
-    "model_small": {"zh": "最快 small", "en": "Fastest · small"},
-    "model_small_word": {"zh": "最快", "en": "Fastest"},
+    "model_large": {"zh": "准确 large-v3", "en": "Accurate · large-v3"},
+    "model_large_word": {"zh": "准确", "en": "Accurate"},
+    "model_large_tip": {"zh": "更准，也更慢", "en": "Slower, more accurate"},
+    "model_small": {"zh": "快速 small", "en": "Fast · small"},
+    "model_small_word": {"zh": "快速", "en": "Fast"},
+    "model_small_tip": {"zh": "更快，精度低一些", "en": "Faster, a bit less accurate"},
 
     # modes (titles reused on the results rail)
     "mode_general_title": {"zh": "通用转写", "en": "General"},
@@ -370,7 +362,7 @@ _CATALOG: dict[str, dict[str, str]] = {
     "step_denoise": {"zh": "降噪处理", "en": "Denoise"},
     "step_asr": {"zh": "语音转写", "en": "Transcribe"},
     "step_diarize": {"zh": "区分说话人", "en": "Separate speakers"},
-    "step_analyze": {"zh": "分析 / AI 增强", "en": "Analyze / AI enhance"},
+    "step_analyze": {"zh": "分析", "en": "Analyze"},
     "step_export": {"zh": "导出结果", "en": "Export results"},
     "proc_preparing": {"zh": "准备中…", "en": "Preparing…"},
     "proc_cancel": {"zh": "取消", "en": "Cancel"},
@@ -387,8 +379,6 @@ _CATALOG: dict[str, dict[str, str]] = {
     "res_feedback": {"zh": "反馈报告", "en": "Feedback Report"},
     "res_tab_ielts": {"zh": "雅思反馈", "en": "IELTS Feedback"},
     "res_tab_summary": {"zh": "重点总结", "en": "Key Points"},
-    "res_tab_summary_ai": {"zh": "重点总结（AI）", "en": "Key Points (AI)"},
-    "res_tab_tidy": {"zh": "AI 校对版", "en": "AI Proofread"},
     "res_stat_pron": {"zh": "发音疑点", "en": "Pronunciation"},
     "res_stat_grammar": {"zh": "语法 / 用词", "en": "Grammar / Word choice"},
     "res_stat_wpm": {"zh": "WPM 语速", "en": "WPM"},
@@ -425,11 +415,6 @@ _CATALOG: dict[str, dict[str, str]] = {
                             "please wait)…"},
     "eng_asr_done": {"zh": "转写完成（{count} 段）",
                      "en": "Transcription complete ({count} segments)"},
-    "eng_llm_unavailable": {
-        "zh": "已勾选本地大模型，但 Ollama 未运行或模型未安装，已回退离线处理。",
-        "en": "Local LLM was enabled, but Ollama isn’t running or the model isn’t "
-              "installed — falling back to offline processing.",
-    },
     "eng_diarize_start": {"zh": "区分说话人…", "en": "Separating speakers…"},
     "eng_diarize_done": {"zh": "识别到 {count} 个说话人", "en": "Found {count} speakers"},
     "eng_main_start": {"zh": "聚焦主讲人，排除旁人…",
@@ -437,17 +422,8 @@ _CATALOG: dict[str, dict[str, str]] = {
     "eng_main_done": {"zh": "已聚焦主讲人", "en": "Focused on the main speaker"},
     "eng_analyze_start": {"zh": "分析发音 / 语法 / 表达…",
                           "en": "Analyzing pronunciation, grammar and phrasing…"},
-    "eng_llm_feedback": {"zh": "大模型点评中…", "en": "Generating LLM feedback…"},
     "eng_analyze_done": {"zh": "分析完成", "en": "Analysis complete"},
-    "eng_correct_start": {"zh": "AI 根据上课内容校对原文…",
-                          "en": "AI is proofreading the transcript against the "
-                                "lecture context…"},
-    "eng_extract_start": {"zh": "AI 提炼重点…", "en": "AI is extracting key points…"},
     "eng_extract_done": {"zh": "重点提取完成", "en": "Key points extracted"},
-    "eng_general_correct": {"zh": "AI 校对全文（提高准确性）…",
-                            "en": "AI is proofreading the full transcript for "
-                                  "accuracy…"},
-    "eng_general_done": {"zh": "整理完成", "en": "Proofreading complete"},
     "eng_export_start": {"zh": "导出结果…", "en": "Exporting results…"},
     "eng_export_done": {"zh": "完成", "en": "Done"},
 
@@ -472,13 +448,6 @@ _CATALOG: dict[str, dict[str, str]] = {
                                 "en": "MLX is not supported on this device; using CPU transcription."},
     "res_key_model": {"zh": "识别引擎 / 模型", "en": "Engine / model"},
     "res_key_warnings": {"zh": "运行提示", "en": "Run warnings"},
-
-    # local-LLM progress messages
-    "llm_proofreading": {"zh": "校对中 {i}/{n}", "en": "Proofreading {i}/{n}"},
-    "llm_correcting": {"zh": "AI 校对 {i}/{n}", "en": "AI proofreading {i}/{n}"},
-    "llm_extracting": {"zh": "提炼要点 {i}/{n}", "en": "Extracting key points {i}/{n}"},
-    "llm_merging": {"zh": "整合总结…", "en": "Assembling the summary…"},
-    "llm_tidying": {"zh": "整理中 {i}/{n}", "en": "Tidying up {i}/{n}"},
 
     # core component errors (surface in dialogs / tracebacks)
     "sys_component_missing": {

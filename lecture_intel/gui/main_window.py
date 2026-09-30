@@ -2,7 +2,7 @@
 Main window — AURA single-stage layout.
 
 Structure:
-    top strip   wordmark · (state text) · 输出文件夹 / 外观
+    top strip   wordmark · (state text) · 保存文件夹 / 外观
     step rail   01 输入 · 02 模式 · 03 转写 · 04 结果   (left, fixed 96px)
     stage       QStackedWidget: HomeScreen / RecordingScreen /
                 ProcessingScreen / ResultsScreen
@@ -316,8 +316,6 @@ class MainWindow(QMainWindow):
 
         active_steps = list(_STEPS_BY_MODE.get(settings["mode"],
                                                _STEPS_BY_MODE["general"]))
-        if settings.get("use_llm") and "analyze" not in active_steps:
-            active_steps.insert(active_steps.index("export"), "analyze")
 
         p = Path(input_path)
         size_mb = p.stat().st_size / 1_048_576

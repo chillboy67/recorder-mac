@@ -32,8 +32,7 @@ Recorder's first principle:
 > **No mode ever rewrites the speaker's choice of words. Mistakes are kept exactly as spoken.**
 
 Anything worth flagging (uncertain pronunciation, grammar issues, non-native phrasing) is **annotated**,
-never edited into the transcript body. The optional local LLM enhancement only touches transcription
-errors caused by unclear audio — it never polishes or rewrites.
+never edited into the transcript body.
 
 The boundaries are stated plainly: Whisper itself drops some filler words while decoding (upstream
 faster-whisper#901 and whisper.cpp#965 were reported and closed unfixed). Measured on our 50-clip
@@ -70,8 +69,6 @@ the annotation. General and IELTS modes only annotate suspected artifacts and ne
 - **Export** to txt / md / docx with timestamps and speaker labels; JSON carries fidelity annotations.
   Legacy `.doc` conversion is available on macOS only.
 - **Light/dark theme**, follows the system setting.
-- **Optional local LLM (Ollama)** for tidy-up / classroom summary / IELTS notes.  
-  Model picks and install: [lecture_intel/docs/LLM_MODELS.md](lecture_intel/docs/LLM_MODELS.md).
 
 ---
 
@@ -175,12 +172,11 @@ cd lecture_intel
 .venv/bin/python3 download_models.py     # downloads to the local model directory
 ```
 
-Three model tiers are selectable in the UI: **most accurate** `large-v3` / **balanced** `large-v3-turbo` /
-**fastest** `small`. Once downloaded, the app runs fully offline at runtime.
+The UI offers **Auto**, **Accurate** `large-v3`, and **Fast** `small`. Once downloaded, the app runs fully offline at runtime.
 
-In a narrowed (compact) window the model picker collapses to icons: 🎯 = most accurate
-(a dart in the bullseye), ⚖️ = balanced (scales), ⚡ = fastest (lightning bolt). The expanded
-list still shows the full names, and hovering the collapsed picker tooltips the full name.
+In a narrowed (compact) window the model picker collapses to icons: ⚖️ = auto (scales),
+🎯 = accurate (a dart in the bullseye), ⚡ = fast (lightning bolt). The expanded
+list still shows the full names. Hovering shows a one-line note.
 
 ### Command line (no UI)
 
@@ -188,7 +184,7 @@ list still shows the full names, and hovering the collapsed picker tooltips the 
 .venv/bin/python3 transcribe.py recording.m4a                  # general
 .venv/bin/python3 transcribe.py class.mp3  -m classroom        # classroom
 .venv/bin/python3 transcribe.py ielts.webm -m ielts            # IELTS feedback
-.venv/bin/python3 transcribe.py a.wav --model large-v3-turbo -f txt -f docx
+.venv/bin/python3 transcribe.py a.wav --model small -f txt -f docx
 .venv/bin/python3 transcribe.py talk.m4a -l ja                 # pin the language (default: auto-detect)
 ```
 
@@ -204,16 +200,6 @@ Supports m4a / mp3 / wav / webm / flac / aac / ogg / opus.
 
 The first time you hit “Start Transcription”, a save-location sheet appears (like a browser download prompt). The default is an `output/` folder **inside the folder you cloned or unzipped the repo into** — the path is found at runtime by walking up to `.git`, so everyone gets their own location and nothing is baked in from the author's machine. Launched as an installed app, with no repo around, it falls back to the data folder under `~/Documents`. It never defaults to `~/Library/Application Support` or `/Applications` — nobody looks in a system folder for their own files. Each run gets a subfolder named after the recording. The choice is remembered and not asked again; change it from **File → Change Output Folder…**, and open the current one with **File → Reveal Output Folder**. On the CLI, output defaults to `<name>_output` next to the audio file; override with `-o`.
 
-### Optional: local LLM enhancement
-
-With [Ollama](https://ollama.com), enable “AI enhancement” in the UI to fix recognition typos, generate classroom summaries, and add IELTS-style notes. When off, offline rules apply. Models run on-device — do not commit weights to Git.
-
-What “faithful” means here: the main transcript is verbatim and never rewritten; the optional AI enhancement only adds a **separate** corrected companion (punctuation, obvious recognition typos) and leaves the original files untouched; the speaker’s own language errors are flagged, never fixed.
-
-Defaults: Chinese audio is recommended **Qwen** (`qwen3` / `qwen2.5:7b`), everything else **Mistral**; the candidate chain only admits LLMs downloadable from Ollama (no audio-multimodal LLM in the library can actually receive audio today, and this app never sends audio to Ollama anyway) — but those are only defaults; which model you install, and how big, is your call. With Ollama absent, or no matching model pulled, enhancement is skipped automatically. Install steps, RAM tiers, and China mirrors:
-
-**[lecture_intel/docs/LLM_MODELS.md](lecture_intel/docs/LLM_MODELS.md)**
-
 ---
 
 ## Architecture
@@ -224,7 +210,6 @@ lecture_intel/
 ├── transcribe.py         CLI entry point
 ├── make_app.sh           Builds and installs /Applications/Recorder.app
 ├── download_models.py    Whisper model pre-download (direct mirror)
-├── docs/LLM_MODELS.md    Hardware tiers × Ollama (Qwen/Mistral) guide
 │
 ├── core/                 The engine
 │   ├── engine.py         Single orchestration entry point: run(input, output, mode)
@@ -236,7 +221,6 @@ lecture_intel/
 │   ├── diarize.py        Token-free speaker separation (voiceprint embeddings + clustering + temporal smoothing)
 │   ├── ielts.py          Pronunciation / grammar / phrasing analysis and report generation
 │   ├── classroom.py      Key-point extraction and summarization
-│   ├── llm.py            Optional local LLM enhancement (Ollama)
 │   ├── sysaudio.py       System audio capture driver
 │   ├── runner.py         Subprocess executor (crash isolation)
 │   ├── paths.py          User data directory (single source of truth)
@@ -340,20 +324,16 @@ coach/student split keys on "not the candidate's language": Japanese, Korean, Ru
 attributed by script, each verified on a real recording in that language. French/German/Spanish coaches need the
 per-chunk language carried on each segment and are **not reliable yet** — that signal only suffices when a
 silence-bounded chunk holds a single language (real 60s coaching chunks mix two), and the acoustic path's role
-decision does not consult segment language at all; both are tracked as follow-ups. The optional local-LLM
-enhancement (correction, classroom summaries) now writes its prompts in the transcript's own language instead of
-always Chinese. The IELTS examiner report stays in Chinese (candidates always answer in English, and the UI is
-Chinese) and LanguageTool stays on `en-US` (it diagnoses the candidate's English). The zh/en thresholds and
-attribution rules are unchanged. The one optional item from the plan — coach-side translation — is not
-implemented; revisit if wanted.
-
-See the [LLM guide](lecture_intel/docs/LLM_MODELS.md) for routing notes.
+decision does not consult segment language at all; both are tracked as follow-ups. The IELTS report
+stays in Chinese (candidates always answer in English, and the UI is Chinese) and LanguageTool stays
+on `en-US` (it diagnoses the candidate's English). The zh/en thresholds and attribution rules are
+unchanged. The one optional item from the plan — coach-side translation — is not implemented;
+revisit if wanted.
 
 ## Privacy
 
 - The model and all processing run on-device — **no network requests at all** (aside from the initial model download).
 - Recordings and transcripts are written to a local data directory (see `core/paths.py`); the repository ships no audio.
-- The optional LLM enhancement runs through local Ollama and also never touches the network.
 
 ---
 
@@ -370,8 +350,7 @@ Full requirements and design trade-offs are documented in [REQUIREMENTS.md](REQU
 ## Directory notes
 
 - `lecture_intel/` — the app itself (the only actively maintained code). Before touching the UI, read
-  [`lecture_intel/docs/GUI_DESIGN.md`](lecture_intel/docs/GUI_DESIGN.md) (design rules that must hold)
-  and [`lecture_intel/docs/LLM_MODELS.md`](lecture_intel/docs/LLM_MODELS.md) (local LLM choices).
+  [`lecture_intel/docs/GUI_DESIGN.md`](lecture_intel/docs/GUI_DESIGN.md) (design rules that must hold).
 - `aura_gui/`, `lecture_intel/gui_old/`, `pipeline.py`, `config.yaml`, and the lecture-classification/structured
   modules in `modules/` — earlier implementations superseded by the `core/` engine; deleted on
   2026-09-20 (`modules/audio_loader.py` and its dataclasses are still in use, so `modules/` remains).

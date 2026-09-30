@@ -79,37 +79,6 @@ class ASRResult:
     annotations: list[dict] = field(default_factory=list)
 
 
-@dataclass
-class CorrectedChunk:
-    """A single corrected chunk from LLM post-processing."""
-    original: str
-    corrected: str
-    chunk_index: int
-    warning: Optional[str] = None
-
-
-@dataclass
-class LLMResult:
-    """Full LLM correction output."""
-    chunks: list[CorrectedChunk]
-    full_corrected: str
-    warnings: list[str] = field(default_factory=list)
-    processing_time_ms: float = 0.0
-
-
-@dataclass
-class PipelineResult:
-    """Complete pipeline output summary."""
-    input_path: Path
-    audio_file: AudioFile
-    segment_count: int
-    asr_result: ASRResult
-    llm_result: Optional[LLMResult]
-    output_files: dict[str, Path]
-    elapsed_sec: float
-    warnings: list[str] = field(default_factory=list)
-
-
 # ============================================================
 # P1-A: Audio Enhancer Types
 # ============================================================

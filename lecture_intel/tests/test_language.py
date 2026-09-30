@@ -26,7 +26,6 @@ from core.languages import (  # noqa: E402
     disambiguate_latin_language,
     display_name,
     normalize_language,
-    prefers_asian_model,
     script_counts,
 )
 from core.transcriber import Transcriber  # noqa: E402
@@ -189,14 +188,6 @@ def test_zh_en_code_switching_unaffected_by_chunk_language():
 
 
 # ── routing + UI helpers ─────────────────────────────────────────────
-
-@pytest.mark.parametrize("code,expected", [
-    ("zh", True), ("ja", True), ("ko", True), ("mixed", True),
-    ("en", False), ("fr", False), ("de", False), ("ru", False), ("th", False),
-])
-def test_prefers_asian_model(code, expected):
-    assert prefers_asian_model(code) is expected
-
 
 @pytest.mark.parametrize("value,expected", [
     (None, None), ("", None), ("  ", None), (AUTO, None), ("AUTO", None),

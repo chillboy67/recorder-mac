@@ -14,27 +14,12 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 
-import pytest
-
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from modules import ASRResult, ASRSegment, ASRWord  # noqa: E402
 from core import engine, export as E  # noqa: E402
 from core import repeat_arbitration as ra  # noqa: E402
-
-
-# ── _lecture_context ────────────────────────────────────────────────
-
-@pytest.mark.parametrize("language,expected", [
-    ("zh", "一节课的课堂录音"),
-    ("mixed", "一节课的课堂录音"),      # code-switching keeps the Chinese hint
-    ("", "一节课的课堂录音"),
-    (None, "一节课的课堂录音"),
-    ("en", "a classroom lecture recording"),
-])
-def test_lecture_context_follows_the_transcript_language(language, expected):
-    assert engine._lecture_context(language) == expected
 
 
 # ── _ielts_summary ──────────────────────────────────────────────────

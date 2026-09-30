@@ -54,8 +54,7 @@ PICKER_LANGUAGES: tuple[tuple[str, str], ...] = (
     ("hi", "हिन्दी"),
 )
 
-# English names for the picker languages, used in prompts that must name the
-# language being processed (see core.llm). Unknown codes fall back to the code.
+# English names for the picker languages. Unknown codes fall back to the code.
 LANGUAGE_NAMES_EN: dict[str, str] = {
     "zh": "Chinese", "en": "English", "ja": "Japanese", "ko": "Korean",
     "fr": "French", "de": "German", "es": "Spanish", "ar": "Arabic",
@@ -95,10 +94,6 @@ LANGUAGE_NAMES: dict[str, str] = {
     "eo": "世界语", "lv": "拉脱维亚语", "lt": "立陶宛语", "et": "爱沙尼亚语",
     "mk": "马其顿语", "sq": "阿尔巴尼亚语", "be": "白俄罗斯语",
 }
-
-# Languages whose model should be the Asian one (Qwen family), per
-# docs/LLM_MODELS.md §2 — CJK text needs a CJK-trained model.
-CJK_LANGS: frozenset[str] = frozenset({"zh", "ja", "ko"})
 
 # Common languages the picker does not offer but users still hit in practice
 # (world speaker volume + IELTS candidature). Together with the picker this is
@@ -287,11 +282,6 @@ def detect_language(text: str, detected: Optional[str] = None) -> str:
         return (_family_member("latin", detected) or _latin_detection(detected)
                 or "en")
     return detected or "en"
-
-
-def prefers_asian_model(language: str) -> bool:
-    """True when the transcript should go to the CJK-trained model."""
-    return language in CJK_LANGS or language == "mixed"
 
 
 def normalize_language(value) -> Optional[str]:

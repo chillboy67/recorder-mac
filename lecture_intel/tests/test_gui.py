@@ -12,8 +12,8 @@ Opt-in on purpose
 Skipped unless ``RECORDER_GUI_TESTS=1``: initialising Qt changes what else may
 run in the same process, because in a sandboxed shell a process that has created
 a QApplication is killed on its next localhost HTTP request — and test_core
-(LanguageTool on 127.0.0.1:1) and test_llm (Ollama on 127.0.0.1:11434) both open
-localhost connections. Keeping Qt out of the default suite keeps
+(LanguageTool on 127.0.0.1:1) opens a localhost connection. Keeping Qt out of
+the default suite keeps
 ``python -m pytest`` reliable; run these explicitly:
 
     RECORDER_GUI_TESTS=1 .venv/bin/python3 -m pytest tests/test_gui.py
@@ -274,7 +274,7 @@ def test_load_results_renders_every_mode(qapp, mode):
     """Regression: this used to raise UnboundLocalError for all three modes."""
     extra = {}
     if mode == "classroom":
-        extra["classroom"] = {"markdown": "# s", "llm": False,
+        extra["classroom"] = {"markdown": "# s",
                               "emphasis_count": 1, "definition_count": 0}
     elif mode == "ielts":
         extra["ielts"] = {"markdown": "# r", "pron_issue_count": 1,

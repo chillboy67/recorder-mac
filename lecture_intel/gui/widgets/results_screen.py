@@ -169,12 +169,7 @@ class ResultsScreen(QWidget):
         if ielts and ielts.get("markdown"):
             self._add_text_tab(t("res_tab_ielts"), ielts["markdown"])
         if classroom and classroom.get("markdown"):
-            title = (t("res_tab_summary_ai") if classroom.get("llm")
-                     else t("res_tab_summary"))
-            self._add_text_tab(title, classroom["markdown"])
-        tidy = stats.get("tidy_markdown")
-        if tidy:
-            self._add_text_tab(t("res_tab_tidy"), tidy)
+            self._add_text_tab(t("res_tab_summary"), classroom["markdown"])
         # The fidelity audit trail: what the repeat arbitration flagged, and
         # which spans actually lost text. Same lines as the exported md/txt.
         if fidelity and fidelity.get("total"):

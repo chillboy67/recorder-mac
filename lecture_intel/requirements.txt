@@ -32,10 +32,7 @@ setuptools<82
 # instead, which nothing in the live tree imports.
 torch>=2.1.0
 
-# ── Local LLM enhancement (optional, via a local Ollama runtime) ──
-# Talks to Ollama over HTTP; no Python client needed.
-# Models used: mistral / qwen3 (see core/llm.py). Ollama itself is not a pip
-# dependency — install it separately and pull the models.
+# LanguageTool client used by the IELTS grammar check.
 httpx>=0.28.1
 
 # ── Export ───────────────────────────────────────────────────
