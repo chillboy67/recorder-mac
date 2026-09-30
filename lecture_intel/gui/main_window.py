@@ -11,6 +11,7 @@ Pipeline lifecycle is unchanged from the old MainWindow (PipelineWorker).
 """
 from __future__ import annotations
 
+import re
 import subprocess
 from pathlib import Path
 
@@ -47,6 +48,23 @@ _STEPS_BY_MODE: dict[str, list[str]] = {
 }
 
 HOME, RECORDING, PROCESSING, RESULTS = range(4)
+
+_EXCEPTION_LINE = re.compile(r"^[A-Za-z_][\w.]*(?:Error|Exception|Exit|Interrupt): (.+)$")
+
+
+def summarize_error(message: str) -> str:
+    """The readable part of a pipeline failure.
+
+    The pipeline reports failures as a traceback whose last line is the
+    exception, e.g. ``RuntimeError: Could not load the CPU Whisper model ...``;
+    that sentence is what the user can act on. Anything else passes through.
+    """
+    text = message.strip()
+    if not text.startswith("Traceback (most recent call last)"):
+        return text
+    last = next((line.strip() for line in reversed(text.splitlines()) if line.strip()), text)
+    match = _EXCEPTION_LINE.match(last)
+    return match.group(1) if match else last
 
 
 class MainWindow(QMainWindow):
@@ -353,7 +371,14 @@ class MainWindow(QMainWindow):
     def _on_error(self, msg: str) -> None:
         self._go(HOME, "state_error", "danger")
         self._show_status("status_error")
-        QMessageBox.critical(self, t("error_box_title"), msg)
+        # A traceback is taller than the screen, which pushes the OK button
+        # out of reach; show its final message and keep the rest foldable.
+        summary = summarize_error(msg)
+        box = QMessageBox(QMessageBox.Icon.Critical, t("error_box_title"), summary,
+                          QMessageBox.StandardButton.Ok, self)
+        if summary != msg.strip():
+            box.setDetailedText(msg)
+        box.exec()
 
     def _cancel_processing(self) -> None:
         if self._worker and self._worker.isRunning():

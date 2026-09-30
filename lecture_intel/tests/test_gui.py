@@ -108,6 +108,23 @@ def test_home_screen_exposes_persistent_engine_setting(qapp):
         home.close()
 
 
+def test_mlx_backend_is_offered_only_on_apple_silicon(qapp, monkeypatch):
+    from gui.widgets import home_screen
+    settings = QSettings("LucasLab", "Recorder")
+    try:
+        for apple, enabled, current in ((False, False, "auto"),
+                                        (True, True, "mlx-whisper")):
+            settings.setValue("engine", "mlx-whisper")
+            monkeypatch.setattr(home_screen, "_apple_silicon", lambda apple=apple: apple)
+            home = HomeScreen()
+            index = home._engine_combo.findData("mlx-whisper")
+            assert home._engine_combo.model().item(index).isEnabled() is enabled
+            assert home.get_settings()["engine"] == current
+            home.close()
+    finally:
+        settings.remove("engine")
+
+
 # ── theme ───────────────────────────────────────────────────────────
 
 def test_scheme_tables_define_every_colour_the_widgets_read(qapp):
@@ -356,6 +373,66 @@ def test_main_window_builds_every_screen_and_switches_language(qapp, isolated_pr
         i18n.set_language("zh")
         window.close()
         window.deleteLater()
+
+
+def _assert_not_squeezed(widget):
+    hint = widget.sizeHint()
+    assert widget.height() >= hint.height(), (widget.objectName(), widget.size(), hint)
+    assert widget.width() >= hint.width(), (widget.objectName(), widget.size(), hint)
+
+
+@pytest.mark.parametrize("lang", ["en", "zh"])
+def test_home_controls_keep_their_size_at_the_default_window(qapp, isolated_prefs, lang):
+    """Wider fonts (DejaVu Sans on Linux) wrap a mode-card description onto
+    one more line. The page used to take that line out of the input card,
+    squashing the source segments and the Start button until their labels
+    were cut in half."""
+    from gui.main_window import MainWindow
+    from core import i18n
+    theme.apply(qapp, "light")
+    window = MainWindow()
+    try:
+        window._set_language(lang)
+        window.resize(1068, 660)            # the default and minimum size
+        window.show()
+        qapp.processEvents()
+        home = window._home
+        for button in home._src_buttons.values():
+            _assert_not_squeezed(button)
+        home.set_file(str(ROOT / "tests" / "missing.wav"), "00:00:01 · 1 KB")
+        qapp.processEvents()
+        _assert_not_squeezed(home._start_btn)
+        combo = home._lang_combo
+        assert combo.width() >= combo.fontMetrics().horizontalAdvance(combo.currentText()) + 48
+    finally:
+        i18n.set_language("zh")
+        window.close()
+        window.deleteLater()
+
+
+def test_segment_reserves_room_for_its_semibold_checked_label(qapp):
+    from PySide6.QtGui import QFont, QFontMetrics
+    from gui.widgets.home_screen import _SegButton
+    button = _SegButton("Microphone")
+    bold = QFont(button.font())
+    bold.setWeight(QFont.Weight.DemiBold)
+    assert button.sizeHint().width() >= QFontMetrics(bold).horizontalAdvance("Microphone")
+    assert button.minimumSizeHint() == button.sizeHint()
+
+
+def test_error_summary_keeps_the_final_message_of_a_traceback():
+    from gui.main_window import summarize_error
+    trace = (
+        "Traceback (most recent call last):\n"
+        '  File "core/transcriber.py", line 500, in _load_faster\n'
+        "    raise RuntimeError(\n"
+        "RuntimeError: Could not load the CPU Whisper model 'small'. "
+        "Check the network connection.\n"
+    )
+    assert summarize_error(trace) == (
+        "Could not load the CPU Whisper model 'small'. Check the network connection.")
+    assert summarize_error("Processing stopped (exit code -9)") == (
+        "Processing stopped (exit code -9)")
 
 
 # ── worker ──────────────────────────────────────────────────────────
