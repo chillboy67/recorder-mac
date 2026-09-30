@@ -7,6 +7,22 @@
 一个本地运行的录音转文字桌面 App：macOS 可安装为双击 App，Windows/Linux 提供源码引导安装与启动脚本。
 全程离线，不调用任何云 API，音频与文字都不出本机。
 
+<div align="center">
+  <p>浅色 / 深色界面</p>
+  <p>
+    <img src="docs/screenshots/screenshot-01-input.png" width="350" alt="输入页（浅色）：拖入音频文件或实时录音" />
+    <img src="docs/screenshots/screenshot-01-input-dark.png" width="350" alt="输入页（深色）：拖入音频文件或实时录音" />
+  </p>
+  <p>
+    <img src="docs/screenshots/screenshot-02-recording.png" width="350" alt="录音中（浅色）" />
+    <img src="docs/screenshots/screenshot-02-recording-dark.png" width="350" alt="录音中（深色）" />
+  </p>
+  <p>
+    <img src="docs/screenshots/screenshot-03-transcribe.png" width="350" alt="转写中（浅色）" />
+    <img src="docs/screenshots/screenshot-03-transcribe-dark.png" width="350" alt="转写中（深色）" />
+  </p>
+</div>
+
 以**转写准确性**为根基，之上提供三种专业模式：
 
 | 模式 | 场景 | 产出 |
