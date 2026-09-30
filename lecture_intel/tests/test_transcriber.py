@@ -245,3 +245,29 @@ def test_whisper_cpp_progress_moves_the_ring(monkeypatch):
         lambda frac, msg: seen.append((round(frac, 3), msg)))
     assert seen == [(0.05, t("tr_writing")), (0.5, t("tr_writing")),
                     (0.95, t("tr_writing"))]
+
+
+def test_chunked_mlx_says_it_is_writing_before_the_first_chunk(monkeypatch, tmp_path):
+    """A single-chunk run sends nothing until it ends, so the ring must learn
+    that writing has started up front, not keep the model-loading line."""
+    sf = pytest.importorskip("soundfile")
+    import numpy as np
+    from core.i18n import t
+
+    seen = []
+
+    def fake_transcribe(clip, **kw):
+        seen.append("chunk")
+        return {"segments": [], "language": "en"}
+
+    monkeypatch.setitem(sys.modules, "mlx_whisper",
+                        SimpleNamespace(transcribe=fake_transcribe))
+    monkeypatch.setattr(T.Transcriber, "_prefetch_mlx", lambda self, p: None)
+    monkeypatch.setattr(T.Transcriber, "_mlx_repo", lambda self: "repo")
+    wav = tmp_path / "a.wav"
+    sf.write(str(wav), np.zeros(16000, dtype=np.float32), 16000)
+    monkeypatch.setattr(T.Transcriber, "_silence_chunks",
+                        staticmethod(lambda w, sr, max_sec: [(0, len(w))]))
+    T.Transcriber(model="small")._transcribe_mlx_chunked(
+        wav, "", lambda frac, msg: seen.append((round(frac, 3), msg)))
+    assert seen == [(0.05, t("tr_writing")), "chunk", (0.95, t("tr_writing"))]

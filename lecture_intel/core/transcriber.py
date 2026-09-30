@@ -494,6 +494,8 @@ class Transcriber:
         chunks = self._silence_chunks(wav, sr, max_sec=chunk_sec)
         repo = self._mlx_repo()
         logger.info("Chunked mlx: %d chunk(s)", len(chunks))
+        if progress:
+            progress(0.05, t("tr_writing"))
 
         all_segs: list[dict] = []
         langs: list[str] = []
