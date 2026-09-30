@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import sys
+import threading
 import time
 from pathlib import Path
 from types import SimpleNamespace
@@ -18,8 +19,13 @@ from core.i18n import set_language  # noqa: E402
 CHUNK = 1000
 
 
-def _slow_writer(folder: Path, chunks: int = 4, name: str = "blob.incomplete"):
-    """A fake hub download: writes into blobs/ a chunk at a time."""
+def _slow_writer(folder: Path, chunks: int = 4, name: str = "blob.incomplete",
+                 seen: threading.Event | None = None):
+    """A fake hub download: writes into blobs/ a chunk at a time.
+
+    With ``seen``, each chunk waits until the test's report callback has fired
+    for it, so how many distinct values get reported does not depend on the
+    poller winning a race against a sleep (it lost on a loaded machine)."""
     def fetch() -> str:
         blob = folder / "blobs" / name
         blob.parent.mkdir(parents=True, exist_ok=True)
@@ -27,7 +33,11 @@ def _slow_writer(folder: Path, chunks: int = 4, name: str = "blob.incomplete"):
             for _ in range(chunks):
                 fh.write(b"x" * CHUNK)
                 fh.flush()
-                time.sleep(0.06)
+                if seen is None:
+                    time.sleep(0.06)
+                else:
+                    seen.wait(5.0)
+                    seen.clear()
         blob.rename(blob.with_suffix(""))
         return str(folder / "snapshots" / "abc")
     return fetch
@@ -35,14 +45,29 @@ def _slow_writer(folder: Path, chunks: int = 4, name: str = "blob.incomplete"):
 
 def test_progress_rises_to_the_total(tmp_path):
     reports = []
-    path = D.download_with_progress(_slow_writer(tmp_path), tmp_path, 4 * CHUNK,
-                                    lambda done, total: reports.append((done, total)),
-                                    interval=0.02)
+    seen = threading.Event()
+
+    def report(done, total):
+        reports.append((done, total))
+        seen.set()
+
+    path = D.download_with_progress(_slow_writer(tmp_path, seen=seen), tmp_path,
+                                    4 * CHUNK, report, interval=0.02)
     assert path.endswith("abc")
     done = [d for d, _ in reports]
     assert done == sorted(done) and len(set(done)) >= 3
     assert all(d < 4 * CHUNK for d in done[:-1])     # never 100% before it finishes
     assert reports[-1] == (4 * CHUNK, 4 * CHUNK)
+
+
+def test_progress_never_falls_when_a_scan_misses_a_file(tmp_path, monkeypatch):
+    """A scan racing the *.incomplete rename sees nothing for one tick."""
+    sizes = iter([0, 2000, 0, 3000])          # baseline, then three polls
+    monkeypatch.setattr(D, "bytes_on_disk", lambda folder: next(sizes, 3000))
+    reports = []
+    D.download_with_progress(lambda: time.sleep(0.1) or "p", tmp_path, None,
+                             lambda done, total: reports.append(done), interval=0.02)
+    assert reports == sorted(reports) and 0 not in reports[1:]
 
 
 def test_files_already_in_the_cache_are_not_counted(tmp_path):
@@ -105,10 +130,11 @@ def test_cpu_model_first_run_reports_download_percent(monkeypatch, tmp_path, eng
     repo = "Systran/faster-whisper-small"
     folder = D.repo_cache_dir(repo, cache)
     calls = []
+    seen = threading.Event()
 
     def download_model(model, cache_dir):
         calls.append((model, cache_dir))
-        return _slow_writer(folder)()
+        return _slow_writer(folder, seen=seen)()
 
     monkeypatch.setitem(sys.modules, "faster_whisper", SimpleNamespace(
         utils=SimpleNamespace(_MODELS={"small": repo}, download_model=download_model)))
@@ -118,8 +144,11 @@ def test_cpu_model_first_run_reports_download_percent(monkeypatch, tmp_path, eng
     monkeypatch.setattr(D, "POLL_INTERVAL", 0.02)
     messages = []
 
-    T.Transcriber(model="small", engine="faster-whisper")._prefetch_faster(
-        lambda frac, msg: messages.append((frac, msg)))
+    def progress(frac, msg):
+        messages.append((frac, msg))
+        seen.set()
+
+    T.Transcriber(model="small", engine="faster-whisper")._prefetch_faster(progress)
 
     assert calls == [("small", str(cache))]
     assert messages[-1] == (0.04, "First use: downloading the small model, "

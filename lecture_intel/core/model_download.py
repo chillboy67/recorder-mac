@@ -93,7 +93,10 @@ def download_with_progress(
     last = -1
     while worker.is_alive():
         worker.join(interval)
-        done = max(0, bytes_on_disk(folder) - baseline)
+        # Never report less than before: a scan that races the library's
+        # rename of *.incomplete misses that file and would show progress
+        # falling back to zero for one tick.
+        done = max(last, 0, bytes_on_disk(folder) - baseline)
         if done != last:
             report(min(done, total - 1) if total else done, total)
             last = done
