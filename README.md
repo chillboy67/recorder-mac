@@ -148,14 +148,18 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\run_windows.ps1
 
 ### Linux
 
+全新系统先装系统包（Ubuntu/Debian；Fedora、Arch 见安装教程），再从
+[Releases](https://github.com/chillboy67/recorder-mac/releases/latest) 下载 `Recorder-Linux-*.tar.gz`：
+
 ```bash
+sudo apt install python3 python3-venv ffmpeg pipewire-bin pulseaudio-utils libxcb-cursor0
+tar xzf Recorder-Linux-*.tar.gz && cd lecture_intel
 bash install_linux.sh --download-cpu-model
 ./run_linux.sh
 ```
 
-Linux 安装脚本使用 CPU 版 torch（不下载约 3 GB 的 CUDA 库）；模型预下载失败不会中断安装，
-之后可重试 `download_models.py`。Debian/Ubuntu 需要 `python3-venv`；系统声音需要 `pipewire-bin`
-（pw-record）或 `pulseaudio-utils`（parec）。
+其他发行版、国内网络 / 离线下载模型、确认系统声音能录、常见报错：见
+[Linux 安装教程](lecture_intel/docs/INSTALL_LINUX.md)。
 
 Windows/Linux 当前发布形式是源码引导安装，不是签名的独立可执行安装包。已有音频文件上传转录
 在各平台共用同一离线流水线；Windows 系统声音采集的真机验收不由 CI 的编译和

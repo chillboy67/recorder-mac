@@ -159,14 +159,19 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\run_windows.ps1
 
 ### Linux
 
+On a fresh system, install the system packages first (Ubuntu/Debian shown; Fedora and Arch are in the install
+guide), then download `Recorder-Linux-*.tar.gz` from
+[Releases](https://github.com/chillboy67/recorder-mac/releases/latest):
+
 ```bash
+sudo apt install python3 python3-venv ffmpeg pipewire-bin pulseaudio-utils libxcb-cursor0
+tar xzf Recorder-Linux-*.tar.gz && cd lecture_intel
 bash install_linux.sh --download-cpu-model
 ./run_linux.sh
 ```
 
-The Linux installer takes the CPU build of torch (skipping ~3 GB of CUDA libraries), and a failed model
-pre-download no longer stops the install; retry `download_models.py` later. Debian/Ubuntu need `python3-venv`;
-system audio needs `pipewire-bin` (pw-record) or `pulseaudio-utils` (parec).
+Other distributions, offline or mirrored model downloads, checking system-audio capture, and common errors:
+see the [Linux install guide](lecture_intel/docs/INSTALL_LINUX.md) (Chinese).
 
 Windows/Linux releases are currently source-bootstrap packages, not signed standalone installers. Existing-audio
 upload transcription uses the same offline pipeline on every platform; CI compilation and `--capabilities`
