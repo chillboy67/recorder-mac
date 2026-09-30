@@ -13,11 +13,15 @@ See the top-level [../README.md](../README.md) for the product overview.
 - **macOS Apple Silicon:** MLX/Metal primary path, CPU fallback, double-click app installer.
 - **macOS Intel:** faster-whisper CPU path.
 - **Windows/Linux:** core, offscreen-GUI, and uploaded-audio transcription smoke tests pass on GitHub-hosted runners; source-bootstrap installers are provided.
+- **Linux desktop CI:** a job runs `install_linux.sh`, records system audio from a live PipeWire server with both
+  backends, transcribes synthesized speech with the real `small` model in all three modes, and launches the app on Xvfb.
 - **Intel/AMD GPU on Windows/Linux:** Vulkan and Intel OpenVINO integration is present, but real-device acceptance
   remains pending until the self-hosted hardware workflow passes on the corresponding machines.
 - **System audio capture:** platform helpers are wired for macOS (ScreenCaptureKit), Windows (WASAPI
   loopback), and Linux (PipeWire/PulseAudio monitor). Microphone and uploaded-file transcription are
-  cross-platform; Windows/Linux loopback still needs real-device playback and a non-silent WAV check.
+  cross-platform. Linux capture passes against a live PipeWire server with a virtual output (pause and the
+  ending included) but has not been accepted on a physical sound card; Windows loopback still needs
+  real-device playback and a non-silent WAV check.
 
 ## Run
 
@@ -35,7 +39,8 @@ python transcribe.py audio.m4a -m ielts
 bootstrap installers (`install_windows.ps1` / `install_linux.sh`); these create a
 local Python environment and are not self-contained binaries. Existing-audio upload
 transcription uses the same offline pipeline on every platform. System-audio loopback
-on Windows/Linux still requires real-device validation. On Windows/Linux, optional whisper.cpp
+on Windows still requires real-device validation; on Linux it is exercised in CI
+against a live PipeWire server (see above). On Windows/Linux, optional whisper.cpp
 Vulkan acceleration supports compatible Intel/AMD GPUs; Intel GPU acceleration
 is also available through the separately configured OpenVINO backend. Apple
 Silicon uses MLX/Metal when available; Intel Macs use the CPU path. See
