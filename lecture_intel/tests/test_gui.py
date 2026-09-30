@@ -597,6 +597,14 @@ def test_onboarding_strip_shows_once_until_dismissed(qapp, isolated_prefs):
         assert again._onboarding.isHidden()             # remembered
         home.show_onboarding()                          # Help → Show Getting Started
         assert not home._onboarding.isHidden()
+        home.set_file(str(ROOT / "tests" / "missing.wav"), "1 KB")
+        assert home._onboarding.isHidden()              # steps done; room for Start
+        home.clear_file()
+        assert not home._onboarding.isHidden()
+        again._dismiss_onboarding()
+        again.set_file(str(ROOT / "tests" / "missing.wav"), "1 KB")
+        again.clear_file()
+        assert again._onboarding.isHidden()             # dismissed stays dismissed
     finally:
         window.close()
         window.deleteLater()

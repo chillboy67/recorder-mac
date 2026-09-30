@@ -183,8 +183,8 @@ class HomeScreen(QWidget):
         from gui.widgets.onboarding import OnboardingStrip
         self._onboarding = OnboardingStrip(lambda: self._mic_combo.currentData())
         self._onboarding.dismissed.connect(self._dismiss_onboarding)
-        self._onboarding.setVisible(
-            not self._prefs.value("onboarding_done", False, type=bool))
+        self._onboarding_wanted = not self._prefs.value("onboarding_done", False, type=bool)
+        self._onboarding.setVisible(self._onboarding_wanted)
         root.addWidget(self._onboarding, alignment=Qt.AlignHCenter)
 
         # ---- input card (drop state) ----
@@ -566,11 +566,15 @@ class HomeScreen(QWidget):
         self._file_meta.setText(meta)
         self._drop_card.setVisible(False)
         self._file_card.setVisible(True)
+        # A chosen file means the steps are done; at the minimum window size
+        # the strip would also squeeze the Start button.
+        self._onboarding.setVisible(False)
 
     def clear_file(self) -> None:
         self._selected_path = None
         self._file_card.setVisible(False)
         self._drop_card.setVisible(True)
+        self._onboarding.setVisible(self._onboarding_wanted)
 
     @property
     def selected_path(self) -> str | None:
@@ -616,9 +620,11 @@ class HomeScreen(QWidget):
 
     def _dismiss_onboarding(self) -> None:
         self._prefs.setValue("onboarding_done", True)
+        self._onboarding_wanted = False
         self._onboarding.setVisible(False)
 
     def show_onboarding(self) -> None:
+        self._onboarding_wanted = True
         self._onboarding.setVisible(True)
 
     # ── live language switch ─────────────────────────
