@@ -325,6 +325,10 @@ class RecordingScreen(QWidget):
         self._pause_btn.setText(t("rec_pause"))
         self._elapsed_s = 0
         self._ring.set_time("00:00:00")
+        # What is actually written: the mic and the "both" mix are mono, the
+        # system-audio helpers record stereo; all of them at 48 kHz PCM.
+        self._ring.set_sub(t("rec_format_stereo" if self._source == "system"
+                             else "rec_format_mono"))
         self._hint.setText(t("rec_hint_idle"))
         self._timer.start()
         self._dot.start()
