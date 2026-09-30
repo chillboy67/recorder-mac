@@ -79,5 +79,5 @@ main_window.py   顶栏 + 步骤轨(step_rail) + 4 屏 stack
   visuals.py, step_rail.py, common.py   自绘控件 / 步骤轨 / 通用件
 ```
 
-模式选择、模型、导出格式、LLM 增强等偏好在 `home_screen.py`；
+模式选择、模型、导出格式等偏好在 `home_screen.py`；
 进度回调签名沿用 `update_progress(info dict from PipelineWorker)`。

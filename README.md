@@ -30,7 +30,6 @@ Recorder 的第一原则是：
 > **任何模式都不改写说话人的措辞选择。说错的原样保留。**
 
 需要提示的地方（读音存疑、语法问题、中式表达）只做**标注**，不动正文。
-可选的本地大模型增强也只在"听不清导致的转写错字"上工作，不做润色改写。
 
 边界同样要说清：Whisper 解码时本身就会丢弃部分语气词（上游
 faster-whisper#901、whisper.cpp#965 报告后均未修复）。50 条评测集实测
@@ -68,8 +67,6 @@ faster-whisper#901、whisper.cpp#965 报告后均未修复）。50 条评测集�
   已录下的音频不会丢。
 - **导出** txt / md / docx，带时间戳与说话人标签；json 导出附带忠实度标注；旧版 `.doc` 转换仅 macOS 可用。
 - **深浅色主题**，跟随系统。
-- **可选本地大模型（Ollama）**。装本机后可做校对 / 课堂总结 / 雅思点评；按语言选用模型。  
-  选型与安装见 [lecture_intel/docs/LLM_MODELS.md](lecture_intel/docs/LLM_MODELS.md)。
 
 ---
 
@@ -165,11 +162,10 @@ cd lecture_intel
 .venv/bin/python3 download_models.py     # 走 hf-mirror.com 镜像，落到本地模型目录
 ```
 
-模型分三档，界面里可选：**最准** `large-v3` / **均衡** `large-v3-turbo` /
-**最快** `small`。下好之后运行时完全不联网。
+界面里可选：**自动**、**准确** `large-v3`、**快速** `small`。下好之后运行时完全不联网。
 
-窗口收窄（紧凑档）时模型下拉只显示图标，对应含义：🎯 = 最准（一箭中靶心）、
-⚖️ = 均衡（天平）、⚡ = 最快（闪电）；展开下拉仍是完整名称，收起态悬停也有完整名称的提示。
+窗口收窄（紧凑档）时模型下拉只显示图标，对应含义：⚖️ = 自动（天平）、🎯 = 准确（一箭中靶心）、
+⚡ = 快速（闪电）。展开下拉仍是完整名称，悬停是一句短说明。
 
 ### 命令行（无界面）
 
@@ -177,7 +173,7 @@ cd lecture_intel
 .venv/bin/python3 transcribe.py 录音.m4a                    # 通用
 .venv/bin/python3 transcribe.py 课堂.mp3  -m classroom       # 课堂
 .venv/bin/python3 transcribe.py 雅思.webm -m ielts           # 雅思反馈
-.venv/bin/python3 transcribe.py a.wav --model large-v3-turbo -f txt -f docx
+.venv/bin/python3 transcribe.py a.wav --model small -f txt -f docx
 .venv/bin/python3 transcribe.py 讲座.m4a -l ja               # 指定语言（默认自动检测）
 ```
 
@@ -196,18 +192,6 @@ cd lecture_intel
 确认后按录音文件名建子文件夹存放结果。选择会被记住，之后不再弹；要改用菜单「文件 → 更改输出文件夹…」，
 随时查看用「显示输出文件夹」。命令行默认写到音频旁边的 `<文件名>_output`，可用 `-o` 指定。
 
-### 可选：本地大模型增强
-
-装了 [Ollama](https://ollama.com) 之后可在界面打开「AI 增强」：修正听不清导致的错字、生成课堂总结、补充雅思考官点评。关掉则走离线规则。模型跑在本机，权重不要提交进 Git。
-
-「不改写」的边界：主转写逐字忠实、永不改写；可选 AI 增强只**额外**生成一份校对版（补标点、修识别错别字），原文文件保持不变；说话人自己的语言错误只被标注，不被修改。
-
-默认路由：中文录音推荐 **Qwen**（`qwen3` / `qwen2.5:7b`），其余语言默认 **Mistral**；
-候选链只收可在 Ollama 下载的大语言模型（Ollama 库中目前不存在可下载且真能喂音频的多模态大语言模型，而本 App 本就不向 Ollama 送音频）。
-这只是默认值，具体装哪个、装多大由你自行选择。未安装 Ollama 或没装任何匹配模型时，增强自动跳过。安装步骤、内存档位与中国镜像见：
-
-**[lecture_intel/docs/LLM_MODELS.md](lecture_intel/docs/LLM_MODELS.md)**
-
 ---
 
 ## 架构
@@ -218,7 +202,6 @@ lecture_intel/
 ├── transcribe.py         CLI 入口
 ├── make_app.sh           构建并安装 /Applications/Recorder.app
 ├── download_models.py    Whisper 模型预下载（镜像直连）
-├── docs/LLM_MODELS.md    硬件档位 × Ollama（Qwen/Mistral）选型
 │
 ├── core/                 引擎
 │   ├── engine.py         唯一编排入口：run(input, output, mode)
@@ -230,7 +213,6 @@ lecture_intel/
 │   ├── diarize.py        免 token 说话人分离（声纹嵌入 + 聚类 + 时序平滑）
 │   ├── ielts.py          发音 / 语法 / 表达分析与报告
 │   ├── classroom.py      重点提取与总结
-│   ├── llm.py            可选的本地 LLM 增强（Ollama）
 │   ├── sysaudio.py       系统内录驱动
 │   ├── runner.py         子进程执行器（崩溃隔离）
 │   ├── paths.py          用户数据目录（唯一真源）
@@ -328,18 +310,14 @@ App 读取 `~/Documents`，安装脚本会把可运行副本与虚拟环境放�
 法德西等拉丁文教官要靠分块转写附带的逐块语种区分，**实测尚不可靠**——逐块语种
 仅在单个静音块恰好只含一种语言时才足够，真实会话的 60 秒块常混两种语言，
 且声学分离成功时角色判定（`_candidate_score`）尚未使用段语种（两点已建任务跟踪）。
-可选的本地大模型增强（校对 / 课堂总结）按转写自身的语言下 prompt，
-不再一律用中文指令；雅思教官点评报告保持中文说明（考生恒为英文作答，且界面为中文），
+雅思报告的说明保持中文（考生恒为英文作答，且界面为中文），
 LanguageTool 保持 en-US（诊断对象即考生英文）。中英混说的判定阈值与归属规则保持
 不变。规划中的可选项——教官话对照翻译——暂未实现，需要时再议。
-
-模型路由说明见 [LLM 指南](lecture_intel/docs/LLM_MODELS.md)。
 
 ## 隐私
 
 - 模型与全部处理都在本机，**没有任何网络请求**（除首次下载模型）。
 - 录音与转写结果写入本地数据目录（见 `core/paths.py`），仓库不收录任何音频。
-- 可选的 LLM 增强走本地 Ollama，同样不出网。
 
 ---
 
@@ -357,8 +335,7 @@ python -m pytest          # 仓库根目录运行，仅覆盖 lecture_intel/（�
 ## 目录说明
 
 - `lecture_intel/` — App 主体（唯一在维护的代码）。改界面前请先读
-  [`lecture_intel/docs/GUI_DESIGN.md`](lecture_intel/docs/GUI_DESIGN.md)（必须保持的设计约定）
-  与 [`lecture_intel/docs/LLM_MODELS.md`](lecture_intel/docs/LLM_MODELS.md)（本地大模型选型）。
+  [`lecture_intel/docs/GUI_DESIGN.md`](lecture_intel/docs/GUI_DESIGN.md)（必须保持的设计约定）。
 - `aura_gui/`、`lecture_intel/gui_old/`、`pipeline.py`、`config.yaml` 与 `modules/` 中的课程分类
   与结构化模块 — 被 `core/` 引擎取代的早期实现，已于 2026-09-20 删除
   （`modules/audio_loader.py` 与其中的数据类仍在使用，故 `modules/` 目录保留；

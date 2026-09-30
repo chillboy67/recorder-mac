@@ -16,7 +16,7 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from core import engine, i18n, llm as llm_mod  # noqa: E402
+from core import engine, i18n  # noqa: E402
 from core.runner import run_pipeline_subprocess  # noqa: E402
 
 
@@ -71,8 +71,7 @@ def test_settings_are_mapped_onto_the_engine_kwargs(tmp_path, stub_engine):
     settings = {
         "mode": "classroom", "model": "small", "engine": "whisper.cpp-vulkan",
         "language": "zh",
-        "formats": ["txt", "md"], "use_llm": True,
-        "llm_model": "mistral", "chinese_model": "qwen3", "ui_lang": "en",
+        "formats": ["txt", "md"], "ui_lang": "en",
     }
     run_pipeline_subprocess("take.m4a", str(tmp_path), settings, FakeQueue())
 
@@ -83,9 +82,6 @@ def test_settings_are_mapped_onto_the_engine_kwargs(tmp_path, stub_engine):
     assert stub_engine["engine"] == "whisper.cpp-vulkan"
     assert stub_engine["language"] == "zh"
     assert stub_engine["formats"] == ["txt", "md"]
-    assert stub_engine["use_llm"] is True
-    assert stub_engine["llm_model"] == "mistral"
-    assert stub_engine["chinese_model"] == "qwen3"
 
 
 def test_missing_settings_fall_back_to_documented_defaults(tmp_path, stub_engine):
@@ -94,18 +90,7 @@ def test_missing_settings_fall_back_to_documented_defaults(tmp_path, stub_engine
     assert stub_engine["mode_key"] == "general"
     assert stub_engine["model"] == "auto"
     assert stub_engine["engine"] == "auto"
-    assert stub_engine["use_llm"] is False
     assert stub_engine["language"] is None
-    assert stub_engine["llm_model"] == llm_mod.DEFAULT_MODEL
-    assert stub_engine["chinese_model"] == llm_mod.DEFAULT_CHINESE_MODEL
-
-
-def test_empty_llm_model_names_use_the_defaults(tmp_path, stub_engine):
-    """The GUI stores "" when the user never picked a model."""
-    run_pipeline_subprocess("in.wav", str(tmp_path),
-                            {"llm_model": "", "chinese_model": ""}, FakeQueue())
-    assert stub_engine["llm_model"] == llm_mod.DEFAULT_MODEL
-    assert stub_engine["chinese_model"] == llm_mod.DEFAULT_CHINESE_MODEL
 
 
 # ── the UI language is applied before the run ───────────────────────

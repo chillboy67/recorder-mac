@@ -4,7 +4,7 @@ HomeScreen — the AURA idle stage:
   · glass input card: drag & drop / 选择文件 / 实时录音 + 来源 + 麦克风
   · (after a file/recording is ready) selected-file card with 开始转写
   · three mode cards (通用 / 课堂 / 雅思)
-  · compact settings row: 识别模型 · 导出格式 chips · 本地大模型增强
+  · settings: 识别模型 · 识别语言 · 转写后端, then a row of export chips
 
 Signals:
     record_requested(str source_key, object mic_device)   # QAudioDevice | None
@@ -46,15 +46,13 @@ MODES = [GENERAL, CLASSROOM, IELTS]
 MODELS = [
     ("auto", "model_auto"),
     ("large-v3", "model_large"),
-    ("large-v3-turbo", "model_turbo"),
     ("small", "model_small"),
 ]
-# compact closed-state icons, colour emoji on purpose: direct hit =
-# accurate, scale = balanced, bolt = fast (emoji presentation selectors)
+# compact closed-state icons, colour emoji on purpose: scales = auto,
+# direct hit = accurate, bolt = fast (emoji presentation selectors)
 MODEL_ICONS = {
-    "model_auto": "A",
+    "model_auto": chr(9878) + chr(65039),    # ⚖️
     "model_large": chr(127919),              # 🎯
-    "model_turbo": chr(9878) + chr(65039),   # ⚖️
     "model_small": chr(9889) + chr(65039),   # ⚡️
 }
 SOURCES = [("mic", "source_mic"), ("system", "source_system"),
@@ -260,10 +258,7 @@ class HomeScreen(QWidget):
             cards_row.addWidget(card)
         root.addLayout(cards_row)
 
-        # ---- settings row ----
-        engine_row = QHBoxLayout()
-        engine_row.setSpacing(10)
-        engine_row.setAlignment(Qt.AlignHCenter)
+        # ---- settings: model, language, backend on the upper row ----
         srow = QHBoxLayout()
         self._srow = srow
         srow.setSpacing(18)
@@ -280,20 +275,6 @@ class HomeScreen(QWidget):
         srow.addWidget(self._lbl_model)
         srow.addWidget(self._model_combo)
 
-        self._lbl_engine = QLabel(t("home_engine"))
-        self._lbl_engine.setProperty("tone", "hint")
-        self._engine_combo = NoScrollComboBox()
-        for value, key in (("auto", "engine_auto"),
-                           ("mlx-whisper", "engine_mlx"),
-                           ("faster-whisper", "engine_cpu"),
-                           ("whisper.cpp-vulkan", "engine_vulkan"),
-                           ("whisper.cpp-openvino", "engine_openvino")):
-            self._engine_combo.addItem(t(key), userData=value)
-        self._engine_combo.setToolTip(t("home_engine_tooltip"))
-        self._engine_combo.currentIndexChanged.connect(self._save_prefs)
-        engine_row.addWidget(self._lbl_engine)
-        engine_row.addWidget(self._engine_combo)
-
         self._lbl_lang = QLabel(t("home_language"))
         self._lbl_lang.setProperty("tone", "hint")
         self._lang_combo = _PopupWordCombo()
@@ -305,11 +286,28 @@ class HomeScreen(QWidget):
         srow.addWidget(self._lbl_lang)
         srow.addWidget(self._lang_combo)
 
-        srow.addWidget(self._divider())
+        self._lbl_engine = QLabel(t("home_engine"))
+        self._lbl_engine.setProperty("tone", "hint")
+        self._engine_combo = NoScrollComboBox()
+        for value, key in (("auto", "engine_auto"),
+                           ("mlx-whisper", "engine_mlx"),
+                           ("faster-whisper", "engine_cpu"),
+                           ("whisper.cpp-vulkan", "engine_vulkan"),
+                           ("whisper.cpp-openvino", "engine_openvino")):
+            self._engine_combo.addItem(t(key), userData=value)
+        self._engine_combo.setToolTip(t("home_engine_tooltip"))
+        self._engine_combo.currentIndexChanged.connect(self._save_prefs)
+        srow.addWidget(self._lbl_engine)
+        srow.addWidget(self._engine_combo)
 
+        # export chips sit on the row the backend used to occupy
+        fmt_row = QHBoxLayout()
+        self._fmt_row = fmt_row
+        fmt_row.setSpacing(18)
+        fmt_row.setAlignment(Qt.AlignHCenter)
         self._lbl_fmt = QLabel(t("home_export"))
         self._lbl_fmt.setProperty("tone", "hint")
-        srow.addWidget(self._lbl_fmt)
+        fmt_row.addWidget(self._lbl_fmt)
         self._chips: dict[str, QPushButton] = {}
         for ext in ("txt", "md", "doc", "docx"):
             chip = ChipButton("." + ext)
@@ -318,18 +316,10 @@ class HomeScreen(QWidget):
             chip.setCursor(Qt.PointingHandCursor)
             chip.toggled.connect(self._on_chip)
             self._chips[ext] = chip
-            srow.addWidget(chip)
-
-        srow.addWidget(self._divider())
-
-        from PySide6.QtWidgets import QCheckBox
-        self._cb_llm = QCheckBox(t("home_llm"))
-        self._cb_llm.stateChanged.connect(self._save_prefs)
-        self._cb_llm.setToolTip(t("home_llm_tooltip"))
-        srow.addWidget(self._cb_llm)
+            fmt_row.addWidget(chip)
 
         root.addLayout(srow)
-        root.addLayout(engine_row)
+        root.addLayout(fmt_row)
 
     def resizeEvent(self, event) -> None:  # noqa: N802 (Qt naming)
         super().resizeEvent(event)
@@ -346,14 +336,8 @@ class HomeScreen(QWidget):
             self._set_model_texts("word" if opened else "icon")
 
     def _refresh_model_tooltip(self) -> None:
-        # the icon-only closed combo keeps its meaning on hover
         key = MODELS[self._model_combo.currentIndex()][1]
-        if self._compact:
-            self._model_combo.setToolTip(t(key + "_word"))
-        elif self._model_combo.currentData() == "auto":
-            self._model_combo.setToolTip(t("model_auto_help"))
-        else:
-            self._model_combo.setToolTip("")
+        self._model_combo.setToolTip(t(key + "_tip"))
 
     def _set_model_texts(self, variant: str) -> None:
         for i, (_value, key) in enumerate(MODELS):
@@ -407,14 +391,9 @@ class HomeScreen(QWidget):
                 "QAbstractItemView { padding: 3px; font-size: 12px; }"
                 "QAbstractItemView::item { padding: 3px 7px; border-radius: 6px; }"
                 if self._compact else "")
-        self._srow.setSpacing(12 if self._compact else 18)
-
-    @staticmethod
-    def _divider() -> QFrame:
-        d = QFrame()
-        d.setObjectName("hairline")
-        d.setFixedSize(1, 16)
-        return d
+        gap = 12 if self._compact else 18
+        self._srow.setSpacing(gap)
+        self._fmt_row.setSpacing(gap)
 
     # ── devices ─────────────────────────────────────────────
 
@@ -469,7 +448,6 @@ class HomeScreen(QWidget):
             "engine": self._engine_combo.currentData(),
             "language": self._lang_combo.currentData(),
             "formats": formats,
-            "use_llm": self._cb_llm.isChecked(),
         }
 
     def _save_prefs(self) -> None:
@@ -479,12 +457,11 @@ class HomeScreen(QWidget):
         self._prefs.setValue("engine", s["engine"])
         self._prefs.setValue("language", s["language"])
         self._prefs.setValue("formats", s["formats"])
-        self._prefs.setValue("use_llm", s["use_llm"])
 
     def _load_prefs(self) -> None:
         # Read everything before applying any of it: applying the mode card
         # fires _save_prefs with the not-yet-restored widget state, which used
-        # to overwrite the stored model/language/formats/LLM prefs with
+        # to overwrite the stored model/language/formats prefs with
         # defaults before they were read back — resetting them every launch.
         mode = self._prefs.value("mode", "general")
         model = self._prefs.value("model", "auto")
@@ -493,7 +470,6 @@ class HomeScreen(QWidget):
         fmts = self._prefs.value("formats", ["txt", "md", "docx"])
         if isinstance(fmts, str):
             fmts = [fmts]
-        use_llm = self._prefs.value("use_llm", False, type=bool)
 
         self._on_mode(mode if mode in self._mode_cards else "general")
 
@@ -516,8 +492,8 @@ class HomeScreen(QWidget):
             chip.setChecked(ext in fmts)
         self._on_chip(False)
 
-        self._cb_llm.setChecked(use_llm)
         self._on_source(self._current_source())
+        self._refresh_model_tooltip()
 
     # ── file selection ──────────────────────────────────────
 
@@ -610,8 +586,6 @@ class HomeScreen(QWidget):
         self._lbl_fmt.setText(t("home_export"))
         self._lang_combo.setToolTip(t("home_lang_tooltip"))
         self._lang_combo.setItemText(0, t("lang_auto"))
-        self._cb_llm.setText(t("home_llm"))
-        self._cb_llm.setToolTip(t("home_llm_tooltip"))
         for i, (_value, key) in enumerate(MODELS):
             self._model_combo.setItemText(i, t(key))
         for i in range(self._mic_combo.count()):

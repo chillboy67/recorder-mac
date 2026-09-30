@@ -71,8 +71,8 @@ def test_t_follows_active_language():
     zh = t("btn_output_folder")
     set_language(EN)
     en = t("btn_output_folder")
-    assert zh == "输出文件夹"
-    assert en == "Output Folder"
+    assert zh == "保存文件夹"
+    assert en == "Save Folder"
     assert zh != en
 
 
