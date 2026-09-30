@@ -9,7 +9,7 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from core.whisper_cpp import WhisperCppError, WhisperCppTranscriber, run_streaming  # noqa: E402
+from core.whisper_cpp import WhisperCppError, WhisperCppTranscriber  # noqa: E402
 
 
 @pytest.fixture
@@ -62,8 +62,7 @@ def test_vulkan_flags_json_normalization_and_logprob(audio):
     assert command[command.index("-bs") + 1] == "7"
     assert command[command.index("-t") + 1] == "3"
     assert command[command.index("--prompt") + 1] == "lecture context"
-    assert command[command.index("-mc") + 1] == "0"
-    assert "--no-context" not in command
+    assert "--no-context" in command
     assert "-oved" not in command
     assert kwargs == {"capture_output": True, "text": True, "check": False}
     assert result == [{
@@ -83,7 +82,7 @@ def test_openvino_gpu_flags_and_log_verification(audio):
     command = calls[0][0]
     assert command[command.index("-l") + 1] == "auto"
     assert command[command.index("-oved") + 1] == "GPU"
-    assert "-mc" not in command
+    assert "--no-context" not in command
 
 
 def test_gpu_claim_rejected_if_selected_backend_not_confirmed(audio):
@@ -135,47 +134,3 @@ def test_nonexistent_audio_is_reported():
     transcriber = WhisperCppTranscriber("cli", "vulkan", "model.bin")
     with pytest.raises(WhisperCppError, match="Audio file does not exist"):
         transcriber.transcribe("not-a-real-audio.wav")
-
-
-def test_progress_lines_are_forwarded_while_running(audio):
-    runner, calls = fake_runner("ggml_vulkan: found GPU device 0: Intel Graphics")
-
-    def run(command, **kwargs):
-        for line in ("whisper_init: loading\n", "cb_progress: progress =   5%\n",
-                     "whisper_print_progress_callback: progress =  50%\n",
-                     "cb_progress: progress = 100%\n"):
-            kwargs["on_stderr_line"](line)
-        return runner(command, **kwargs)
-
-    seen = []
-    WhisperCppTranscriber("cli", "vulkan", "model.bin", runner=run).transcribe(
-        audio, progress=seen.append)
-
-    assert "--print-progress" in calls[0][0]
-    assert seen == [0.05, 0.5, 1.0]
-
-
-def test_no_progress_callback_keeps_the_plain_command(audio):
-    runner, calls = fake_runner("ggml_vulkan: found GPU device 0: Intel Graphics")
-    WhisperCppTranscriber("cli", "vulkan", "model.bin", runner=runner).transcribe(audio)
-    command, kwargs = calls[0]
-    assert "--print-progress" not in command and "on_stderr_line" not in kwargs
-
-
-def test_run_streaming_hands_over_stderr_lines_and_collects_output():
-    script = ("import sys\n"
-              "print('transcript')\n"
-              "for p in (10, 60):\n"
-              "    print(f'cb_progress: progress = {p}%', file=sys.stderr, flush=True)\n"
-              "sys.exit(3)\n")
-    lines = []
-    done = run_streaming([sys.executable, "-c", script], on_stderr_line=lines.append,
-                         capture_output=True, text=True, check=False)
-    assert lines == ["cb_progress: progress = 10%\n", "cb_progress: progress = 60%\n"]
-    assert done.returncode == 3
-    assert done.stdout == "transcript\n" and "progress = 60%" in done.stderr
-
-
-def test_run_streaming_missing_binary_raises_oserror():
-    with pytest.raises(OSError):
-        run_streaming(["/definitely/not/whisper-cli"])

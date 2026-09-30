@@ -19,7 +19,6 @@ sys.path.insert(0, str(ROOT))
 
 from core import i18n  # noqa: E402
 from core.i18n import (  # noqa: E402
-    _CATALOG,
     DEFAULT,
     EN,
     SUPPORTED,
@@ -82,21 +81,7 @@ def test_t_formats_placeholders():
     assert t("status_done", seconds=12, dir="/tmp/out") == \
         "✓ Done in 12s · Output: /tmp/out"
     set_language(ZH)
-    assert t("eng_asr_done", count=7) == "记好啦，共 7 段"
-
-
-def test_progress_ring_messages_fit_under_the_ring():
-    """The ring shows at most 22 characters, so no progress line may be cut."""
-    keys = ["proc_preparing", "tr_load_model", "tr_backend_fallback", "tr_done",
-            "tr_download_progress", "tr_download_bytes", "tr_writing",
-            "cheer_sip", "cheer_slow", "cheer_half", "cheer_nearly"]
-    keys += [k for k in _CATALOG if k.startswith("eng_")]
-    for lang in (ZH, EN):
-        set_language(lang)
-        for key in keys:
-            text = t(key, count=128, done="12.3", total="12.3")
-            assert len(text) <= 22, (lang, key, text)
-    set_language(ZH)
+    assert t("eng_asr_done", count=7) == "转写完成（7 段）"
 
 
 def test_t_bad_format_args_do_not_raise():

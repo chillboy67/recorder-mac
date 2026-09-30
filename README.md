@@ -359,15 +359,6 @@ LanguageTool 保持 en-US（诊断对象即考生英文）。中英混说的判�
 python -m pytest          # 仓库根目录运行，覆盖 lecture_intel/tests
 ```
 
-在全新环境里只想跑测试、不想装完整依赖（torch、faster-whisper 等）时，装这几个轻量包就够了：
-
-```bash
-python -m pip install pytest "numpy>=1.24.0" "soundfile>=0.12.1" "python-docx>=1.1.0"
-```
-
-界面测试（`RECORDER_GUI_TESTS=1`，另需 PySide6）和真实模型测试（`RECORDER_REAL_MODEL_TESTS=1`）默认跳过；
-需要 ffmpeg 的少数测试在没装 ffmpeg 时也会跳过。
-
 改完代码后重新运行 `lecture_intel/make_app.sh` 同步到已安装的 App。
 
 完整需求与取舍记录见 [REQUIREMENTS.md](REQUIREMENTS.md)。

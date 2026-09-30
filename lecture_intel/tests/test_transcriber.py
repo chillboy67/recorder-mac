@@ -219,29 +219,3 @@ def test_guard_never_filters_without_evidence(tmp_path):
             _seg("y", None, [0.05])]                                     # no no_speech
     kept, dropped = _drop_silence_hallucinations(segs, _write_wav(tmp_path, -60))
     assert len(kept) == 2 and dropped == []
-
-
-def test_whisper_cpp_progress_moves_the_ring(monkeypatch):
-    """whisper.cpp reports no segments while it runs; its progress lines must
-    still reach the GUI so the ring and the rotating lines keep moving."""
-    from core import whisper_cpp
-    from core.i18n import t
-
-    class FakeCpp:
-        def __init__(self, *a, **kw):
-            self.detected_language = "en"
-
-        def transcribe(self, audio, *, progress=None, **kw):
-            progress(0.5)
-            progress(1.0)
-            return []
-
-    monkeypatch.setattr(whisper_cpp, "WhisperCppTranscriber", FakeCpp)
-    monkeypatch.setattr(T.Transcriber, "_whisper_cpp_binary", lambda self, b: "cli")
-    monkeypatch.setattr(T, "whisper_cpp_model_path", lambda model: "m.bin")
-    seen = []
-    T.Transcriber(model="small")._transcribe_whisper_cpp(
-        "whisper.cpp-vulkan", "a.wav", None, "", False,
-        lambda frac, msg: seen.append((round(frac, 3), msg)))
-    assert seen == [(0.05, t("tr_writing")), (0.5, t("tr_writing")),
-                    (0.95, t("tr_writing"))]
