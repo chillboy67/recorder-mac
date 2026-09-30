@@ -241,7 +241,6 @@ lecture_intel/
 │
 ├── gui/                  PySide6 UI (home / record / process / results + theming)
 ├── native/               SystemAudioRecorder.swift (ScreenCaptureKit-based system audio capture)
-├── dictionaries/         Classroom term dictionary (legacy pipeline archive; not wired into the core engine)
 └── tests/                Unit tests that run without needing the model (python -m pytest)
 ```
 
@@ -288,8 +287,9 @@ always answers in English, so whoever else is speaking is the coach) — this is
 separation actually reliable, and Chinese, Japanese, Korean, Russian and Thai coaches are verified on real audio.
 French/German/Spanish coaches, whose letters are indistinguishable from English, are **not reliable yet**: they
 depend on the per-chunk language the chunked ASR path attaches, which only helps when a silence-bounded chunk
-happens to hold one language (real 60s coaching chunks mix two), and when the acoustic split succeeds the
-role decision (`_candidate_score`) does not consult segment language at all. Both tracked as follow-ups.
+happens to hold one language (real 60s coaching chunks mix two). When the acoustic split succeeds, the role
+decision (`_candidate_score`) does weigh segment language, but that language is inherited from the chunk too, so it
+has the same limit. Per-segment language detection is tracked as a follow-up.
 
 **System audio capture writes its own WAV file.**
 ScreenCaptureKit hands back non-interleaved Float32 audio that neither AVAudioFile nor its converters will accept,
@@ -310,7 +310,7 @@ The project ran from May to July 2026, roughly in five phases:
 
 | Time | Phase |
 |------|-------|
-| 2026-05-07 – 05-17 | IELTS speaking-scorer prototype: grammar / naturalness / pronunciation rules + a FastAPI backend (`backend/`) |
+| 2026-05-07 – 05-17 | IELTS speaking-scorer prototype: grammar / naturalness / pronunciation rules + a FastAPI backend (`backend/`, since deleted; see the v2.1.0 tag) |
 | 2026-05-30 – 06-01 | Pivoted to classroom recordings, built an 11-step pipeline (`modules/` + `pipeline.py`) |
 | 2026-06-13 – 06-14 | Rebuilt from scratch: the mode-driven `core/` engine, full-file transcription replacing self-sliced VAD segments, subprocess crash isolation |
 | 2026-06-18 – 06-20 | System audio capture, light/dark theming, unified user data directory |
@@ -336,9 +336,9 @@ and the `language` setting reaches the engine, the CLI (`transcribe.py -l ja`) a
 coach/student split keys on "not the candidate's language": Japanese, Korean, Russian and Thai coaches are
 attributed by script, each verified on a real recording in that language. French/German/Spanish coaches need the
 per-chunk language carried on each segment and are **not reliable yet** — that signal only suffices when a
-silence-bounded chunk holds a single language (real 60s coaching chunks mix two), and the acoustic path's role
-decision does not consult segment language at all; both are tracked as follow-ups. The IELTS report
-stays in Chinese (candidates always answer in English, and the UI is Chinese) and LanguageTool stays
+silence-bounded chunk holds a single language (real 60s coaching chunks mix two); the acoustic path's role
+decision weighs segment language, but that language also comes from the chunk. Per-segment language detection is
+tracked as a follow-up. The IELTS report's notes are currently Chinese only (candidates always answer in English) and LanguageTool stays
 on `en-US` (it diagnoses the candidate's English). The zh/en thresholds and attribution rules are
 unchanged. The one optional item from the plan — coach-side translation — is not implemented;
 revisit if wanted.
@@ -369,9 +369,11 @@ Full requirements and design trade-offs are documented in [REQUIREMENTS.md](REQU
   2026-09-20 (`modules/audio_loader.py` and its dataclasses are still in use, so `modules/` remains).
   `aura_gui/` was the design draft for the UI redesign — already merged into `lecture_intel/gui/`; its
   design intent now lives in `lecture_intel/docs/GUI_DESIGN.md`.
-- `backend/` + `frontend/` — the original FastAPI-based IELTS scoring prototype; its analysis approach
-  (pronunciation confidence, grammar rules, report templates) has been folded into `lecture_intel/core/ielts.py`.
-  Kept for archival purposes only, safe to ignore.
+- `backend/` + `frontend/` (the original FastAPI-based IELTS scoring prototype) and `lecture_intel/dictionaries/`
+  (the legacy pipeline's classroom term dictionaries, never wired into the `core/` engine) — deleted. The
+  prototype's analysis approach (pronunciation confidence, grammar rules, report templates) lives on in
+  `lecture_intel/core/ielts.py`; the old code is still browsable at the
+  [v2.1.0 tag](https://github.com/chillboy67/recorder-mac/tree/v2.1.0).
 
 ## License
 

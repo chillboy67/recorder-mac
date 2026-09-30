@@ -14,7 +14,6 @@ lecture_intel/.venv/
 lecture_intel/models/
 lecture_intel/output/
 lecture_intel/dist/
-backend/.venv/
 .venv/
 
 # ── 评测产物（生成数据，不入库）──────────────────────────────
@@ -25,15 +24,12 @@ lecture_intel/eval/e2e_out/
 
 # ── 编译产物 ─────────────────────────────────────────────────
 lecture_intel/native/system_audio_recorder
-frontend/node_modules/
-frontend/dist/
 
 # ── 缓存 ─────────────────────────────────────────────────────
 __pycache__/
 **/__pycache__/
 *.pyc
 .pytest_cache/
-backend/.pytest_cache/
 
 # ── 系统 / 编辑器 ────────────────────────────────────────────
 .DS_Store

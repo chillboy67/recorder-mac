@@ -1,7 +1,7 @@
 """
 Lecture Intelligence System - shared data types.
 
-The dataclasses here (AudioFile / ASRSegment / ASRWord / ASRResult / …) are the
+The dataclasses here (AudioFile / ASRSegment / ASRWord / ASRResult) are the
 common vocabulary passed between `core/` and the GUI. `modules/audio_loader.py`
 is the only implementation remaining alongside them; the other modules that used
 to live in this package belonged to the retired 11-step pipeline and have been
@@ -18,10 +18,6 @@ from pathlib import Path
 from typing import Optional
 
 
-# ============================================================
-# P0 Types (existing, updated with processing_time_ms)
-# ============================================================
-
 @dataclass
 class AudioFile:
     """Output of AudioLoader; a converted, normalized audio file."""
@@ -31,14 +27,6 @@ class AudioFile:
     channels: int
     original_path: Optional[Path] = None
     processing_time_ms: float = 0.0
-
-
-@dataclass
-class Segment:
-    """Output of VADProcessor; a single speech segment with time boundaries."""
-    start: float
-    end: float
-    audio_path: Path
 
 
 @dataclass
@@ -77,126 +65,3 @@ class ASRResult:
     # markers, etc. Every entry keeps the original text so annotations never
     # destroy what the speaker (or the model) actually produced.
     annotations: list[dict] = field(default_factory=list)
-
-
-# ============================================================
-# P1-A: Audio Enhancer Types
-# ============================================================
-
-@dataclass
-class EnhancedAudioResult:
-    """Output of AudioEnhancer."""
-    output_path: str
-    skipped: bool
-    snr_db_before: float
-    snr_db_after: Optional[float]
-    processing_time_ms: float = 0.0
-
-
-# ============================================================
-# P1-B: Course Classifier Types
-# ============================================================
-
-@dataclass
-class ClassificationResult:
-    """Output of CourseClassifier."""
-    course: str               # e.g. "deep_learning", "general_lecture"
-    confidence: float         # 0.0 ~ 1.0
-    top3: list[tuple]         # [(course, score), ...]
-    domain_hints: list[str]   # detected keywords
-    method: str               # "keyword" | "embedding"
-    processing_time_ms: float = 0.0
-
-
-# ============================================================
-# P1-C: Terminology Corrector Types
-# ============================================================
-
-@dataclass
-class CorrectionRecord:
-    """A single correction made by TerminologyCorrector."""
-    original: str
-    corrected: str
-    level: int                # 1-4, matching correction level
-    position: int             # character position in text
-
-
-@dataclass
-class CorrectionResult:
-    """Output of TerminologyCorrector."""
-    corrected_text: str
-    corrections_made: list[CorrectionRecord]
-    correction_count: int
-    dictionaries_used: list[str]
-    processing_time_ms: float = 0.0
-
-
-# ============================================================
-# P1-D: Transcript Merger Types
-# ============================================================
-
-@dataclass
-class MergedSegment:
-    """A merged transcript segment."""
-    id: int
-    start: float
-    end: float
-    text: str
-    speaker_id: Optional[str]
-    source_segment_ids: list[int] = field(default_factory=list)
-
-
-@dataclass
-class MergeResult:
-    """Output of TranscriptMerger."""
-    segments: list[MergedSegment]
-    full_text: str
-    merge_count: int
-    processing_time_ms: float = 0.0
-
-
-# ============================================================
-# P2-A: Speaker Diarizer Types
-# ============================================================
-
-@dataclass
-class SpeakerSegment:
-    """A diarized speaker segment."""
-    start: float
-    end: float
-    speaker_id: str         # raw: SPEAKER_00
-    speaker_label: str      # final: Person 1
-
-
-@dataclass
-class DiarizationResult:
-    """Output of SpeakerDiarizer."""
-    segments: list[SpeakerSegment]
-    speaker_count: int
-    speaker_map: dict[str, str]    # {"SPEAKER_00": "Person 1", ...}
-    processing_time_ms: float = 0.0
-
-
-# ============================================================
-# P2-B: Lecture Structurer Types
-# ============================================================
-
-@dataclass
-class KeyPoint:
-    """A highlighted key point in the lecture."""
-    text: str
-    point_type: str         # "emphasis" | "definition" | "repetition" | "contrast"
-    confidence: float
-    start_char: int
-    end_char: int
-
-
-@dataclass
-class StructuredResult:
-    """Output of LectureStructurer."""
-    markdown: str
-    key_points: list[KeyPoint]
-    definitions_count: int
-    emphasis_count: int
-    section_breaks: int
-    processing_time_ms: float = 0.0
