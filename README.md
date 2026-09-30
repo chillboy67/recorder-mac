@@ -50,7 +50,8 @@ faster-whisper#901、whisper.cpp#965 报告后均未修复）。50 条评测集�
   `faster-whisper`（CPU）。纯 CPU 推理依赖已按平台整理，CPU 设备的自动档使用
   `small` 模型，且支持预下载后离线运行。
 - **跨平台与加速后端**：Windows/Linux 的核心、GUI 离屏测试和上传音频转录 smoke test 已加入 GitHub
-  托管 runner。App/CLI
+  托管 runner；Linux 另有一个按用户实际用法跑的作业：执行 `install_linux.sh`、在真实 PipeWire 上录系统声音、
+  用真实 `small` 模型转写合成语音（三种模式）、在 X 显示上启动 App。App/CLI
   已接入可选 whisper.cpp Vulkan（兼容的 Intel/AMD GPU）和 Intel OpenVINO GPU；未配置或未能确认 GPU
   执行时回退 faster-whisper CPU。真实 GPU 验收通过自托管硬件 workflow 执行，在对应 Intel/AMD 作业通过前
   不宣称 GPU 已实机验证。Apple Silicon 使用 MLX/Metal；Intel Mac 使用 CPU。见
@@ -59,8 +60,10 @@ faster-whisper#901、whisper.cpp#965 报告后均未修复）。50 条评测集�
   不会被"翻译"成单一语言（实现见下方"工程要点"）。
 - **录音来源**：各平台支持麦克风和已有音频文件；系统声音链路已接入 macOS
   （ScreenCaptureKit）、Windows（WASAPI loopback）和 Linux（PipeWire/PulseAudio monitor）。
-  macOS 的电脑内部声音及麦克风混录可直接使用；Windows/Linux 的系统声音仍需在对应真机上
-  播放声音并确认生成的 WAV 非静音后，才能视为验收通过。
+  macOS 的电脑内部声音及麦克风混录可直接使用。Linux 的系统声音已在 CI 的真实 PipeWire 1.0 声音服务器
+  （虚拟输出设备）上用 pw-record 与 parec 两种后端验证：录到声音、暂停期间的声音不入文件、结尾不丢；
+  物理声卡的真机验收尚未进行。Windows 的系统声音仍需在真机上播放声音并确认生成的 WAV 非静音后，
+  才能视为验收通过。
 - **逐词置信度**始终开启——这是雅思模式识别"疑似发音问题"的依据。
 - **长录音稳**。2 小时录音在 16GB 机器上按静音分块处理，内存有界、进度真实。
 - **崩溃安全**。转写在独立子进程中运行，即使模型进程被系统杀掉，界面不会崩、
@@ -150,9 +153,13 @@ bash install_linux.sh --download-cpu-model
 ./run_linux.sh
 ```
 
+Linux 安装脚本使用 CPU 版 torch（不下载约 3 GB 的 CUDA 库）；模型预下载失败不会中断安装，
+之后可重试 `download_models.py`。Debian/Ubuntu 需要 `python3-venv`；系统声音需要 `pipewire-bin`
+（pw-record）或 `pulseaudio-utils`（parec）。
+
 Windows/Linux 当前发布形式是源码引导安装，不是签名的独立可执行安装包。已有音频文件上传转录
-在各平台共用同一离线流水线；系统声音采集的 Windows/Linux 真机验收不由 CI 的编译和
-`--capabilities` 检查替代；系统声音采集仍需对应设备的真机播放和非静音 WAV 验收。
+在各平台共用同一离线流水线；Windows 系统声音采集的真机验收不由 CI 的编译和
+`--capabilities` 检查替代，仍需真机播放和非静音 WAV 验收。
 Vulkan/OpenVINO 的真实 GPU 状态见[验收指南](lecture_intel/docs/GPU_BACKENDS.md)。
 
 ### 预下载模型（推荐，尤其是国内网络）

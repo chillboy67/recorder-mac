@@ -52,15 +52,19 @@ the annotation. General and IELTS modes only annotate suspected artifacts and ne
 
 - **Fully offline.** The Whisper model runs on-device; once downloaded, no network is needed. No accounts, no uploads.
 - **Platform-aware acceleration.** Apple Silicon defaults to `mlx-whisper` (Metal). Windows/Linux core,
-  offscreen-GUI, and uploaded-audio transcription smoke tests run on GitHub-hosted runners; optional whisper.cpp Vulkan and Intel OpenVINO backends
+  offscreen-GUI, and uploaded-audio transcription smoke tests run on GitHub-hosted runners, plus a Linux job that
+  runs `install_linux.sh`, records system audio from a live PipeWire server, transcribes synthesized speech with
+  the real `small` model in all three modes, and launches the app on an X display; optional whisper.cpp Vulkan and Intel OpenVINO backends
   are integrated, with `faster-whisper` CPU fallback. Real Intel/AMD GPU acceptance still requires the configured
   self-hosted hardware workflow and is not claimed until those jobs pass.
 - **Chinese/English code-switching without bias.** Chinese segments stay Chinese, English segments stay English —
   never silently "translated" into a single language (see "Engineering notes" below for how).
 - **Recording sources**: microphone and existing audio files on every platform; system-audio capture is wired
   for macOS (ScreenCaptureKit), Windows (WASAPI loopback), and Linux (PipeWire/PulseAudio monitor).
-  macOS system audio and mixed mic + system recording are usable; Windows/Linux system-audio capture still
-  requires real-device playback and a non-silent WAV check before it is considered accepted.
+  macOS system audio and mixed mic + system recording are usable. Linux system audio is checked in CI against a
+  live PipeWire 1.0 server with a virtual output, with both pw-record and parec: audio is captured, audio played
+  while paused stays out, and the ending is kept; it has not yet been accepted on a physical sound card. Windows
+  system-audio capture still requires real-device playback and a non-silent WAV check before it is considered accepted.
 - **Per-word confidence scores** are always on — this is what powers the IELTS mode's "possible pronunciation issue" flags.
 - **Stable on long recordings.** A 2-hour recording is processed in silence-bounded chunks on a 16GB machine,
   with bounded memory and genuine progress reporting.
@@ -160,9 +164,13 @@ bash install_linux.sh --download-cpu-model
 ./run_linux.sh
 ```
 
+The Linux installer takes the CPU build of torch (skipping ~3 GB of CUDA libraries), and a failed model
+pre-download no longer stops the install; retry `download_models.py` later. Debian/Ubuntu need `python3-venv`;
+system audio needs `pipewire-bin` (pw-record) or `pulseaudio-utils` (parec).
+
 Windows/Linux releases are currently source-bootstrap packages, not signed standalone installers. Existing-audio
 upload transcription uses the same offline pipeline on every platform; CI compilation and `--capabilities`
-checks do not replace real-device validation of Windows/Linux system-audio capture. See the
+checks do not replace real-device validation of Windows system-audio capture. See the
 [GPU acceptance guide](lecture_intel/docs/GPU_BACKENDS.md) for the real-hardware status of Vulkan and OpenVINO.
 
 ### Pre-download models (recommended)
