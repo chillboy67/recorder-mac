@@ -27,6 +27,7 @@ from typing import Optional
 
 from modules import ASRResult, ASRSegment
 from core.diarize import CANDIDATE, EXAMINER, OTHER
+from core.i18n import t
 
 logger = logging.getLogger(__name__)
 
@@ -166,10 +167,10 @@ def _pronunciation_issues(segs: list[ASRSegment]) -> list[PronIssue]:
 
 def _pron_note(conf: float) -> str:
     if conf < 0.25:
-        return "识别置信度很低，发音可能很不清晰或读错，建议重点核对。"
+        return t("rep_pron_note_very_low")
     if conf < 0.35:
-        return "识别置信度低，发音可能不够清楚或重音/元音有偏差。"
-    return "识别置信度偏低，建议确认发音是否标准。"
+        return t("rep_pron_note_low")
+    return t("rep_pron_note_somewhat_low")
 
 
 def _count_fillers(text: str) -> int:
@@ -223,7 +224,7 @@ def _languagetool(text: str, url: str) -> Optional[list[GrammarIssue]]:
     for m in payload.get("matches", []):
         reps = m.get("replacements") or []
         out.append(GrammarIssue(
-            message=m.get("message", "可能的语法问题"),
+            message=m.get("message", t("rep_grammar_default")),
             context=m.get("context", {}).get("text", ""),
             replacement=reps[0]["value"] if reps else None,
             category=m.get("rule", {}).get("category", {}).get("id", "grammar").lower(),
@@ -231,30 +232,31 @@ def _languagetool(text: str, url: str) -> Optional[list[GrammarIssue]]:
     return out
 
 
+# (pattern, i18n key of the message, suggested replacement, category)
 _OFFLINE_RULES: list[tuple[str, str, Optional[str], str]] = [
-    (r"\bI has\b", "主谓一致：I 用 have。", "I have", "subject-verb"),
-    (r"\b(he|she|it) have\b", "第三人称单数用 has。", None, "subject-verb"),
-    (r"\b(people|they|we) is\b", "复数主语用 are。", None, "subject-verb"),
-    (r"\ban useful\b", "useful 以辅音音开头，用 a。", "a useful", "article"),
-    (r"\ba hour\b", "hour 以元音音开头，用 an。", "an hour", "article"),
-    (r"\bmore better\b", "避免双重比较级。", "better", "comparative"),
-    (r"\bdiscuss about\b", "discuss 后不加 about。", "discuss", "collocation"),
-    (r"\binformations\b", "information 不可数。", "information", "noun-form"),
-    (r"\badvices\b", "advice 不可数。", "advice", "noun-form"),
-    (r"\bknowledges\b", "knowledge 不可数。", "knowledge", "noun-form"),
-    (r"\bvery much like\b", "更自然：really like。", "really like", "phrasing"),
-    (r"\baccording to me\b", "中式表达：用 in my opinion / personally。", "in my opinion", "phrasing"),
-    (r"\bcan able to\b", "can 与 be able to 不能连用。", "can / am able to", "modal"),
-    (r"\bnowadays\b.*\bnowadays\b", "nowadays 重复使用，注意多样性。", None, "repetition"),
+    (r"\bI has\b", "rep_rule_i_has", "I have", "subject-verb"),
+    (r"\b(he|she|it) have\b", "rep_rule_third_person", None, "subject-verb"),
+    (r"\b(people|they|we) is\b", "rep_rule_plural_are", None, "subject-verb"),
+    (r"\ban useful\b", "rep_rule_a_useful", "a useful", "article"),
+    (r"\ba hour\b", "rep_rule_an_hour", "an hour", "article"),
+    (r"\bmore better\b", "rep_rule_double_comparative", "better", "comparative"),
+    (r"\bdiscuss about\b", "rep_rule_discuss_about", "discuss", "collocation"),
+    (r"\binformations\b", "rep_rule_information", "information", "noun-form"),
+    (r"\badvices\b", "rep_rule_advice", "advice", "noun-form"),
+    (r"\bknowledges\b", "rep_rule_knowledge", "knowledge", "noun-form"),
+    (r"\bvery much like\b", "rep_rule_really_like", "really like", "phrasing"),
+    (r"\baccording to me\b", "rep_rule_according_to_me", "in my opinion", "phrasing"),
+    (r"\bcan able to\b", "rep_rule_can_able", "can / am able to", "modal"),
+    (r"\bnowadays\b.*\bnowadays\b", "rep_rule_nowadays", None, "repetition"),
 ]
 
 
 def _offline_grammar(text: str) -> list[GrammarIssue]:
     out: list[GrammarIssue] = []
-    for pattern, msg, rep, cat in _OFFLINE_RULES:
+    for pattern, key, rep, cat in _OFFLINE_RULES:
         for m in re.finditer(pattern, text, flags=re.IGNORECASE):
             ctx = text[max(0, m.start() - 30): m.end() + 30]
-            out.append(GrammarIssue(message=msg, context=ctx.strip(),
+            out.append(GrammarIssue(message=t(key), context=ctx.strip(),
                                     replacement=rep, category=cat))
     return out
 
@@ -270,7 +272,7 @@ _NATURAL = {
     "many many": "a great many",
     "make me happy": "lift my mood / cheer me up",
     "big problem": "serious issue",
-    "i think i think": "(重复) I'd say / In my view",
+    "i think i think": "I'd say / In my view",
     "how to say": "how can I put it",
     "more and more": "increasingly",
     "in my country": "where I'm from / back home",
@@ -283,7 +285,7 @@ def _naturalness(text: str) -> list[str]:
     out = []
     for plain, better in _NATURAL.items():
         if plain in low:
-            out.append(f"「{plain}」可换成更地道的表达，如「{better}」。")
+            out.append(t("rep_natural", plain=plain, better=better))
     return out
 
 
@@ -309,60 +311,62 @@ def _examiner_corrections(exam_segs: list[ASRSegment]) -> list[str]:
 # ----------------------------------------------------------------------
 
 def render_markdown(r: IELTSReport) -> str:
+    """The report in the active UI language; the transcripts stay verbatim."""
     L: list[str] = []
-    L.append("# 雅思口语反馈")
+    L.append(f"# {t('rep_title')}")
     L.append("")
-    L.append("## 概览")
-    L.append(f"- 考生发言时长：约 {r.candidate_seconds:.0f}s")
-    L.append(f"- 教官发言时长：约 {r.examiner_seconds:.0f}s")
+    L.append(f"## {t('rep_overview')}")
+    L.append(t("rep_candidate_time", seconds=f"{r.candidate_seconds:.0f}"))
+    L.append(t("rep_examiner_time", seconds=f"{r.examiner_seconds:.0f}"))
     if r.other_seconds > 0:
-        L.append(f"- 背景人声（已排除）：约 {r.other_seconds:.0f}s")
-    L.append(f"- 语速：约 {r.words_per_minute:.0f} WPM")
-    L.append(f"- 填充词（um/uh/like 等）：{r.filler_count} 处")
-    L.append(f"- 明显停顿（>{LONG_PAUSE_SEC:.1f}s）：{r.long_pause_count} 处")
+        L.append(t("rep_other_time", seconds=f"{r.other_seconds:.0f}"))
+    L.append(t("rep_wpm", wpm=f"{r.words_per_minute:.0f}"))
+    L.append(t("rep_fillers", count=r.filler_count))
+    L.append(t("rep_pauses", sec=f"{LONG_PAUSE_SEC:.1f}", count=r.long_pause_count))
     L.append("")
 
-    L.append("## 疑似发音问题（基于识别置信度，原文未改动）")
+    L.append(f"## {t('rep_pron_heading')}")
     if r.pron_issues:
-        L.append("> 以下单词识别置信度偏低，往往对应发音不清/读错/口音偏差，建议逐一核对录音。")
+        L.append(f"> {t('rep_pron_intro')}")
         L.append("")
         for p in r.pron_issues:
-            L.append(f"- **{p.word}**（{p.start:.1f}s，置信度 {p.confidence:.0%}）：{p.note}")
+            L.append(t("rep_pron_item", word=p.word, start=f"{p.start:.1f}",
+                       confidence=f"{p.confidence:.0%}", note=p.note))
     else:
-        L.append("- 未发现明显低置信度单词，发音整体较清晰。")
+        L.append(f"- {t('rep_pron_none')}")
     L.append("")
 
-    L.append("## 语法 / 用词问题（仅标注，不改原文）")
+    L.append(f"## {t('rep_grammar_heading')}")
     if r.grammar_issues:
         for g in r.grammar_issues[:20]:
-            fix = f"　建议：`{g.replacement}`" if g.replacement else ""
+            fix = t("rep_grammar_fix", replacement=g.replacement) if g.replacement else ""
             L.append(f"- [{g.category}] {g.message}{fix}")
             if g.context:
-                L.append(f"  - 原文片段：`{g.context}`")
+                L.append(t("rep_grammar_context", context=g.context))
     else:
-        L.append("- 未检测到明显语法问题。")
+        L.append(f"- {t('rep_grammar_none')}")
     L.append("")
 
-    L.append("## 表达地道度")
+    L.append(f"## {t('rep_natural_heading')}")
     if r.naturalness:
         for n in r.naturalness:
             L.append(f"- {n}")
     else:
-        L.append("- 未发现明显中式表达。")
+        L.append(f"- {t('rep_natural_none')}")
     L.append("")
 
     if r.examiner_corrections:
-        L.append("## 教官的纠正参考")
+        L.append(f"## {t('rep_corrections_heading')}")
         for c in r.examiner_corrections:
             L.append(f"- {c}")
         L.append("")
 
-    L.append("## 考生原文（逐字，未修改）")
+    L.append(f"## {t('rep_candidate_transcript')}")
     L.append("")
-    L.append(r.transcript_candidate or "（无）")
+    L.append(r.transcript_candidate or t("rep_none"))
     L.append("")
     if r.transcript_examiner.strip():
-        L.append("## 教官原文")
+        L.append(f"## {t('rep_examiner_transcript')}")
         L.append("")
         L.append(r.transcript_examiner)
         L.append("")

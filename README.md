@@ -121,13 +121,13 @@ ffmpeg 预处理（高通去低频隆隆 + 自适应降噪 + 响度归一，**�
 
 ## 快速开始
 
-需要 Python 3.10+ 与 [ffmpeg](https://ffmpeg.org)。进入 `lecture_intel/` 后按平台安装：
+从源码安装需要 Python 3.10+ 与 [ffmpeg](https://ffmpeg.org)（macOS Release 版已内置 ffmpeg，无需另装）。进入 `lecture_intel/` 后按平台安装：
 
 ### macOS
 
 > **不想折腾？直接下 Release**：在 [Releases](https://github.com/chillboy67/recorder-mac/releases/latest) 下载
 > `Recorder-macOS-arm64-*.zip`（Apple Silicon），解压后把 `Recorder.app` 拖进「应用程序」再双击。不用自己装 Python：
-> 首次打开会联网安装运行环境，几分钟后自动打开；ffmpeg 仍需另装（`brew install ffmpeg`）。App 未签名，若被系统拦截，
+> 首次打开会联网安装运行环境，几分钟后自动打开；ffmpeg 已内置，不用另装。App 未签名，若被系统拦截，
 > 到「系统设置 → 隐私与安全性」点「仍要打开」，或运行 `xattr -dr com.apple.quarantine /Applications/Recorder.app`。
 > Intel Mac 请用下面的源码安装。
 
@@ -136,6 +136,7 @@ ffmpeg 预处理（高通去低频隆隆 + 自适应降噪 + 响度归一，**�
 ```bash
 uv venv
 uv pip install -r requirements.txt
+./build_ffmpeg.sh                # 可选：编一个精简 ffmpeg 打进 App（约 1 分钟）
 ./make_app.sh                    # 安装到 /Applications/Recorder.app
 ```
 
@@ -212,6 +213,7 @@ lecture_intel/
 ├── app.py                GUI 入口（双击目标）
 ├── transcribe.py         CLI 入口
 ├── make_app.sh           构建并安装 /Applications/Recorder.app
+├── build_ffmpeg.sh       编译随 App 发布的精简 ffmpeg / ffprobe（仅音频）
 ├── download_models.py    Whisper 模型预下载（镜像直连）
 │
 ├── core/                 引擎
@@ -231,7 +233,6 @@ lecture_intel/
 │
 ├── gui/                  PySide6 界面（首页 / 录音 / 处理 / 结果 + 主题）
 ├── native/               SystemAudioRecorder.swift（ScreenCaptureKit 内录）
-├── dictionaries/         课堂术语词典（旧流水线存档，core 引擎未接入）
 └── tests/                无需模型即可跑的单元测试（python -m pytest）
 ```
 
@@ -272,8 +273,8 @@ abort。改成 multiprocessing 子进程 + 主线程轮询结果队列后：子�
 按语言归属分配角色（雅思考生一律答英文，说其他语言的即教官）——中文、日文、
 韩文、俄文、泰文教官已用真实音频验证可分，这一步才让教官/考生分离真正可用。
 法／德／西这类与英文同用拉丁字母的教官**尚未可靠**：逐块语种只在每个静音块恰好
-只含一种语言时才够用，而真实会话的 60 秒块常混两种语言；且声学分离成功时，
-角色判定（`_candidate_score`）目前还不看段语种。两点均已建任务跟踪。
+只含一种语言时才够用，而真实会话的 60 秒块常混两种语言。声学分离成功时的角色判定
+（`_candidate_score`）已计入段语种，但段语种同样继承自整块，受同一限制。改为逐段检测语种已建任务跟踪。
 
 **系统内录自己写 WAV。**
 ScreenCaptureKit 给出的是非交错 Float32，AVAudioFile / 转换器都拒绝处理，
@@ -294,7 +295,7 @@ App 读取 `~/Documents`，安装脚本会把可运行副本与虚拟环境放�
 
 | 时间 | 阶段 |
 |------|------|
-| 2026-05-07 ~ 05-17 | 雅思口语批改原型：语法 / 自然度 / 发音规则 + FastAPI 接口（`backend/`） |
+| 2026-05-07 ~ 05-17 | 雅思口语批改原型：语法 / 自然度 / 发音规则 + FastAPI 接口（`backend/`，已删除，见 v2.1.0 tag） |
 | 2026-05-30 ~ 06-01 | 转向课堂录音，搭起 11 步流水线（`modules/` + `pipeline.py`） |
 | 2026-06-13 ~ 06-14 | 推倒重来：mode 驱动的 `core/` 引擎，整文件转写取代自切 VAD 段；子进程隔离崩溃 |
 | 2026-06-18 ~ 06-20 | 系统内录、深浅色主题、用户数据目录统一 |
@@ -316,12 +317,13 @@ App 读取 `~/Documents`，安装脚本会把可运行副本与虚拟环境放�
 实现要点：语言工具层在 `core/languages.py`，按 Unicode 文字系统判定语言
 （假名→日语、谚文→韩语、汉字→中文；拉丁、西里尔、阿拉伯等被多种语言共用的文字
 交给 Whisper 自己的检测结果区分），语言设置接入引擎、命令行（`transcribe.py -l ja`）
-与界面「语言」选择器（默认自动检测，共 15 种常用语言）。教官角色判定以「非考生语言」
+与界面「语言」选择器（自动检测 + 13 种常用语言）。教官角色判定以「非考生语言」
 为准：日／韩／俄／泰教官按文字系统归属分角色，已用五种语言的真实音频逐一验证；
 法德西等拉丁文教官要靠分块转写附带的逐块语种区分，**实测尚不可靠**——逐块语种
 仅在单个静音块恰好只含一种语言时才足够，真实会话的 60 秒块常混两种语言，
-且声学分离成功时角色判定（`_candidate_score`）尚未使用段语种（两点已建任务跟踪）。
-雅思报告的说明保持中文（考生恒为英文作答，且界面为中文），
+声学分离成功时的角色判定（`_candidate_score`）虽已计入段语种，但段语种同样来自整块
+（改为逐段检测语种已建任务跟踪）。
+雅思报告、课堂总结和导出文件里的说明文字跟随界面语言（中文 / English），引用的原话一律照录；
 LanguageTool 保持 en-US（诊断对象即考生英文）。中英混说的判定阈值与归属规则保持
 不变。规划中的可选项——教官话对照翻译——暂未实现，需要时再议。
 
@@ -329,14 +331,16 @@ LanguageTool 保持 en-US（诊断对象即考生英文）。中英混说的判�
 
 - 模型与全部处理都在本机，**没有任何网络请求**（除首次下载模型）。
 - 录音与转写结果写入本地数据目录（见 `core/paths.py`），仓库不收录任何音频。
+- 运行日志和崩溃记录只写在本机（macOS `~/Library/Logs/Recorder/`，Windows `%LOCALAPPDATA%\Recorder\Logs`，
+  Linux `~/.local/state/recorder/logs`），不会上传。遇到问题时可用「帮助 → 导出诊断包…」打一个 zip 附到 issue：
+  里面是日志、系统与依赖版本、最近一次处理的步骤记录（原话替换为字数），**不含录音和逐字稿**，用户目录显示为 `~`。
 
 ---
 
 ## 开发
 
 ```bash
-python -m pytest          # 仓库根目录运行，仅覆盖 lecture_intel/（默认验证层）
-                          # backend/tests 为存档代码，不计入默认验证
+python -m pytest          # 仓库根目录运行，覆盖 lecture_intel/tests
 ```
 
 改完代码后重新运行 `lecture_intel/make_app.sh` 同步到已安装的 App。
@@ -352,9 +356,10 @@ python -m pytest          # 仓库根目录运行，仅覆盖 lecture_intel/（�
   （`modules/audio_loader.py` 与其中的数据类仍在使用，故 `modules/` 目录保留；
   `aura_gui/` 是界面改版的设计稿源本、早已合并进 `lecture_intel/gui/`，其设计意图已迁至
   `lecture_intel/docs/GUI_DESIGN.md`）。
-- `backend/` + `frontend/` — 最早的 FastAPI 雅思批改原型，其分析思路
-  （发音置信度、语法规则、报告模板）已并入 `lecture_intel/core/ielts.py`，
-  保留仅作存档，可忽略。
+- `backend/` + `frontend/`（最早的 FastAPI 雅思批改原型）与 `lecture_intel/dictionaries/`
+  （旧流水线的课堂术语词典，从未接入 `core/` 引擎）— 已删除。原型的分析思路（发音置信度、
+  语法规则、报告模板）已并入 `lecture_intel/core/ielts.py`；旧代码可在
+  [v2.1.0 tag](https://github.com/chillboy67/recorder-mac/tree/v2.1.0) 中查看。
 
 ## 许可
 

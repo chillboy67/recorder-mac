@@ -172,6 +172,42 @@ _CATALOG: dict[str, dict[str, str]] = {
     "menu_language": {"zh": "语言", "en": "Language"},
     "menu_help": {"zh": "帮助", "en": "Help"},
     "menu_help_docs": {"zh": "打开说明", "en": "Open Documentation"},
+    "menu_help_diagnostics": {"zh": "导出诊断包…", "en": "Export Diagnostics…"},
+    "menu_help_onboarding": {"zh": "显示新手引导", "en": "Show Getting Started"},
+    "onb_title": {"zh": "第一次使用？", "en": "New here?"},
+    "onb_steps": {"zh": "选下方模式 → 拖入音频或实时录音 → 开始转写",
+                  "en": "Pick a mode, add audio or record, then start."},
+    "onb_steps_tip": {
+        "zh": "第一次转写会先下载识别模型（界面会显示进度），之后可以断网使用。",
+        "en": "The first transcription downloads the speech model (with progress shown); "
+              "after that Recorder works offline.",
+    },
+    "onb_check": {"zh": "测试麦克风", "en": "Test Microphone"},
+    "onb_check_again": {"zh": "再测一次", "en": "Test Again"},
+    "onb_dismiss": {"zh": "知道了", "en": "Got It"},
+    "onb_mic_listening": {"zh": "正在听…说句话试试（不会保存）",
+                          "en": "Listening… say something (nothing is saved)"},
+    "onb_mic_ok": {"zh": "麦克风正常（峰值 {db} dB）", "en": "Microphone works (peak {db} dB)"},
+    "onb_mic_silent": {
+        "zh": "没有收到声音：换一个麦克风试试，或在系统设置里允许 Recorder 使用麦克风",
+        "en": "No sound arrived: try another microphone, or allow Recorder to use it in system settings",
+    },
+    "onb_mic_error": {"zh": "无法测试麦克风：{error}", "en": "Could not test the microphone: {error}"},
+    "onb_mic_none": {"zh": "没有找到麦克风", "en": "No microphone found"},
+    "onb_mic_failed": {"zh": "麦克风无法打开", "en": "The microphone could not be opened"},
+    "diag_save_title": {"zh": "导出诊断包", "en": "Export Diagnostics"},
+    "diag_saved": {
+        "zh": "诊断包已保存到：\n{path}\n\n"
+              "包含运行日志、系统与依赖版本，以及最近一次处理的步骤记录（原话已替换为字数）。"
+              "不含录音和逐字稿，用户目录显示为 ~。\n\n"
+              "提 issue 时可以附上它；附之前可以先解压看看内容。",
+        "en": "Saved the diagnostics bundle to:\n{path}\n\n"
+              "It holds the app logs, system and package versions, and the processing "
+              "steps of the last run with every spoken word replaced by its length. "
+              "It has no audio and no transcript, and your home folder shows as ~.\n\n"
+              "Attach it to an issue if you like; you can unzip it first to check.",
+    },
+    "diag_failed": {"zh": "无法保存诊断包：{error}", "en": "Could not save the diagnostics bundle: {error}"},
 
     # top strip
     "btn_output_folder": {"zh": "保存文件夹", "en": "Save Folder"},
@@ -218,11 +254,13 @@ _CATALOG: dict[str, dict[str, str]] = {
     "worker_crash": {
         "zh": "处理进程意外退出{code}，很可能是内存不足或模型过大。\n\n"
               "你的录音文件已安全保存，没有丢失。\n"
-              "建议在「识别模型」里选「快速」后重试。",
+              "建议在「识别模型」里选「快速」后重试。\n"
+              "如需反馈问题，可用「帮助 → 导出诊断包…」。",
         "en": "The processing process quit unexpectedly{code} — most likely out "
               "of memory, or a model that is too large.\n\n"
               "Your recording is safely on disk and was not lost.\n"
-              "Try picking “Fast” under Model, then run it again.",
+              "Try picking “Fast” under Model, then run it again.\n"
+              "To report the problem, use Help → Export Diagnostics….",
     },
     "deps_title": {"zh": "缺少依赖", "en": "Missing Dependencies"},
     "deps_body": {
@@ -436,6 +474,12 @@ _CATALOG: dict[str, dict[str, str]] = {
                              "en": "{backend} unavailable — switching to CPU faster-whisper ({model})…"},
     "tr_done": {"zh": "转写完成", "en": "Transcription complete"},
     "tr_mlx": {"zh": "转写中（MLX 加速）…", "en": "Transcribing (MLX accelerated)…"},
+    "tr_download_progress": {
+        "zh": "首次使用，正在下载 {model} 模型：{done} / {total} GB（{pct}%）",
+        "en": "First use: downloading the {model} model, {done} / {total} GB ({pct}%)",
+    },
+    "tr_download_bytes": {"zh": "首次使用，正在下载 {model} 模型：已下载 {done} GB",
+                          "en": "First use: downloading the {model} model, {done} GB so far"},
     "tr_gpu_chunk": {"zh": "转写中（GPU 分块）…", "en": "Transcribing (GPU, chunked)…"},
     "tr_cpu": {"zh": "转写中（CPU）…", "en": "Transcribing (CPU)…"},
     "tr_warn_fallback": {"zh": "{backend} 运行失败，已回退 CPU faster-whisper：{exc}",
@@ -466,4 +510,138 @@ _CATALOG: dict[str, dict[str, str]] = {
         "zh": "textutil 转换失败: {err}",
         "en": "textutil conversion failed: {err}",
     },
+
+    # ── IELTS report (core/ielts.py) — transcripts inside stay verbatim ──
+    "rep_title": {"zh": "雅思口语反馈", "en": "IELTS Speaking Feedback"},
+    "rep_overview": {"zh": "概览", "en": "Overview"},
+    "rep_candidate_time": {"zh": "- 考生发言时长：约 {seconds}s",
+                           "en": "- Candidate speaking time: about {seconds}s"},
+    "rep_examiner_time": {"zh": "- 教官发言时长：约 {seconds}s",
+                          "en": "- Coach speaking time: about {seconds}s"},
+    "rep_other_time": {"zh": "- 背景人声（已排除）：约 {seconds}s",
+                       "en": "- Background voices (excluded): about {seconds}s"},
+    "rep_wpm": {"zh": "- 语速：约 {wpm} WPM", "en": "- Speaking rate: about {wpm} WPM"},
+    "rep_fillers": {"zh": "- 填充词（um/uh/like 等）：{count} 处",
+                    "en": "- Fillers (um / uh / like …): {count}"},
+    "rep_pauses": {"zh": "- 明显停顿（>{sec}s）：{count} 处",
+                   "en": "- Long pauses (>{sec}s): {count}"},
+    "rep_pron_heading": {"zh": "疑似发音问题（基于识别置信度，原文未改动）",
+                         "en": "Possible pronunciation issues (from recognition confidence; transcript unchanged)"},
+    "rep_pron_intro": {
+        "zh": "以下单词识别置信度偏低，往往对应发音不清/读错/口音偏差，建议逐一核对录音。",
+        "en": "The recogniser was unsure of these words, which often means they were unclear, "
+              "mispronounced or strongly accented. Check each one against the recording.",
+    },
+    "rep_pron_item": {"zh": "- **{word}**（{start}s，置信度 {confidence}）：{note}",
+                      "en": "- **{word}** ({start}s, confidence {confidence}): {note}"},
+    "rep_pron_none": {"zh": "未发现明显低置信度单词，发音整体较清晰。",
+                      "en": "No low-confidence words found; pronunciation is clear overall."},
+    "rep_pron_note_very_low": {
+        "zh": "识别置信度很低，发音可能很不清晰或读错，建议重点核对。",
+        "en": "Very low confidence: likely unclear or mispronounced. Check this one first.",
+    },
+    "rep_pron_note_low": {
+        "zh": "识别置信度低，发音可能不够清楚或重音/元音有偏差。",
+        "en": "Low confidence: possibly unclear, or the stress or a vowel is off.",
+    },
+    "rep_pron_note_somewhat_low": {
+        "zh": "识别置信度偏低，建议确认发音是否标准。",
+        "en": "Slightly low confidence: worth checking the pronunciation.",
+    },
+    "rep_grammar_heading": {"zh": "语法 / 用词问题（仅标注，不改原文）",
+                            "en": "Grammar / word choice (flagged only; transcript unchanged)"},
+    "rep_grammar_default": {"zh": "可能的语法问题", "en": "Possible grammar issue"},
+    "rep_grammar_fix": {"zh": "　建议：`{replacement}`", "en": " Suggestion: `{replacement}`"},
+    "rep_grammar_context": {"zh": "  - 原文片段：`{context}`", "en": "  - In context: `{context}`"},
+    "rep_grammar_none": {"zh": "未检测到明显语法问题。", "en": "No obvious grammar issues found."},
+    "rep_rule_i_has": {"zh": "主谓一致：I 用 have。", "en": "Subject–verb agreement: I takes have."},
+    "rep_rule_third_person": {"zh": "第三人称单数用 has。", "en": "Third person singular takes has."},
+    "rep_rule_plural_are": {"zh": "复数主语用 are。", "en": "A plural subject takes are."},
+    "rep_rule_a_useful": {"zh": "useful 以辅音音开头，用 a。",
+                          "en": "useful starts with a consonant sound, so use a."},
+    "rep_rule_an_hour": {"zh": "hour 以元音音开头，用 an。",
+                         "en": "hour starts with a vowel sound, so use an."},
+    "rep_rule_double_comparative": {"zh": "避免双重比较级。", "en": "Avoid a double comparative."},
+    "rep_rule_discuss_about": {"zh": "discuss 后不加 about。", "en": "discuss takes no about."},
+    "rep_rule_information": {"zh": "information 不可数。", "en": "information is uncountable."},
+    "rep_rule_advice": {"zh": "advice 不可数。", "en": "advice is uncountable."},
+    "rep_rule_knowledge": {"zh": "knowledge 不可数。", "en": "knowledge is uncountable."},
+    "rep_rule_really_like": {"zh": "更自然：really like。", "en": "More natural: really like."},
+    "rep_rule_according_to_me": {"zh": "中式表达：用 in my opinion / personally。",
+                                 "en": "Unidiomatic: say in my opinion / personally."},
+    "rep_rule_can_able": {"zh": "can 与 be able to 不能连用。",
+                          "en": "can and be able to don't go together."},
+    "rep_rule_nowadays": {"zh": "nowadays 重复使用，注意多样性。",
+                          "en": "nowadays is repeated; vary the wording."},
+    "rep_natural_heading": {"zh": "表达地道度", "en": "Natural phrasing"},
+    "rep_natural": {"zh": "「{plain}」可换成更地道的表达，如「{better}」。",
+                    "en": "“{plain}” could be more natural, e.g. “{better}”."},
+    "rep_natural_none": {"zh": "未发现明显中式表达。", "en": "No obviously unidiomatic phrasing found."},
+    "rep_corrections_heading": {"zh": "教官的纠正参考", "en": "The coach's corrections"},
+    "rep_candidate_transcript": {"zh": "考生原文（逐字，未修改）",
+                                 "en": "Candidate transcript (verbatim, unedited)"},
+    "rep_examiner_transcript": {"zh": "教官原文", "en": "Coach transcript"},
+    "rep_none": {"zh": "（无）", "en": "(none)"},
+
+    # ── classroom summary (core/classroom.py) ──
+    "cls_title": {"zh": "课堂重点总结", "en": "Lecture Key Points"},
+    "cls_intro": {"zh": "自动提取，供复习参考。完整内容见转写原文。",
+                  "en": "Extracted automatically as a study aid. The full transcript has everything."},
+    "cls_emphasis": {"zh": "老师强调的重点", "en": "What the teacher stressed"},
+    "cls_emphasis_none": {"zh": "未检测到明显的「重点/注意/常考」等强调用语。",
+                          "en": "No clear emphasis cues (\"important\", \"note\", \"on the exam\"…) found."},
+    "cls_definitions": {"zh": "重要定义", "en": "Definitions"},
+    "cls_definitions_none": {"zh": "未检测到明显的定义句。", "en": "No clear definitions found."},
+    "cls_terms": {"zh": "高频主题（反复出现，可能是核心）",
+                  "en": "Recurring topics (likely the core of the lecture)"},
+    "cls_terms_sep": {"zh": "、", "en": ", "},
+    "cls_term_count": {"zh": "{term}（{count}次）", "en": "{term} ({count}×)"},
+    "cls_longest": {"zh": "讲解篇幅最长的部分", "en": "Longest explanations"},
+    "cls_span": {"zh": "[{start}–{end}，约{seconds}s]", "en": "[{start}–{end}, about {seconds}s]"},
+    "cls_transcript": {"zh": "全文转写", "en": "Full transcript"},
+
+    # ── exported files (core/export.py) ──
+    "exp_speaker_candidate": {"zh": "考生", "en": "Candidate"},
+    "exp_speaker_examiner": {"zh": "教官", "en": "Coach"},
+    "exp_speaker_other": {"zh": "其他", "en": "Other"},
+    "exp_speaker_main": {"zh": "主讲", "en": "Lecturer"},
+    "exp_fidelity_heading": {"zh": "忠实度标注（正文未改写）",
+                             "en": "Fidelity notes (transcript not rewritten)"},
+    "exp_fidelity_note": {
+        "zh": "正文一律保持说话人的原话。下列片段仅为标注；"
+              "只有课堂模式会把已确认为转写伪影的词级重复折叠，折叠掉的原话记在每一条里。",
+        "en": "The transcript always keeps the speaker's own words. The items below are notes only; "
+              "only classroom mode folds word repeats confirmed as transcription artifacts, and each "
+              "item records the words it folded.",
+    },
+    "exp_verdict_asr_loop": {"zh": "疑似转写伪影", "en": "Likely transcription artifact"},
+    "exp_verdict_real_speech": {"zh": "真实重复", "en": "Real repetition"},
+    "exp_verdict_uncertain": {"zh": "判定存疑", "en": "Undecided"},
+    "exp_state_folded": {"zh": "已在正文中折叠", "en": "folded in the transcript"},
+    "exp_state_kept": {"zh": "正文原样保留", "en": "kept as spoken"},
+    "exp_repeat_line": {"zh": "[{ts}] {verdict} · {state} ｜原话「{original}」",
+                        "en": "[{ts}] {verdict} · {state} | said: “{original}”"},
+    "exp_evidence": {"zh": "｜依据：{evidence}", "en": " | evidence: {evidence}"},
+    "exp_dup_kept": {"zh": "[{ts}] 相邻重复段 · 正文原样保留 ｜「{text}」与上一段重复",
+                     "en": "[{ts}] Repeated segment · kept as spoken | “{text}” repeats the one before"},
+    "exp_dup_dropped": {
+        "zh": "[{ts}] 相邻重复段 · 已整段剔除 ｜「{text}」与上一段重复（原话见 meta.json）",
+        "en": "[{ts}] Repeated segment · removed | “{text}” repeated the one before (kept in meta.json)",
+    },
+    "exp_ev_l1": {"zh": "L1 词时间轴 {span}s ≪ 应有的 {expected}s（解码时钟冻结）",
+                  "en": "L1 word timeline {span}s ≪ expected {expected}s (decoder clock stalled)"},
+    "exp_ev_l2": {"zh": "L2 浊音段 {bursts} 个 ≥ 0.8×{k}（每份拷贝都独立发声）",
+                  "en": "L2 {bursts} voiced bursts ≥ 0.8×{k} (each copy was spoken)"},
+    "exp_ev_original": {"zh": "降噪前原始音频", "en": "the original audio before denoising"},
+    "exp_ev_pipeline": {"zh": "管道音频", "en": "the processed audio"},
+    "exp_ev_l3_failed": {"zh": "L3 在{where}上重解码失败，证据不足",
+                         "en": "L3 re-decoding {where} failed; not enough evidence"},
+    "exp_ev_l3": {"zh": "L3 在{where}上 3 个温度种子复现 {seeds} 份拷贝（原文共 {k} 份）",
+                  "en": "L3 re-decoding {where} with 3 temperature seeds gave {seeds} copies ({k} in the transcript)"},
+    "exp_md_language": {"zh": "- 语言：{language}", "en": "- Language: {language}"},
+    "exp_md_engine": {"zh": "- 引擎：{engine}", "en": "- Engine: {engine}"},
+    "exp_md_duration": {"zh": "- 时长：{seconds}s", "en": "- Duration: {seconds}s"},
+    "exp_md_transcript": {"zh": "转写", "en": "Transcript"},
+    "exp_docx_meta": {"zh": "语言 {language} · 引擎 {engine} · 时长 {seconds}s",
+                      "en": "Language {language} · Engine {engine} · Duration {seconds}s"},
 }

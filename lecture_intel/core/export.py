@@ -15,11 +15,12 @@ from modules import ASRResult, ASRSegment
 
 from core.i18n import t
 
-_SPEAKER_ZH = {
-    "candidate": "考生",
-    "examiner": "教官",
-    "other": "其他",
-    "main": "主讲",
+# Speaker label → i18n key; exported files follow the UI language.
+_SPEAKER_KEYS = {
+    "candidate": "exp_speaker_candidate",
+    "examiner": "exp_speaker_examiner",
+    "other": "exp_speaker_other",
+    "main": "exp_speaker_main",
 }
 
 
@@ -27,14 +28,10 @@ _SPEAKER_ZH = {
 # The transcript body is never rewritten by this section. It is a report
 # *about* the transcript: which spans the three-level arbitration flagged, what
 # it decided, and on what evidence. Nothing here is part of the utterance.
-FIDELITY_HEADING = "忠实度标注（正文未改写）"
-FIDELITY_NOTE = ("正文一律保持说话人的原话。下列片段仅为标注；"
-                 "只有课堂模式会把已确认为转写伪影的词级重复折叠，折叠掉的原话记在每一条里。")
-
-_VERDICT_ZH = {
-    "asr_loop": "疑似转写伪影",
-    "real_speech": "真实重复",
-    "uncertain": "判定存疑",
+_VERDICT_KEYS = {
+    "asr_loop": "exp_verdict_asr_loop",
+    "real_speech": "exp_verdict_real_speech",
+    "uncertain": "exp_verdict_uncertain",
 }
 
 
@@ -44,18 +41,15 @@ def _evidence_brief(ev: dict) -> str:
         return ""
     level = ev.get("level")
     if level == 1:
-        return (f"L1 词时间轴 {ev.get('span_sec')}s ≪ 应有的 {ev.get('expected_sec')}s"
-                "（解码时钟冻结）")
+        return t("exp_ev_l1", span=ev.get("span_sec"), expected=ev.get("expected_sec"))
     if level == 2:
-        return (f"L2 浊音段 {ev.get('voiced_bursts')} 个 ≥ 0.8×{ev.get('k')}"
-                "（每份拷贝都独立发声）")
+        return t("exp_ev_l2", bursts=ev.get("voiced_bursts"), k=ev.get("k"))
     if level == 3:
-        where = "降噪前原始音频" if ev.get("oracle") == "original" else "管道音频"
+        where = t("exp_ev_original" if ev.get("oracle") == "original" else "exp_ev_pipeline")
         seeds = ev.get("seeds")
         if seeds is None:
-            return f"L3 在{where}上重解码失败，证据不足"
-        return (f"L3 在{where}上 3 个温度种子复现 {seeds} 份拷贝"
-                f"（原文共 {ev.get('k')} 份）")
+            return t("exp_ev_l3_failed", where=where)
+        return t("exp_ev_l3", where=where, seeds=seeds, k=ev.get("k"))
     return str(ev.get("reason") or "")
 
 
@@ -70,18 +64,18 @@ def fidelity_lines(asr, dropped_segments: Optional[list] = None) -> list[str]:
         kind = a.get("type")
         ts = f"{_ts_short(a.get('start', 0))}–{_ts_short(a.get('end', 0))}"
         if kind == "repeat_arbitration":
-            verdict = _VERDICT_ZH.get(a.get("verdict"), str(a.get("verdict", "?")))
-            state = "已在正文中折叠" if a.get("folded") else "正文原样保留"
+            key = _VERDICT_KEYS.get(a.get("verdict"))
+            verdict = t(key) if key else str(a.get("verdict", "?"))
+            state = t("exp_state_folded" if a.get("folded") else "exp_state_kept")
             ev = _evidence_brief(a.get("evidence") or {})
-            line = f"[{ts}] {verdict} · {state} ｜原话「{a.get('original', '')}」"
-            out.append(f"{line}｜依据：{ev}" if ev else line)
+            line = t("exp_repeat_line", ts=ts, verdict=verdict, state=state,
+                     original=a.get("original", ""))
+            out.append(line + t("exp_evidence", evidence=ev) if ev else line)
         elif kind == "adjacent_duplicate_segment":
-            out.append(f"[{ts}] 相邻重复段 · 正文原样保留 ｜"
-                       f"「{a.get('text', '')}」与上一段重复")
+            out.append(t("exp_dup_kept", ts=ts, text=a.get("text", "")))
     for d in (dropped_segments or []):
         ts = f"{_ts_short(d.get('start', 0))}–{_ts_short(d.get('end', 0))}"
-        out.append(f"[{ts}] 相邻重复段 · 已整段剔除 ｜"
-                   f"「{d.get('text', '')}」与上一段重复（原话见 meta.json）")
+        out.append(t("exp_dup_dropped", ts=ts, text=d.get("text", "")))
     return out
 
 
@@ -142,7 +136,8 @@ def _label(labels, seg_id) -> str:
     raw = labels.get(seg_id)
     if not raw:
         return ""
-    return _SPEAKER_ZH.get(raw, raw)
+    key = _SPEAKER_KEYS.get(raw)
+    return t(key) if key else raw
 
 
 def _txt(asr, out_dir, base, labels, dropped_segments=None) -> Path:
@@ -157,15 +152,17 @@ def _txt(asr, out_dir, base, labels, dropped_segments=None) -> Path:
     if fidelity:
         # Appended after the transcript, never interleaved into it.
         body += "\n\n" + "\n".join(
-            [FIDELITY_HEADING, "", FIDELITY_NOTE, ""] + fidelity)
+            [t("exp_fidelity_heading"), "", t("exp_fidelity_note"), ""] + fidelity)
     p = out_dir / f"{base}.txt"
     p.write_text(body, encoding="utf-8")
     return p
 
 
 def _md(asr, out_dir, base, labels, dropped_segments=None) -> Path:
-    L = [f"# {base}", "", f"- 语言：{asr.language}", f"- 引擎：{asr.model_used}",
-         f"- 时长：{asr.audio_duration_sec:.0f}s", "", "## 转写", ""]
+    L = [f"# {base}", "", t("exp_md_language", language=asr.language),
+         t("exp_md_engine", engine=asr.model_used),
+         t("exp_md_duration", seconds=f"{asr.audio_duration_sec:.0f}"),
+         "", f"## {t('exp_md_transcript')}", ""]
     for s in asr.segments:
         ts = _ts_short(s.start)
         spk = _label(labels, s.id)
@@ -176,7 +173,7 @@ def _md(asr, out_dir, base, labels, dropped_segments=None) -> Path:
         L.append("")
     fidelity = fidelity_lines(asr, dropped_segments)
     if fidelity:
-        L.extend(["", f"## {FIDELITY_HEADING}", "", f"> {FIDELITY_NOTE}", ""])
+        L.extend(["", f"## {t('exp_fidelity_heading')}", "", f"> {t('exp_fidelity_note')}", ""])
         L.extend(f"- {line}" for line in fidelity)
         L.append("")
     p = out_dir / f"{base}.md"
@@ -241,8 +238,8 @@ def _build_docx_document(asr, base, labels, report_md):
     else:
         doc.add_heading(base, level=0)
         meta = doc.add_paragraph()
-        meta.add_run(f"语言 {asr.language} · 引擎 {asr.model_used} · "
-                     f"时长 {asr.audio_duration_sec:.0f}s").italic = True
+        meta.add_run(t("exp_docx_meta", language=asr.language, engine=asr.model_used,
+                       seconds=f"{asr.audio_duration_sec:.0f}")).italic = True
         for s in asr.segments:
             ts = _ts_short(s.start)
             spk = _label(labels, s.id)

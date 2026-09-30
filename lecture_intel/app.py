@@ -53,10 +53,18 @@ def main() -> None:
         Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
     )
 
+    try:
+        from core.diagnostics import log_uncaught, setup_logging
+        setup_logging("app")
+        sys.excepthook = log_uncaught
+    except OSError:
+        pass   # an unwritable log folder must not stop the app
+
     app = QApplication(sys.argv)
     app.setApplicationName("Recorder")
     app.setOrganizationName("LucasLab")
-    app.setApplicationVersion("2.1.0")
+    from core import APP_VERSION
+    app.setApplicationVersion(APP_VERSION)
 
     from PySide6.QtCore import QSettings
     from core.i18n import detect_system_language, set_language, t

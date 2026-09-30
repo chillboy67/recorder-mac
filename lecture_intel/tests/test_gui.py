@@ -535,3 +535,76 @@ def test_on_finished_survives_a_failing_notification(main_window, monkeypatch,
     monkeypatch.setattr(subprocess, "run", missing)
     main_window._on_finished(_result("general", output_dir=str(tmp_path)))
     assert main_window._results._output_dir == str(tmp_path)
+
+
+# ── first-run strip ─────────────────────────────────────────────────
+
+def test_peak_level_reads_every_sample_format():
+    import struct
+    from PySide6.QtMultimedia import QAudioFormat
+    from gui.widgets.onboarding import peak_level
+    F = QAudioFormat.SampleFormat
+    assert peak_level(struct.pack("<3h", 0, -16384, 100), F.Int16) == pytest.approx(0.5)
+    assert peak_level(struct.pack("<2f", 0.25, -0.75), F.Float) == pytest.approx(0.75)
+    assert peak_level(struct.pack("<i", 2 ** 30), F.Int32) == pytest.approx(0.5)
+    assert peak_level(bytes([128, 192]), F.UInt8) == pytest.approx(0.5)
+    assert peak_level(b"\x01", F.Int16) == 0.0            # half a sample
+
+
+class _FakeCapture:
+    """Stands in for MicCapture: emits the given peak as soon as it starts."""
+
+    def __init__(self, peak):
+        from PySide6.QtCore import QObject, Signal
+
+        class Capture(QObject):
+            level = Signal(float)
+            finished = Signal(float)
+            failed = Signal(str)
+            devices = []
+
+            def start(self, device):
+                Capture.devices.append(device)
+                self.level.emit(peak)
+                self.finished.emit(peak)
+
+        self.cls = Capture
+
+
+@pytest.mark.parametrize("peak, tone", [(0.2, "ok"), (0.0005, "danger")])
+def test_mic_check_reports_sound_or_silence(qapp, peak, tone):
+    from gui.widgets.onboarding import OnboardingStrip
+    fake = _FakeCapture(peak)
+    strip = OnboardingStrip(lambda: "the-selected-mic", capture_factory=fake.cls)
+    strip.start_check()
+    assert fake.cls.devices == ["the-selected-mic"]
+    assert strip._steps.property("tone") == tone
+    assert strip._check_btn.isEnabled()
+    strip.retranslate()                    # keeps the result, not the steps
+    assert strip._steps.property("tone") == tone
+    painted(strip)
+
+
+def test_onboarding_strip_shows_once_until_dismissed(qapp, isolated_prefs):
+    from gui.main_window import MainWindow
+    window = MainWindow()
+    try:
+        home = window._home
+        assert not home._onboarding.isHidden()          # fresh preferences
+        home._onboarding.dismissed.emit()
+        assert home._onboarding.isHidden()
+        again = HomeScreen()
+        assert again._onboarding.isHidden()             # remembered
+        home.show_onboarding()                          # Help → Show Getting Started
+        assert not home._onboarding.isHidden()
+        home.set_file(str(ROOT / "tests" / "missing.wav"), "1 KB")
+        assert home._onboarding.isHidden()              # steps done; room for Start
+        home.clear_file()
+        assert not home._onboarding.isHidden()
+        again._dismiss_onboarding()
+        again.set_file(str(ROOT / "tests" / "missing.wav"), "1 KB")
+        again.clear_file()
+        assert again._onboarding.isHidden()             # dismissed stays dismissed
+    finally:
+        window.close()
+        window.deleteLater()

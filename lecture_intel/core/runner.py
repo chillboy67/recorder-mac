@@ -28,6 +28,11 @@ def run_pipeline_subprocess(input_path, output_dir, settings, queue):
         # The subprocess is a fresh interpreter, so set it before running.
         from core.i18n import set_language
         set_language((settings or {}).get("ui_lang"))
+        try:
+            from core.diagnostics import setup_logging
+            setup_logging("worker")
+        except OSError:
+            pass   # an unwritable log folder must not stop the transcription
 
         from core.engine import run
 
@@ -49,7 +54,9 @@ def run_pipeline_subprocess(input_path, output_dir, settings, queue):
         )
         queue.put(("result", summary))
     except Exception:
+        import logging
         import traceback
+        logging.getLogger("recorder.worker").exception("Pipeline failed")
         queue.put(("error", traceback.format_exc()))
     finally:
         try:
