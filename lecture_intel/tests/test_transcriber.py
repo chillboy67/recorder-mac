@@ -182,3 +182,40 @@ def test_cpu_loader_uses_the_shared_offline_cache_and_bounded_threads(
     assert captured["compute_type"] == "int8"
     assert captured["cpu_threads"] == 8
     assert captured["download_root"] == str(tmp_path / "cache")
+
+
+def _write_wav(tmp_path, level_db, sec=1.0):
+    import numpy as np
+    import soundfile as sf
+    x = (10 ** (level_db / 20)) * np.sin(2 * np.pi * 220 * np.arange(int(16000 * sec)) / 16000)
+    p = tmp_path / "a.wav"
+    sf.write(p, x.astype("float32"), 16000)
+    return p
+
+
+def _seg(text, nsp, probs):
+    return {"start": 0.0, "end": 1.0, "text": text, "no_speech_prob": nsp,
+            "words": [{"word": "w", "probability": p} for p in probs]}
+
+
+def test_silence_hallucination_is_dropped(tmp_path):
+    from core.transcriber import _drop_silence_hallucinations
+    kept, dropped = _drop_silence_hallucinations(
+        [_seg(" Thank you.", 0.92, [0.09, 1.0])], _write_wav(tmp_path, -45))
+    assert kept == [] and len(dropped) == 1
+
+
+def test_quiet_but_real_speech_is_kept(tmp_path):
+    from core.transcriber import _drop_silence_hallucinations
+    # same suspicious stats, but the audio under it is speech-loud
+    kept, dropped = _drop_silence_hallucinations(
+        [_seg(" have.", 0.92, [0.17])], _write_wav(tmp_path, -21))
+    assert len(kept) == 1 and dropped == []
+
+
+def test_guard_never_filters_without_evidence(tmp_path):
+    from core.transcriber import _drop_silence_hallucinations
+    segs = [{"start": 0, "end": 1, "text": "x", "words": []},          # no probs
+            _seg("y", None, [0.05])]                                     # no no_speech
+    kept, dropped = _drop_silence_hallucinations(segs, _write_wav(tmp_path, -60))
+    assert len(kept) == 2 and dropped == []

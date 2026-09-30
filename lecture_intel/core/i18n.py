@@ -484,6 +484,9 @@ _CATALOG: dict[str, dict[str, str]] = {
     "tr_cpu": {"zh": "转写中（CPU）…", "en": "Transcribing (CPU)…"},
     "tr_warn_fallback": {"zh": "{backend} 运行失败，已回退 CPU faster-whisper：{exc}",
                          "en": "{backend} failed; fell back to CPU faster-whisper: {exc}"},
+    "tr_warn_silence_dropped": {
+        "zh": "有 {n} 段判定为无语音（静音处的识别幻觉），未写入转写。",
+        "en": "{n} segment(s) judged to be silence (a recognition artifact, not speech) were left out of the transcript."},
     "tr_cpp_language_warning": {
         "zh": "whisper.cpp 当前为整段统一语种检测；中英混说可能不如逐块检测。",
         "en": "whisper.cpp currently detects one language for the full recording; mixed-language accuracy may differ from per-chunk detection.",

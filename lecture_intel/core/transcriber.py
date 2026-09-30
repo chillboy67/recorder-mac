@@ -66,6 +66,19 @@ _COMPRESSION_RATIO_THRESHOLD = 2.4
 # full 6-step ladder triples-to-sextuples the compute on noisy lectures (lots of
 # heat) for little gain, and runaway loops are cleaned afterwards anyway.
 TEMPERATURE_LADDER = (0.0, 0.4)
+# Silence hallucination guard. Whisper only skips a window when it is BOTH
+# no-speech and low-logprob, but on a second of silence it emits a stock phrase
+# ("Thank you.") whose avg logprob is propped up by the confident tail tokens,
+# so the window survives. No single signal decides: no_speech_prob reaches 0.9
+# on real lecture speech, and short real segments do contain low-probability
+# words. A segment is dropped only when all four hold — the window is flagged
+# no-speech, the segment is a few words, the model barely believes one of
+# them, and the audio under it is near-silent. Measured: hallucinations sit at
+# -34…-41 dBFS; real segments meeting the first three were at -21…-29 dBFS.
+_HALLUCINATION_MAX_WORDS = 4
+_HALLUCINATION_WORD_PROB = 0.2
+_HALLUCINATION_MAX_DBFS = -31.0
+_HALLUCINATION_PAD_SEC = 0.2
 
 
 class Transcriber:
@@ -179,6 +192,12 @@ class Transcriber:
             )
         engine = self._engine or engine
         dt = time.time() - t0
+
+        raw_segments, dropped = _drop_silence_hallucinations(raw_segments, audio_path)
+        if dropped:
+            logger.info("Dropped %d silence hallucination(s): %s", len(dropped),
+                        [(d.get("text") or "").strip() for d in dropped])
+            warnings.append(t("tr_warn_silence_dropped", n=len(dropped)))
 
         segments = self._to_segments(raw_segments, detected_lang)
         full_text = " ".join(s.text for s in segments).strip()
@@ -603,6 +622,7 @@ class Transcriber:
             segs.append({
                 "start": s.start, "end": s.end, "text": s.text,
                 "avg_logprob": s.avg_logprob,
+                "no_speech_prob": s.no_speech_prob,
                 "words": [
                     {"word": w.word, "start": w.start, "end": w.end,
                      "probability": w.probability}
@@ -661,6 +681,54 @@ class Transcriber:
                 words=words,
             ))
         return segments
+
+
+def _drop_silence_hallucinations(raw_segments: list[dict],
+                                 audio_path) -> tuple[list[dict], list[dict]]:
+    """Split raw segments into (kept, dropped) — see _HALLUCINATION_MAX_WORDS.
+
+    Engines that report no ``no_speech_prob`` (whisper.cpp) or no word
+    probabilities are never filtered, and neither is anything when the audio
+    cannot be read: without the evidence, keep the text."""
+    suspects = []
+    for seg in raw_segments:
+        probs = [w.get("probability") for w in seg.get("words") or []]
+        probs = [p for p in probs if p is not None]
+        if (probs
+                and (seg.get("no_speech_prob") or 0.0) > _NO_SPEECH_THRESHOLD
+                and len(probs) <= _HALLUCINATION_MAX_WORDS
+                and min(probs) < _HALLUCINATION_WORD_PROB):
+            suspects.append(seg)
+    if not suspects:
+        return raw_segments, []
+    try:
+        import soundfile as sf
+        wav, sr = sf.read(str(audio_path), dtype="float32")
+    except Exception as exc:
+        logger.warning("silence guard skipped (cannot read audio: %s)", exc)
+        return raw_segments, []
+    if wav.ndim > 1:
+        wav = wav.mean(axis=1)
+    dropped = [seg for seg in suspects
+               if _peak_dbfs(wav, sr, seg) < _HALLUCINATION_MAX_DBFS]
+    kept = [seg for seg in raw_segments if not any(seg is d for d in dropped)]
+    return kept, dropped
+
+
+def _peak_dbfs(wav, sr: int, seg: dict) -> float:
+    """Loudest 128 ms frame (RMS, dBFS) in the audio under a segment."""
+    import numpy as np
+
+    a = max(0, int((float(seg.get("start") or 0.0) - _HALLUCINATION_PAD_SEC) * sr))
+    b = int((float(seg.get("end") or 0.0) + _HALLUCINATION_PAD_SEC) * sr)
+    clip = wav[a:b]
+    frame = max(1, int(0.128 * sr))
+    if len(clip) < frame:
+        clip = np.pad(clip, (0, frame - len(clip)))
+    hop = max(1, frame // 4)
+    peak = max(float(np.sqrt(np.mean(clip[i:i + frame] ** 2)))
+               for i in range(0, len(clip) - frame + 1, hop))
+    return 20.0 * float(np.log10(peak + 1e-12))
 
 
 def _local_model_dir(model: str):
