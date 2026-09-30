@@ -313,6 +313,8 @@ _CATALOG: dict[str, dict[str, str]] = {
     "rec_status_recording": {"zh": "录音中 · {source}", "en": "Recording · {source}"},
     "rec_status_paused": {"zh": "已暂停 · {source}", "en": "Paused · {source}"},
     "rec_pause": {"zh": "❚❚  暂停", "en": "❚❚  Pause"},
+    "rec_format_mono": {"zh": "48 kHz · 单声道 · WAV", "en": "48 kHz · mono · WAV"},
+    "rec_format_stereo": {"zh": "48 kHz · 立体声 · WAV", "en": "48 kHz · stereo · WAV"},
     "rec_resume": {"zh": "▶  继续录音", "en": "▶  Resume"},
     "rec_stop": {"zh": "■  停止录音", "en": "■  Stop Recording"},
     "rec_hint_idle": {"zh": "停止后可直接转写", "en": "Transcribe right after you stop"},

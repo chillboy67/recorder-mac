@@ -270,6 +270,25 @@ def test_recording_screen_builds_and_cleans_up_without_temps(qapp):
     rec.retranslate()
 
 
+@pytest.mark.parametrize("source, channels", [("mic", "mono"), ("system", "stereo"),
+                                              ("both", "mono")])
+def test_recording_ring_shows_the_real_capture_format(qapp, source, channels):
+    """It used to read a fixed "−14 dB · 16 kHz" placeholder while capturing
+    48 kHz, contradicting the fidelity the app is built around."""
+    from core import i18n
+    from gui.widgets.recording_screen import RecordingScreen
+    i18n.set_language("en")
+    rec = RecordingScreen()
+    try:
+        rec._source = source
+        rec._enter_recording_ui()
+        assert rec._ring._sub == f"48 kHz · {channels} · WAV"
+        rec._exit_recording_ui()
+    finally:
+        i18n.set_language("zh")
+        rec.cleanup_temps()
+
+
 # ── processing screen ───────────────────────────────────────────────
 
 def test_processing_screen_resets_and_reports_progress(qapp):

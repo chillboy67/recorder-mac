@@ -96,7 +96,7 @@ class GlowRing(QWidget):
         super().__init__(parent)
         self.setFixedSize(260, 260)
         self._clock = "00:00:00"
-        self._sub = "−14 dB · 16 kHz"
+        self._sub = ""
 
     def set_time(self, text: str) -> None:
         self._clock = text
