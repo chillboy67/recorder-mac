@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import sys
 import zipfile
 from pathlib import Path
@@ -91,7 +92,7 @@ def test_bundle_has_logs_system_and_redacted_meta(logs, tmp_path):
 
     assert SPOKEN not in everything
     assert str(Path.home()) not in everything
-    assert "~/Documents/a.m4a" in everything
+    assert os.path.join("~", "Documents", "a.m4a") in everything
     assert system["app_version"] and "packages" in system
     transcribe, annotations, removed = meta["steps"]
     assert transcribe["params"] == {"model": "large-v3", "engine": "mlx", "language": "en"}
