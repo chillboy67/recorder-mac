@@ -134,7 +134,10 @@ jobs:
           for _ in $(seq 40); do pactl info > /dev/null 2>&1 && break; sleep 0.5; done
           pactl info > /dev/null || { tail -n 20 "$RUNNER_TEMP"/pipewire*.log "$RUNNER_TEMP"/wireplumber.log; exit 1; }
           pactl load-module module-null-sink sink_name=speakers
-          pactl set-default-sink speakers
+          # The default-device setting lives in metadata WirePlumber publishes;
+          # until it is up, set-default-sink fails with "Not supported".
+          for _ in $(seq 40); do pactl set-default-sink speakers 2> /dev/null && break; sleep 0.5; done
+          test "$(pactl get-default-sink)" = speakers
           pactl info
           echo "XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR" >> "$GITHUB_ENV"
           echo "DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS" >> "$GITHUB_ENV"
