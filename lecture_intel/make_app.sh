@@ -73,7 +73,8 @@ BUNDLED="$(cd "$(dirname "$0")/../Resources/Recorder" 2>/dev/null && pwd)"
 VENV="$APP_HOME/.venv"
 READY="$VENV/.recorder-requirements"   # hash of the requirements.txt last installed
 LOG="$HOME/Library/Logs/Recorder.log"
-export PATH="/opt/homebrew/bin:/usr/local/bin:$HOME/.local/bin:$PATH"   # find ffmpeg/uv from Finder
+# The bundled ffmpeg (bin/) first, then Homebrew's: Finder gives apps a bare PATH.
+export PATH="$APP_HOME/bin:/opt/homebrew/bin:/usr/local/bin:$HOME/.local/bin:$PATH"
 
 mkdir -p "$APP_HOME" "$(dirname "$LOG")"
 # make_app.sh and CI set RECORDER_BOOTSTRAP_ONLY=1: install, print here, don't open the GUI.
@@ -202,6 +203,16 @@ if [[ -n "$UV_BIN" ]]; then
   fi
 else
   echo "  ! uv not found — first launch will fall back to python3 -m venv"
+fi
+
+# --- 2d) Bundle ffmpeg + ffprobe when build_ffmpeg.sh has produced them ----
+# The release workflow always does; a dev build without them uses Homebrew's.
+if [[ -x dist/ffmpeg/bin/ffmpeg && -x dist/ffmpeg/bin/ffprobe ]]; then
+  mkdir -p "$CODE/bin"
+  cp dist/ffmpeg/bin/* "$CODE/bin/"
+  echo "  ✓ bundled $("$CODE/bin/ffmpeg" -hide_banner -version | head -1)"
+else
+  echo "  ! no dist/ffmpeg (run ./build_ffmpeg.sh) — the app will need ffmpeg on PATH"
 fi
 
 # Stamp the build: the launcher re-syncs the code whenever this changes.

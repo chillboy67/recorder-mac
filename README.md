@@ -121,13 +121,13 @@ ffmpeg 预处理（高通去低频隆隆 + 自适应降噪 + 响度归一，**�
 
 ## 快速开始
 
-需要 Python 3.10+ 与 [ffmpeg](https://ffmpeg.org)。进入 `lecture_intel/` 后按平台安装：
+从源码安装需要 Python 3.10+ 与 [ffmpeg](https://ffmpeg.org)（macOS Release 版已内置 ffmpeg，无需另装）。进入 `lecture_intel/` 后按平台安装：
 
 ### macOS
 
 > **不想折腾？直接下 Release**：在 [Releases](https://github.com/chillboy67/recorder-mac/releases/latest) 下载
 > `Recorder-macOS-arm64-*.zip`（Apple Silicon），解压后把 `Recorder.app` 拖进「应用程序」再双击。不用自己装 Python：
-> 首次打开会联网安装运行环境，几分钟后自动打开；ffmpeg 仍需另装（`brew install ffmpeg`）。App 未签名，若被系统拦截，
+> 首次打开会联网安装运行环境，几分钟后自动打开；ffmpeg 已内置，不用另装。App 未签名，若被系统拦截，
 > 到「系统设置 → 隐私与安全性」点「仍要打开」，或运行 `xattr -dr com.apple.quarantine /Applications/Recorder.app`。
 > Intel Mac 请用下面的源码安装。
 
@@ -136,6 +136,7 @@ ffmpeg 预处理（高通去低频隆隆 + 自适应降噪 + 响度归一，**�
 ```bash
 uv venv
 uv pip install -r requirements.txt
+./build_ffmpeg.sh                # 可选：编一个精简 ffmpeg 打进 App（约 1 分钟）
 ./make_app.sh                    # 安装到 /Applications/Recorder.app
 ```
 
@@ -212,6 +213,7 @@ lecture_intel/
 ├── app.py                GUI 入口（双击目标）
 ├── transcribe.py         CLI 入口
 ├── make_app.sh           构建并安装 /Applications/Recorder.app
+├── build_ffmpeg.sh       编译随 App 发布的精简 ffmpeg / ffprobe（仅音频）
 ├── download_models.py    Whisper 模型预下载（镜像直连）
 │
 ├── core/                 引擎
