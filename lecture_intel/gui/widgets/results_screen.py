@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt, Signal, QUrl
+from PySide6.QtCore import QSize, Qt, Signal, QUrl
 from PySide6.QtGui import QDesktopServices, QFont, QGuiApplication
 from PySide6.QtWidgets import (
     QFrame,
@@ -26,6 +26,36 @@ from PySide6.QtWidgets import (
 from core.i18n import t
 from core.languages import display_name
 from gui import theme
+
+
+class _ElidedLabel(QLabel):
+    """One-line label that elides in the middle instead of demanding its full
+    width. A plain QLabel makes a long output path the pane's minimum width,
+    which squeezes the other pane until its footer buttons clip."""
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._full = ""
+
+    def setText(self, text: str) -> None:  # noqa: N802 (Qt naming)
+        self._full = text
+        self.setToolTip(text)
+        self._elide()
+
+    def resizeEvent(self, event) -> None:  # noqa: N802 (Qt naming)
+        super().resizeEvent(event)
+        self._elide()
+
+    def minimumSizeHint(self) -> QSize:  # noqa: N802 (Qt naming)
+        return QSize(0, self.fontMetrics().height() + 4)
+
+    def sizeHint(self) -> QSize:  # noqa: N802 (Qt naming)
+        return QSize(self.fontMetrics().horizontalAdvance(self._full),
+                     self.fontMetrics().height() + 4)
+
+    def _elide(self) -> None:
+        super().setText(self.fontMetrics().elidedText(
+            self._full, Qt.ElideMiddle, self.width()))
 
 
 class _GlassPane(QFrame):
@@ -118,19 +148,22 @@ class ResultsScreen(QWidget):
         self._rail_scroll.setWidgetResizable(True)
         self._rail_scroll.setFrameShape(QScrollArea.NoFrame)
         self._rail_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self._rail_scroll.setStyleSheet("QScrollArea { background: transparent; }")
+        self._rail_scroll.setStyleSheet(
+            "QScrollArea, QScrollArea > QWidget > QWidget { background: transparent; }")
+        self._rail_scroll.viewport().setAutoFillBackground(False)
         self._rail_host = QWidget()
+        self._rail_host.setAutoFillBackground(False)
         self._rail = QVBoxLayout(self._rail_host)
-        self._rail.setContentsMargins(0, 0, 0, 0)
-        self._rail.setSpacing(16)
+        self._rail.setSpacing(4)
         self._rail.setAlignment(Qt.AlignTop)
+        self._rail.setContentsMargins(0, 0, 8, 0)
         self._rail_scroll.setWidget(self._rail_host)
         self._right.body.addWidget(self._rail_scroll)
 
         rfoot = self._right.add_footer()
-        self._path_lbl = QLabel("")
+        self._path_lbl = _ElidedLabel()
         self._path_lbl.setProperty("mono", True)
-        rfoot.addWidget(self._path_lbl)
+        rfoot.addWidget(self._path_lbl, stretch=1)
 
         root.addWidget(self._right, stretch=2)
 
@@ -234,11 +267,8 @@ class ResultsScreen(QWidget):
         if fidelity:
             self._add_fidelity_card(fidelity, c)
 
-        names = QLabel("\n".join(Path(f).name for f in files))
-        names.setProperty("mono", True)
-        names.setWordWrap(True)
         self._rail.addWidget(self._rail_section(t("res_section_files")))
-        self._rail.addWidget(names)
+        self._add_files_card([Path(f).name for f in files])
 
         self._path_lbl.setText(t("res_output", dir=str(self._output_dir)))
         self._btn_folder.setEnabled(True)
@@ -255,26 +285,55 @@ class ResultsScreen(QWidget):
 
     # ── helpers ─────────────────────────────────────────────
 
-    def _rail_section(self, text: str) -> QLabel:
+    def _rail_section(self, text: str) -> QWidget:
+        """Small caps-style heading with breathing room above it."""
+        host = QWidget()
+        hl = QVBoxLayout(host)
+        hl.setContentsMargins(0, 8, 0, 0)
         lbl = QLabel(text)
         c = theme.current_scheme()
         lbl.setStyleSheet(
-            f"font-size: 11px; letter-spacing: 2px; color: {c['ink3']};")
-        return lbl
+            f"font-size: 11px; font-weight: 700; letter-spacing: 1px; "
+            f"color: {c['ink3']};")
+        hl.addWidget(lbl)
+        return host
 
-    def _add_rail_kv(self, key: str, value: str) -> None:
+    def _add_rail_kv(self, key: str, value: str, *, last: bool = False) -> None:
         row = QWidget()
-        rl = QHBoxLayout(row)
+        rl = QVBoxLayout(row)
         rl.setContentsMargins(0, 0, 0, 0)
+        rl.setSpacing(0)
+        line = QHBoxLayout()
+        line.setContentsMargins(0, 4, 0, 4)
         c = theme.current_scheme()
         k = QLabel(key)
         k.setStyleSheet(f"font-size: 12px; color: {c['ink3']};")
-        v = QLabel(value)
-        v.setStyleSheet(f"font-size: 12px; color: {c['ink2']};")
-        v.setAlignment(Qt.AlignRight)
-        rl.addWidget(k)
-        rl.addWidget(v, stretch=1)
+        v = _ElidedLabel()
+        v.setStyleSheet(f"font-size: 12px; font-weight: 600; color: {c['ink']};")
+        v.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        v.setText(value)
+        line.addWidget(k)
+        line.addWidget(v, stretch=1)
+        rl.addLayout(line)
+        if not last:
+            hr = QFrame()
+            hr.setObjectName("hairline")
+            hr.setFixedHeight(1)
+            rl.addWidget(hr)
         self._rail.addWidget(row)
+
+    def _add_files_card(self, names: list[str]) -> None:
+        card = QFrame()
+        card.setObjectName("modeCard")
+        cl = QVBoxLayout(card)
+        cl.setContentsMargins(12, 8, 12, 8)
+        cl.setSpacing(2)
+        for name in names:
+            lbl = _ElidedLabel()
+            lbl.setProperty("mono", True)
+            lbl.setText(name)
+            cl.addWidget(lbl)
+        self._rail.addWidget(card)
 
     def _add_fidelity_card(self, fid: dict, c: dict) -> None:
         """At-a-glance counts for the fidelity layer.
@@ -287,10 +346,15 @@ class ResultsScreen(QWidget):
         """
         self._rail.addWidget(self._rail_section(t("res_section_fidelity")))
         if not fid.get("total"):
+            card = QFrame()
+            card.setObjectName("modeCard")
+            cl = QVBoxLayout(card)
+            cl.setContentsMargins(12, 7, 12, 7)
             none_lbl = QLabel(t("res_fid_none"))
             none_lbl.setWordWrap(True)
-            none_lbl.setStyleSheet(f"font-size: 12px; color: {c['ink3']};")
-            self._rail.addWidget(none_lbl)
+            none_lbl.setStyleSheet(f"font-size: 12px; color: {c['ok']};")
+            cl.addWidget(none_lbl)
+            self._rail.addWidget(card)
             return
         row = QHBoxLayout()
         row.setSpacing(10)

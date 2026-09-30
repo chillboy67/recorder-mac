@@ -608,3 +608,25 @@ def test_onboarding_strip_shows_once_until_dismissed(qapp, isolated_prefs):
     finally:
         window.close()
         window.deleteLater()
+
+
+def test_long_output_path_does_not_squeeze_the_footer_buttons(qapp):
+    """A long output path used to set the right pane's minimum width, pushing
+    the screen past the window and clipping the left pane's button labels."""
+    screen = ResultsScreen()
+    screen.resize(972, 560)               # what the 1068-wide window leaves it
+    screen.load_results(_result(
+        "general", output_dir="/Users/someone/Documents/recorder/Recorder/" + "x" * 60))
+    painted(screen)
+    assert screen.minimumSizeHint().width() <= 972
+    for btn in (screen._btn_folder, screen._btn_copy, screen._btn_new):
+        assert btn.width() >= btn.sizeHint().width()
+    assert "x" * 60 in screen._path_lbl.toolTip()     # full path still reachable
+
+
+def test_info_rail_has_no_opaque_slab(qapp):
+    """The scroll host used to paint the default palette as a grey block."""
+    screen = ResultsScreen()
+    screen.load_results(_result("general", fidelity={**FIDELITY, "total": 0}))
+    assert not screen._rail_scroll.viewport().autoFillBackground()
+    assert not screen._rail_host.autoFillBackground()
