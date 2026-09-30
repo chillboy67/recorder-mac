@@ -40,6 +40,7 @@ from core.i18n import t
 from core.model_cache import (faster_whisper_cache_dir, find_faster_whisper_model,
                               mlx_cache_dir, whisper_cpp_model_available,
                               whisper_cpp_model_path)
+from core.model_download import download_with_progress, expected_bytes, repo_cache_dir
 from core.languages import (detect_language, disambiguate_latin_language,
                             english_function_words_dominate, _LATIN_LANGS)
 
@@ -337,6 +338,72 @@ class Transcriber:
     # MLX
     # ------------------------------------------------------------------
 
+    # ------------------------------------------------------------------
+    # First-run downloads, with progress
+    # ------------------------------------------------------------------
+
+    def _download_report(self, progress):
+        def report(done: int, total: Optional[int]) -> None:
+            if not progress:
+                return
+            if total:
+                progress(0.04 * done / total, t(
+                    "tr_download_progress", model=self.model, done=f"{done / 1e9:.2f}",
+                    total=f"{total / 1e9:.2f}", pct=int(done * 100 / total)))
+            else:
+                progress(0.0, t("tr_download_bytes", model=self.model,
+                                done=f"{done / 1e9:.2f}"))
+        return report
+
+    def _prefetch_mlx(self, progress) -> None:
+        """Download the mlx model the way mlx-whisper would, but with progress.
+
+        mlx-whisper calls ``snapshot_download(repo_id=...)`` for a repo id that
+        is not a local folder; doing the same first leaves the model where it
+        looks. A failure is only logged: the load then fails with its own error."""
+        repo = self._mlx_repo()
+        if Path(repo).exists():
+            return
+        try:
+            from huggingface_hub import snapshot_download
+        except ImportError:
+            return
+        try:
+            snapshot_download(repo_id=repo, local_files_only=True)
+            return                                   # already cached
+        except Exception:
+            pass
+        try:
+            download_with_progress(lambda: snapshot_download(repo_id=repo),
+                                   repo_cache_dir(repo), expected_bytes(repo),
+                                   self._download_report(progress))
+        except Exception as exc:
+            logger.warning("Downloading %s failed: %s", repo, exc)
+
+    # The files faster-whisper's download_model fetches, for the size estimate.
+    _FASTER_FILES = ("config.json", "preprocessor_config.json", "model.bin",
+                     "tokenizer.json", "vocabulary.*")
+
+    def _prefetch_faster(self, progress) -> None:
+        """Same as ``_prefetch_mlx``, through faster-whisper's own downloader."""
+        if find_faster_whisper_model(self.model) is not None:
+            return
+        try:
+            from faster_whisper import utils as fw_utils
+        except ImportError:
+            return
+        repo = getattr(fw_utils, "_MODELS", {}).get(self.model)
+        if repo is None:           # a path or repo id the caller manages
+            return
+        cache = faster_whisper_cache_dir()
+        try:
+            download_with_progress(
+                lambda: fw_utils.download_model(self.model, cache_dir=str(cache)),
+                repo_cache_dir(repo, cache), expected_bytes(repo, self._FASTER_FILES),
+                self._download_report(progress))
+        except Exception as exc:
+            logger.warning("Downloading %s failed: %s", repo, exc)
+
     def _mlx_repo(self) -> str:
         # Prefer a locally downloaded model (via download_models.py). This makes
         # transcription fully offline and sidesteps networks where HuggingFace
@@ -353,6 +420,7 @@ class Transcriber:
     ):
         import mlx_whisper
 
+        self._prefetch_mlx(progress)
         if progress:
             progress(0.05, t("tr_mlx"))
         result = mlx_whisper.transcribe(
@@ -389,6 +457,8 @@ class Transcriber:
         import mlx_whisper
         import numpy as np
         import soundfile as sf
+
+        self._prefetch_mlx(progress)
 
         wav, sr = sf.read(str(audio_path))
         if wav.ndim > 1:
@@ -482,9 +552,10 @@ class Transcriber:
     # faster-whisper (CPU fallback)
     # ------------------------------------------------------------------
 
-    def _load_faster(self):
+    def _load_faster(self, progress=None):
         if self._faster_model is None:
             from faster_whisper import WhisperModel
+            self._prefetch_faster(progress)
             cached_model = find_faster_whisper_model(self.model)
             model_ref = str(cached_model) if cached_model else self.model
             threads = max(1, min(8, os.cpu_count() or 4))
@@ -509,7 +580,7 @@ class Transcriber:
         self, audio_path, language, initial_prompt, condition_on_previous,
         progress, temperature=TEMPERATURE_LADDER,
     ):
-        model = self._load_faster()
+        model = self._load_faster(progress)
         if progress:
             progress(0.05, t("tr_cpu"))
         seg_iter, info = model.transcribe(

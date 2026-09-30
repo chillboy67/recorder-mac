@@ -452,6 +452,12 @@ _CATALOG: dict[str, dict[str, str]] = {
                              "en": "{backend} unavailable — switching to CPU faster-whisper ({model})…"},
     "tr_done": {"zh": "转写完成", "en": "Transcription complete"},
     "tr_mlx": {"zh": "转写中（MLX 加速）…", "en": "Transcribing (MLX accelerated)…"},
+    "tr_download_progress": {
+        "zh": "首次使用，正在下载 {model} 模型：{done} / {total} GB（{pct}%）",
+        "en": "First use: downloading the {model} model, {done} / {total} GB ({pct}%)",
+    },
+    "tr_download_bytes": {"zh": "首次使用，正在下载 {model} 模型：已下载 {done} GB",
+                          "en": "First use: downloading the {model} model, {done} GB so far"},
     "tr_gpu_chunk": {"zh": "转写中（GPU 分块）…", "en": "Transcribing (GPU, chunked)…"},
     "tr_cpu": {"zh": "转写中（CPU）…", "en": "Transcribing (CPU)…"},
     "tr_warn_fallback": {"zh": "{backend} 运行失败，已回退 CPU faster-whisper：{exc}",
