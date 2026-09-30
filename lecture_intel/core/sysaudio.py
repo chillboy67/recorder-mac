@@ -53,9 +53,16 @@ def _installed_native_dir(platform_key: str) -> Path:
 
 def _helper_candidates(platform_key: str, name: str) -> list[Path]:
     """Installed copy first (the app may run from a data dir), then the source
-    tree so a dev checkout works without re-running the platform installer."""
+    tree so a dev checkout works without re-running the platform installer.
+
+    Linux is the exception: the app always runs from the source tree and the
+    helper is a script, so the tree copy is always in step with the code; a
+    copy the installer left behind would go stale after a ``git pull``."""
     tree = Path(__file__).resolve().parent.parent / "native" / name
-    return [_installed_native_dir(platform_key) / name, tree]
+    installed = _installed_native_dir(platform_key) / name
+    if platform_key == "linux":
+        return [tree, installed]
+    return [installed, tree]
 
 
 def _is_launchable(path: Path, platform_key: str) -> bool:

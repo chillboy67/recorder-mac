@@ -127,6 +127,23 @@ def test_darwin_prefers_the_installed_copy_over_the_tree(tmp_path, monkeypatch):
     assert S.binary_path() == installed
 
 
+def test_linux_prefers_the_tree_helper_over_the_installed_copy(tmp_path, monkeypatch):
+    """Linux runs from the source tree; an installed copy from an earlier
+    install_linux.sh must not shadow the helper updated by a git pull."""
+    monkeypatch.setattr(S, "_platform_key", lambda: "linux")
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "share"))
+    monkeypatch.setattr(S, "__file__", str(tmp_path / "fake" / "core" / "sysaudio.py"))
+    tree = tmp_path / "fake" / "native" / "SystemAudioRecorderLinux.py"
+    tree.parent.mkdir(parents=True)
+    tree.write_text("STDIN_CONTROL_V1", encoding="utf-8")
+    installed = tmp_path / "share" / "Recorder" / "native" / "SystemAudioRecorderLinux.py"
+    installed.parent.mkdir(parents=True)
+    installed.write_text("STDIN_CONTROL_V1", encoding="utf-8")
+    assert S.binary_path() == tree
+    tree.unlink()
+    assert S.binary_path() == installed
+
+
 def test_linux_helper_runs_with_current_python(tmp_path, monkeypatch):
     monkeypatch.setattr(S, "_platform_key", lambda: "linux")
     helper = tmp_path / "SystemAudioRecorderLinux.py"
