@@ -8,6 +8,22 @@ A fully local audio-to-text desktop app. macOS has a double-click app installer;
 Windows and Linux have source-bootstrap install and launch scripts. Everything
 runs offline — no cloud API calls, and audio and text never leave the machine.
 
+<div align="center">
+  <p>Light / dark mode</p>
+  <p>
+    <img src="docs/screenshots/screenshot-01-input.png" width="350" alt="Input (light): drop an audio file or record live" />
+    <img src="docs/screenshots/screenshot-01-input-dark.png" width="350" alt="Input (dark): drop an audio file or record live" />
+  </p>
+  <p>
+    <img src="docs/screenshots/screenshot-02-recording.png" width="350" alt="Recording in progress (light)" />
+    <img src="docs/screenshots/screenshot-02-recording-dark.png" width="350" alt="Recording in progress (dark)" />
+  </p>
+  <p>
+    <img src="docs/screenshots/screenshot-03-transcribe.png" width="350" alt="Transcribing (light)" />
+    <img src="docs/screenshots/screenshot-03-transcribe-dark.png" width="350" alt="Transcribing (dark)" />
+  </p>
+</div>
+
 Built on **transcription accuracy** as the foundation, with three purpose-built modes on top:
 
 | Mode | Scenario | Output |
