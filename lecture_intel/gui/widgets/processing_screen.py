@@ -44,6 +44,16 @@ CREEP_SHARE = 0.006          # share of the remaining gap covered per second
 STEP_CEILING = {"load": 8, "denoise": 16, "asr": 75, "diarize": 85,
                 "analyze": 94, "export": 100}
 
+# Nor may it jump: an update ahead of the ring waits in line while the ring
+# sweeps up to it, and only then shows its line and ticks its step — so a
+# run that finishes early (28% → done) still plays every milestone. Once the
+# run is over the sweep stops at SETTLE_AT and `settled` fires right away.
+# At each major milestone — a step starting or finishing — it pauses briefly.
+FRAME_MS = 30
+SWEEP_PER_S = 40.0           # percent per second while catching up
+PAUSE_FRAMES = 13            # ≈0.4s rest on a major milestone
+SETTLE_AT = 99
+
 
 def _cheers(percent: float) -> tuple[str, ...]:
     if percent >= 67:
@@ -55,6 +65,7 @@ def _cheers(percent: float) -> tuple[str, ...]:
 
 class ProcessingScreen(QWidget):
     cancel_requested = Signal()
+    settled = Signal()               # the ring has played out after settle()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -65,9 +76,15 @@ class ProcessingScreen(QWidget):
         self._idle = 0               # ticks since real progress last moved
         self._line = ""              # latest real message
         self._line_age = 0           # ticks the latest message has been up
+        self._queue: list[dict] = []  # updates the ring hasn't swept up to yet
+        self._settling = False       # settle() asked; fire `settled` at SETTLE_AT
+        self._pause = 0              # sweep frames left to rest on a milestone
         self._timer = QTimer(self)
         self._timer.setInterval(TICK_MS)
         self._timer.timeout.connect(self._tick)
+        self._sweep = QTimer(self)
+        self._sweep.setInterval(FRAME_MS)
+        self._sweep.timeout.connect(self._frame)
         self._build_ui()
 
     def _build_ui(self) -> None:
@@ -124,6 +141,10 @@ class ProcessingScreen(QWidget):
         self._step_widgets.clear()
         self._step_start.clear()
         self._timer.stop()
+        self._sweep.stop()
+        self._queue.clear()
+        self._settling = False
+        self._pause = 0
         self._shown = self._ceiling = 0.0
         self._idle = self._line_age = 0
         self._line = t("proc_preparing")
@@ -154,11 +175,82 @@ class ProcessingScreen(QWidget):
                                         "name": name, "time": tlbl, "key": step}
 
     def update_progress(self, info: dict) -> None:
+        info = {**info, "_at": time.time()}
+        if info.get("status") == "error":
+            self._sweep.stop()
+            self._queue.clear()
+            self._apply(info)
+            return
+        # Ahead of the ring (or behind one that is) → wait for the sweep.
+        if self._queue or info.get("percent", 0) > self._shown:
+            self._queue.append(info)
+            if not self._sweep.isActive():
+                self._sweep.start()
+            return
+        self._apply(info)
+
+    def settle(self) -> None:
+        """The run is over: play the ring out to SETTLE_AT, then emit
+        `settled`."""
+        self._settling = True
+        top = max([q.get("percent", 0) for q in self._queue] + [self._shown])
+        if top < 100:
+            self._queue.append({"step": "", "message": self._line,
+                                "percent": 100, "status": "done",
+                                "_at": time.time()})
+        if self._queue:
+            if not self._sweep.isActive():
+                self._sweep.start()
+        else:
+            self._maybe_settle()
+
+    def _frame(self) -> None:
+        if self._pause:
+            self._pause -= 1
+            return
+        if self._queue:
+            target = float(self._queue[0].get("percent", 0))
+            if self._settling:
+                target = min(target, SETTLE_AT)
+            step = SWEEP_PER_S * FRAME_MS / 1000
+            self._shown = max(self._shown, min(target, self._shown + step))
+            while self._queue and self._queue[0].get("percent", 0) <= self._shown:
+                info = self._queue.pop(0)
+                major = self._is_major(info)
+                self._apply(info)
+                if major:
+                    self._pause = PAUSE_FRAMES
+                    break
+            if self._settling and self._shown >= SETTLE_AT:
+                self._queue.clear()       # the results screen takes it from here
+        self._paint_ring()
+        if not self._queue:
+            self._sweep.stop()
+            self._maybe_settle()
+
+    def _is_major(self, info: dict) -> bool:
+        """A step starting or finishing — what the step list shows."""
+        w = self._step_widgets.get(info.get("step", ""))
+        if w is None:
+            return False
+        status = info.get("status", "running")
+        return status == "done" or (
+            status == "running"
+            and w["icon"].text() == STATUS_ICONS["waiting"])
+
+    def _maybe_settle(self) -> None:
+        if self._settling and not self._queue and self._shown >= SETTLE_AT:
+            self._settling = False
+            self.settled.emit()
+
+    def _apply(self, info: dict) -> None:
+        """Show one update: its line on the ring and its step's status."""
         step = info.get("step", "")
         message = info.get("message", "")
         percent = info.get("percent", 0)
         status = info.get("status", "running")
-        if percent > self._shown:
+        now = info.get("_at", time.time())
+        if percent >= self._shown:
             self._shown = float(percent)
             self._idle = 0
         self._ceiling = STEP_CEILING.get(step, self._shown)
@@ -181,13 +273,13 @@ class ProcessingScreen(QWidget):
         w["icon"].setStyleSheet(
             f"color: {colors.get(status, c['accent'])}; font-size: 13px;")
         if status == "running":
-            self._step_start[step] = time.time()
+            self._step_start[step] = now
             w["name"].setStyleSheet(
                 f"color: {c['accent']}; font-size: 13px; font-weight: 600;")
             w["time"].setText(t("proc_in_progress"))
             w["time"].setStyleSheet(f"color: {c['accent']}; font-size: 11px;")
         elif status == "done":
-            elapsed = time.time() - self._step_start.get(step, time.time())
+            elapsed = now - self._step_start.get(step, now)
             w["name"].setStyleSheet(f"color: {c['ink2']}; font-size: 13px;")
             w["time"].setText(f"{elapsed:.1f}s")
             w["time"].setStyleSheet(f"color: {c['ink3']}; font-size: 11px;")
@@ -199,13 +291,16 @@ class ProcessingScreen(QWidget):
         self._line_age += 1
         self._idle += 1
         gap = self._ceiling - 1 - self._shown
-        if self._idle >= CREEP_AFTER_TICKS and gap > 0:
+        if (not self._sweep.isActive() and self._idle >= CREEP_AFTER_TICKS
+                and gap > 0):
             self._shown += gap * CREEP_SHARE
         self._paint_ring()
 
     def _paint_ring(self) -> None:
         lines = (self._line, *(t(k) for k in _cheers(self._shown)))
         label = lines[(self._line_age // ROTATE_TICKS) % len(lines)]
+        if self._sweep.isActive():
+            label = self._line        # a sweep reads out its milestones only
         self._ring.set_progress(int(self._shown), label[:22])
 
     def hideEvent(self, event) -> None:

@@ -97,7 +97,9 @@ def run(
         report("denoise", t("eng_denoise_done"), 16, "done")
 
     # 3) Transcribe (whole file) --------------------------------------------
-    report("asr", t("eng_asr_start"), 20)
+    # Transcription is the long, real wait; it starts at 30% so the ring rests
+    # there rather than near the bottom, and its progress spans 30 → 75%.
+    report("asr", t("eng_asr_start"), 30)
 
     # A caller-supplied language overrides the mode preset; "auto"/"" normalize
     # to None, which re-enables per-chunk detection on mixed-language audio.
@@ -107,7 +109,7 @@ def run(
         logger.info("Language pinned to %s; per-chunk language detection disabled", lang)
 
     def asr_progress(frac, msg):
-        report("asr", msg, 20 + int(frac * 55))
+        report("asr", msg, 30 + int(frac * 45))
 
     transcriber = Transcriber(model=model, engine=engine or mode.engine)
     asr: ASRResult = transcriber.transcribe(

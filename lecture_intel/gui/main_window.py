@@ -75,6 +75,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self._worker: PipelineWorker | None = None
         self._last_output_dir: str | None = None   # for the diagnostics bundle
+        self._done: dict | None = None     # finished result awaiting the ring
         self._prefs = QSettings("LucasLab", "Recorder")
         self._status_key: str | None = None
         self._status_args: dict = {}
@@ -280,6 +281,7 @@ class MainWindow(QMainWindow):
 
         self._processing = ProcessingScreen()
         self._processing.cancel_requested.connect(self._cancel_processing)
+        self._processing.settled.connect(self._show_results)
         self._stack.addWidget(self._processing)
 
         self._results = ResultsScreen()
@@ -371,13 +373,21 @@ class MainWindow(QMainWindow):
         # as original.wav) — the capture temps can go. A user-saved copy in
         # record_dir() is a different file and is untouched.
         self._recording.cleanup_temps()
-        total_s = result.get("stats", {}).get("total_time_s", 0)
         self._results.load_results(result)
+        self._done = result
+        self._send_notification(
+            "Recorder", t("notify_done", name=Path(result["output_dir"]).name))
+        # Let the ring play out to 100% before the results screen takes over.
+        self._processing.settle()
+
+    def _show_results(self) -> None:
+        result, self._done = self._done, None
+        if result is None or self._stack.currentIndex() != PROCESSING:
+            return                # cancelled or navigated away meanwhile
+        total_s = result.get("stats", {}).get("total_time_s", 0)
         self._go(RESULTS, "state_done", "ok", seconds=f"{total_s:.0f}")
         self._show_status("status_done", seconds=f"{total_s:.0f}",
                           dir=result["output_dir"])
-        self._send_notification(
-            "Recorder", t("notify_done", name=Path(result["output_dir"]).name))
 
     def _on_error(self, msg: str) -> None:
         logging.getLogger("recorder.gui").error("Processing failed:\n%s", msg)

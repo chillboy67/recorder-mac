@@ -312,6 +312,7 @@ def test_processing_screen_never_sits_still(qapp):
     screen.reset(["asr"])
     screen.update_progress({"step": "asr", "percent": 20, "status": "running",
                             "message": "叫醒识别小助手"})
+    _sweep_out(screen)
     assert screen._timer.isActive()
     labels = []
     for _ in range(3 * P.ROTATE_TICKS):
@@ -333,8 +334,84 @@ def test_processing_screen_never_sits_still(qapp):
 
     screen.update_progress({"step": "export", "percent": 100, "status": "done",
                             "message": "好啦！"})
+    assert screen._ring._percent == crept             # sweeps, never jumps
+    _sweep_out(screen)
     assert not screen._timer.isActive()
     assert screen._ring._percent == 100
+
+
+def _sweep_out(screen, limit: int = 1000) -> list[tuple[int, str]]:
+    """Run the catch-up animation to its end; return each frame's ring."""
+    frames = []
+    for _ in range(limit):
+        if not screen._sweep.isActive():
+            break
+        screen._frame()
+        frames.append((screen._ring._percent, screen._ring._label))
+    assert not screen._sweep.isActive()
+    return frames
+
+
+def test_processing_screen_plays_every_milestone_when_the_run_ends_early(qapp):
+    """20% → done at once still sweeps through each milestone in order,
+    ticking each step only when the ring reaches it, and hands over to the
+    results at 99% — never sitting on 100%."""
+    from core import i18n
+    from gui.widgets import processing_screen as P
+    i18n.set_language("zh")
+    screen = P.ProcessingScreen()
+    screen.reset(["load", "asr", "export"])
+    fired = []
+    screen.settled.connect(lambda: fired.append(screen._ring._percent))
+    screen.update_progress({"step": "asr", "percent": 20, "status": "running",
+                            "message": "叫醒识别小助手"})
+    _sweep_out(screen)
+    assert screen._ring._percent == 20
+
+    tail = [("asr", 72, "running", "一字一句记下来"),
+            ("asr", 76, "done", "记好啦，共 25 段"),
+            ("export", 96, "running", "打包好送给你"),
+            ("export", 100, "done", "好啦！")]
+    for step, pct, status, msg in tail:
+        screen.update_progress({"step": step, "percent": pct,
+                                "status": status, "message": msg})
+    screen.settle()                                   # the result came in
+    assert screen._ring._percent == 20                # nothing jumped yet
+    assert screen._step_widgets["asr"]["icon"].text() == P.STATUS_ICONS["running"]
+    assert fired == []
+
+    frames = _sweep_out(screen)
+    percents = [p for p, _ in frames]
+    assert percents == sorted(percents)               # never backwards
+    assert len(set(percents)) > 60                    # passing through, not skipping
+    shown = [lab for _, lab in frames]
+    played = tail[:-1]
+    firsts = [shown.index(msg) for *_, msg in played]
+    assert firsts == sorted(firsts)                   # each line, in order
+    for (_, pct, _, msg) in played:
+        assert frames[shown.index(msg)][0] >= pct - 1   # only once reached
+    assert screen._step_widgets["asr"]["icon"].text() == P.STATUS_ICONS["done"]
+    # rests on each step starting/finishing, but not on a mere chunk update
+    assert percents.count(76) > P.PAUSE_FRAMES        # asr ✓
+    assert percents.count(96) > P.PAUSE_FRAMES        # export starts
+    assert percents.count(72) < P.PAUSE_FRAMES        # chunk progress
+    assert max(percents) == P.SETTLE_AT               # never shows 100%
+    assert fired == [P.SETTLE_AT]                     # and hands over at once
+
+
+def test_processing_screen_settles_without_a_final_update(qapp):
+    from gui.widgets import processing_screen as P
+    screen = P.ProcessingScreen()
+    screen.reset(["asr"])
+    fired = []
+    screen.settled.connect(lambda: fired.append(screen._ring._percent))
+    screen.update_progress({"step": "asr", "percent": 30, "status": "running",
+                            "message": "x"})
+    _sweep_out(screen)
+    screen.settle()                                   # no 100% update came
+    assert fired == []
+    _sweep_out(screen)
+    assert fired == [P.SETTLE_AT]
 
 
 # ── results screen ──────────────────────────────────────────────────
@@ -569,6 +646,35 @@ def test_on_finished_survives_a_failing_notification(main_window, monkeypatch,
     monkeypatch.setattr(subprocess, "run", missing)
     main_window._on_finished(_result("general", output_dir=str(tmp_path)))
     assert main_window._results._output_dir == str(tmp_path)
+
+
+def test_results_wait_for_the_ring_to_play_out(main_window, monkeypatch, tmp_path):
+    from gui import main_window as mw
+    monkeypatch.setattr(main_window, "_send_notification", lambda *a: None)
+    proc = main_window._processing
+    proc.reset(["load", "asr", "export"], "take.wav")
+    main_window._go(mw.PROCESSING)
+    proc.update_progress({"step": "asr", "percent": 28, "status": "running",
+                          "message": "x"})
+    _sweep_out(proc)
+    proc.update_progress({"step": "export", "percent": 100, "status": "done",
+                          "message": "好啦！"})
+    main_window._on_finished(_result("general", output_dir=str(tmp_path)))
+    assert main_window._stack.currentIndex() == mw.PROCESSING   # still sweeping
+    _sweep_out(proc)
+    assert main_window._stack.currentIndex() == mw.RESULTS
+
+
+def test_cancel_during_the_play_out_stays_home(main_window, monkeypatch, tmp_path):
+    from gui import main_window as mw
+    monkeypatch.setattr(main_window, "_send_notification", lambda *a: None)
+    proc = main_window._processing
+    proc.reset(["asr"], "take.wav")
+    main_window._go(mw.PROCESSING)
+    main_window._on_finished(_result("general", output_dir=str(tmp_path)))
+    main_window._cancel_processing()
+    _sweep_out(proc)
+    assert main_window._stack.currentIndex() == mw.HOME
 
 
 # ── first-run strip ─────────────────────────────────────────────────
