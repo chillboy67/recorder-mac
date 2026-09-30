@@ -73,6 +73,8 @@ QSS_DISPLAY = '"Space Grotesk", "SF Pro Display", "Helvetica Neue"'
 ```
 main_window.py   顶栏 + 步骤轨(step_rail) + 4 屏 stack
   home_screen.py        空闲页：模式卡片 + 底部设置行（原 settings_panel 已并入）
+  onboarding.py         首页顶部的新手引导条：三步说明 + 麦克风测试（只听几秒、不存文件、不下载模型）；
+                        「知道了」写入偏好键 onboarding_done，「帮助 → 显示新手引导」可重新打开
   recording_screen.py   录音页：GlowRing + WaveBars + PulseDot（无进度环）
   processing_screen.py  处理页：ProgressRing + 玻璃步骤卡
   results_screen.py     结果页：双玻璃面板

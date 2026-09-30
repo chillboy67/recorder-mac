@@ -173,6 +173,28 @@ _CATALOG: dict[str, dict[str, str]] = {
     "menu_help": {"zh": "帮助", "en": "Help"},
     "menu_help_docs": {"zh": "打开说明", "en": "Open Documentation"},
     "menu_help_diagnostics": {"zh": "导出诊断包…", "en": "Export Diagnostics…"},
+    "menu_help_onboarding": {"zh": "显示新手引导", "en": "Show Getting Started"},
+    "onb_title": {"zh": "第一次使用？", "en": "New here?"},
+    "onb_steps": {"zh": "选下方模式 → 拖入音频或实时录音 → 开始转写",
+                  "en": "Pick a mode, add audio or record, then start."},
+    "onb_steps_tip": {
+        "zh": "第一次转写会先下载识别模型（界面会显示进度），之后可以断网使用。",
+        "en": "The first transcription downloads the speech model (with progress shown); "
+              "after that Recorder works offline.",
+    },
+    "onb_check": {"zh": "测试麦克风", "en": "Test Microphone"},
+    "onb_check_again": {"zh": "再测一次", "en": "Test Again"},
+    "onb_dismiss": {"zh": "知道了", "en": "Got It"},
+    "onb_mic_listening": {"zh": "正在听…说句话试试（不会保存）",
+                          "en": "Listening… say something (nothing is saved)"},
+    "onb_mic_ok": {"zh": "麦克风正常（峰值 {db} dB）", "en": "Microphone works (peak {db} dB)"},
+    "onb_mic_silent": {
+        "zh": "没有收到声音：换一个麦克风试试，或在系统设置里允许 Recorder 使用麦克风",
+        "en": "No sound arrived: try another microphone, or allow Recorder to use it in system settings",
+    },
+    "onb_mic_error": {"zh": "无法测试麦克风：{error}", "en": "Could not test the microphone: {error}"},
+    "onb_mic_none": {"zh": "没有找到麦克风", "en": "No microphone found"},
+    "onb_mic_failed": {"zh": "麦克风无法打开", "en": "The microphone could not be opened"},
     "diag_save_title": {"zh": "导出诊断包", "en": "Export Diagnostics"},
     "diag_saved": {
         "zh": "诊断包已保存到：\n{path}\n\n"

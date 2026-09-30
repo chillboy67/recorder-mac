@@ -179,6 +179,14 @@ class HomeScreen(QWidget):
         outer.addLayout(root)
         outer.addStretch(1)
 
+        # ---- first-run strip: the three steps + a mic check ----
+        from gui.widgets.onboarding import OnboardingStrip
+        self._onboarding = OnboardingStrip(lambda: self._mic_combo.currentData())
+        self._onboarding.dismissed.connect(self._dismiss_onboarding)
+        self._onboarding.setVisible(
+            not self._prefs.value("onboarding_done", False, type=bool))
+        root.addWidget(self._onboarding, alignment=Qt.AlignHCenter)
+
         # ---- input card (drop state) ----
         self._drop_card = QFrame()
         self._drop_card.setObjectName("glassCard")
@@ -604,9 +612,19 @@ class HomeScreen(QWidget):
         self._drop_card.setProperty("drop", "")
         theme.repolish(self._drop_card)
 
+    # ── first-run strip ──────────────────────────────
+
+    def _dismiss_onboarding(self) -> None:
+        self._prefs.setValue("onboarding_done", True)
+        self._onboarding.setVisible(False)
+
+    def show_onboarding(self) -> None:
+        self._onboarding.setVisible(True)
+
     # ── live language switch ─────────────────────────
 
     def retranslate(self) -> None:
+        self._onboarding.retranslate()
         self._drop_title.setText(t("home_drop_title"))
         self._browse_btn.setText(t("home_browse"))
         self._rec_btn.setText(t("home_record"))
