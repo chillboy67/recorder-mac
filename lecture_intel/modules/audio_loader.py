@@ -39,7 +39,7 @@ MAGIC_SIGNATURES: dict[str, list[bytes]] = {
     "flac": [b"fLaC"],
     "ogg": [b"OggS"],
     "m4a": [],   # ISOBMFF: check for 'ftyp' at offset 4
-    "aac": [],   # same as m4a
+    "aac": [b"\xff\xf1", b"\xff\xf9"],   # raw ADTS stream; in an MP4 box it is m4a
     "webm": [b"\x1a\x45\xdf\xa3"],
 }
 

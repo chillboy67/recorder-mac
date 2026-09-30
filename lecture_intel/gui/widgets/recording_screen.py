@@ -245,29 +245,11 @@ class RecordingScreen(QWidget):
                 self._finalize(self._mic_path)
 
     def _mix(self, mic: str | None, sysp: str | None) -> str | None:
-        import shutil
-        import subprocess
-        have = [p for p in (mic, sysp)
-                if p and Path(p).exists() and Path(p).stat().st_size > 1024]
-        if not have:
-            return None
-        if len(have) == 1:
-            return have[0]
-        ffmpeg = shutil.which("ffmpeg") or "/opt/homebrew/bin/ffmpeg"
-        out = tempfile.NamedTemporaryFile(
-            suffix=".wav", prefix="lecture_mix_", delete=False)
-        out.close()
-        cmd = [ffmpeg, "-y", "-i", have[0], "-i", have[1],
-               "-filter_complex", "amix=inputs=2:duration=longest:normalize=0",
-               "-ac", "1", "-ar", "48000", out.name]
-        try:
-            r = subprocess.run(cmd, capture_output=True, text=True)
-            if r.returncode == 0 and Path(out.name).stat().st_size > 1024:
-                self._mix_path = out.name
-                return out.name
-        except Exception:
-            pass
-        return have[0]
+        from core.sysaudio import mix_recordings
+        mixed = mix_recordings(mic, sysp)
+        if mixed not in (mic, sysp):
+            self._mix_path = mixed
+        return mixed
 
     def cleanup_temps(self) -> None:
         """Delete the capture temps (mic / system / mix wavs) once processing

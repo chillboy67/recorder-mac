@@ -116,6 +116,34 @@ def _helper_command(helper: Path, output_path: str) -> list[str]:
     return [str(helper), output_path]
 
 
+def mix_recordings(mic: Optional[str], sysp: Optional[str]) -> Optional[str]:
+    """Mix the mic and system-audio captures into one 48 kHz mono WAV.
+
+    Returns the new temp file, the only non-empty capture when just one
+    exists (or the mix fails), or None when there is nothing to use."""
+    have = [p for p in (mic, sysp)
+            if p and Path(p).exists() and Path(p).stat().st_size > 1024]
+    if not have:
+        return None
+    if len(have) == 1:
+        return have[0]
+    ffmpeg = shutil.which("ffmpeg") or "/opt/homebrew/bin/ffmpeg"
+    out = tempfile.NamedTemporaryFile(
+        suffix=".wav", prefix="lecture_mix_", delete=False)
+    out.close()
+    cmd = [ffmpeg, "-y", "-i", have[0], "-i", have[1],
+           "-filter_complex", "amix=inputs=2:duration=longest:normalize=0",
+           "-ac", "1", "-ar", "48000", out.name]
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True)
+        if r.returncode == 0 and Path(out.name).stat().st_size > 1024:
+            return out.name
+    except Exception:
+        pass
+    Path(out.name).unlink(missing_ok=True)
+    return have[0]
+
+
 class SystemAudioRecorder:
     """Start, pause, resume and stop system-audio capture to a temp WAV."""
 
