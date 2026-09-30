@@ -350,6 +350,11 @@ revisit if wanted.
 
 - The model and all processing run on-device — **no network requests at all** (aside from the initial model download).
 - Recordings and transcripts are written to a local data directory (see `core/paths.py`); the repository ships no audio.
+- App logs and crash traces stay on your machine (macOS `~/Library/Logs/Recorder/`, Windows
+  `%LOCALAPPDATA%\Recorder\Logs`, Linux `~/.local/state/recorder/logs`) and are never uploaded. To report a problem,
+  Help → Export Diagnostics… writes a zip you can attach to an issue: the logs, system and package versions, and the
+  last run's processing steps with every spoken word replaced by its length — **no audio and no transcript**, with
+  your home folder shown as `~`.
 
 ---
 

@@ -331,6 +331,9 @@ LanguageTool 保持 en-US（诊断对象即考生英文）。中英混说的判�
 
 - 模型与全部处理都在本机，**没有任何网络请求**（除首次下载模型）。
 - 录音与转写结果写入本地数据目录（见 `core/paths.py`），仓库不收录任何音频。
+- 运行日志和崩溃记录只写在本机（macOS `~/Library/Logs/Recorder/`，Windows `%LOCALAPPDATA%\Recorder\Logs`，
+  Linux `~/.local/state/recorder/logs`），不会上传。遇到问题时可用「帮助 → 导出诊断包…」打一个 zip 附到 issue：
+  里面是日志、系统与依赖版本、最近一次处理的步骤记录（原话替换为字数），**不含录音和逐字稿**，用户目录显示为 `~`。
 
 ---
 

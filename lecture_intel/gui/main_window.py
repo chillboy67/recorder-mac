@@ -11,6 +11,7 @@ Pipeline lifecycle is unchanged from the old MainWindow (PipelineWorker).
 """
 from __future__ import annotations
 
+import logging
 import re
 import subprocess
 from pathlib import Path
@@ -71,6 +72,7 @@ class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self._worker: PipelineWorker | None = None
+        self._last_output_dir: str | None = None   # for the diagnostics bundle
         self._prefs = QSettings("LucasLab", "Recorder")
         self._status_key: str | None = None
         self._status_args: dict = {}
@@ -151,6 +153,9 @@ class MainWindow(QMainWindow):
         docs_act = QAction(t("menu_help_docs"), self)
         docs_act.triggered.connect(self._open_readme)
         help_menu.addAction(docs_act)
+        diag_act = QAction(t("menu_help_diagnostics"), self)
+        diag_act.triggered.connect(self._export_diagnostics)
+        help_menu.addAction(diag_act)
 
     _APPEARANCE_LABEL_KEYS = {"auto": "appearance_btn_auto",
                               "dark": "appearance_btn_dark",
@@ -331,6 +336,7 @@ class MainWindow(QMainWindow):
             return
         output_dir = str(base / Path(input_path).stem)
         Path(output_dir).mkdir(parents=True, exist_ok=True)
+        self._last_output_dir = output_dir
 
         active_steps = list(_STEPS_BY_MODE.get(settings["mode"],
                                                _STEPS_BY_MODE["general"]))
@@ -369,6 +375,7 @@ class MainWindow(QMainWindow):
             "Recorder", t("notify_done", name=Path(result["output_dir"]).name))
 
     def _on_error(self, msg: str) -> None:
+        logging.getLogger("recorder.gui").error("Processing failed:\n%s", msg)
         self._go(HOME, "state_error", "danger")
         self._show_status("status_error")
         # A traceback is taller than the screen, which pushes the OK button
@@ -448,6 +455,21 @@ class MainWindow(QMainWindow):
         readme = Path(__file__).parent.parent / "README.md"
         if readme.exists():
             subprocess.run(["open", str(readme)])
+
+    def _export_diagnostics(self) -> None:
+        from core.diagnostics import default_bundle_name, export_bundle
+        start = Path.home() / "Desktop"
+        start = start if start.is_dir() else Path.home()
+        dest, _ = QFileDialog.getSaveFileName(
+            self, t("diag_save_title"), str(start / default_bundle_name()), "Zip (*.zip)")
+        if not dest:
+            return
+        try:
+            saved = export_bundle(dest, self._last_output_dir)
+        except OSError as exc:
+            QMessageBox.warning(self, t("diag_save_title"), t("diag_failed", error=exc))
+            return
+        QMessageBox.information(self, t("diag_save_title"), t("diag_saved", path=saved))
 
     @staticmethod
     def _send_notification(title: str, message: str) -> None:

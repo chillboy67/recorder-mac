@@ -172,6 +172,20 @@ _CATALOG: dict[str, dict[str, str]] = {
     "menu_language": {"zh": "语言", "en": "Language"},
     "menu_help": {"zh": "帮助", "en": "Help"},
     "menu_help_docs": {"zh": "打开说明", "en": "Open Documentation"},
+    "menu_help_diagnostics": {"zh": "导出诊断包…", "en": "Export Diagnostics…"},
+    "diag_save_title": {"zh": "导出诊断包", "en": "Export Diagnostics"},
+    "diag_saved": {
+        "zh": "诊断包已保存到：\n{path}\n\n"
+              "包含运行日志、系统与依赖版本，以及最近一次处理的步骤记录（原话已替换为字数）。"
+              "不含录音和逐字稿，用户目录显示为 ~。\n\n"
+              "提 issue 时可以附上它；附之前可以先解压看看内容。",
+        "en": "Saved the diagnostics bundle to:\n{path}\n\n"
+              "It holds the app logs, system and package versions, and the processing "
+              "steps of the last run with every spoken word replaced by its length. "
+              "It has no audio and no transcript, and your home folder shows as ~.\n\n"
+              "Attach it to an issue if you like; you can unzip it first to check.",
+    },
+    "diag_failed": {"zh": "无法保存诊断包：{error}", "en": "Could not save the diagnostics bundle: {error}"},
 
     # top strip
     "btn_output_folder": {"zh": "保存文件夹", "en": "Save Folder"},
@@ -218,11 +232,13 @@ _CATALOG: dict[str, dict[str, str]] = {
     "worker_crash": {
         "zh": "处理进程意外退出{code}，很可能是内存不足或模型过大。\n\n"
               "你的录音文件已安全保存，没有丢失。\n"
-              "建议在「识别模型」里选「快速」后重试。",
+              "建议在「识别模型」里选「快速」后重试。\n"
+              "如需反馈问题，可用「帮助 → 导出诊断包…」。",
         "en": "The processing process quit unexpectedly{code} — most likely out "
               "of memory, or a model that is too large.\n\n"
               "Your recording is safely on disk and was not lost.\n"
-              "Try picking “Fast” under Model, then run it again.",
+              "Try picking “Fast” under Model, then run it again.\n"
+              "To report the problem, use Help → Export Diagnostics….",
     },
     "deps_title": {"zh": "缺少依赖", "en": "Missing Dependencies"},
     "deps_body": {
