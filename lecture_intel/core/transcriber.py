@@ -175,7 +175,7 @@ class Transcriber:
             try:
                 raw_segments, detected_lang = self._transcribe_whisper_cpp(
                     engine, audio_path, language, initial_prompt,
-                    condition_on_previous,
+                    condition_on_previous, progress,
                 )
                 if chunked and language is None:
                     warnings.append(t("tr_cpp_language_warning"))
@@ -300,7 +300,7 @@ class Transcriber:
         raise RuntimeError(f"whisper.cpp binary is not configured ({variable})")
 
     def _transcribe_whisper_cpp(self, engine, audio_path, language, initial_prompt,
-                                condition_on_previous):
+                                condition_on_previous, progress=None):
         from core.whisper_cpp import WhisperCppTranscriber
 
         backend = engine.removeprefix("whisper.cpp-")
@@ -309,9 +309,13 @@ class Transcriber:
             whisper_cpp_model_path(self.model), beam_size=self.beam_size,
             threads=max(1, min(8, os.cpu_count() or 4)),
         )
+        cpp_progress = None
+        if progress:
+            progress(0.05, t("tr_writing"))
+            cpp_progress = lambda frac: progress(0.05 + 0.9 * frac, t("tr_writing"))  # noqa: E731
         segments = runner.transcribe(
             audio_path, language=language, prompt=initial_prompt,
-            condition_on_previous=condition_on_previous,
+            condition_on_previous=condition_on_previous, progress=cpp_progress,
         )
         return segments, runner.detected_language or language or "en"
 

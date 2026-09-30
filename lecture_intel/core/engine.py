@@ -53,10 +53,10 @@ def run(
     t_start = time.time()
     warnings: list[str] = []
 
-    def report(step, message, percent, status="running", **extra):
+    def report(step, message, percent, status="running"):
         if progress:
             progress({"step": step, "message": message,
-                      "percent": percent, "status": status, **extra})
+                      "percent": percent, "status": status})
 
     # 0) Archive the input for provenance -----------------------------------
     # The output dir becomes self-contained evidence: original.wav (capture-faithful,
@@ -106,11 +106,8 @@ def run(
     if lang is not None:
         logger.info("Language pinned to %s; per-chunk language detection disabled", lang)
 
-    writing = t("tr_writing")
-
     def asr_progress(frac, msg):
-        # `cheer` lets the GUI rotate encouraging lines while the model writes.
-        report("asr", msg, 20 + int(frac * 55), cheer=msg == writing)
+        report("asr", msg, 20 + int(frac * 55))
 
     transcriber = Transcriber(model=model, engine=engine or mode.engine)
     asr: ASRResult = transcriber.transcribe(
