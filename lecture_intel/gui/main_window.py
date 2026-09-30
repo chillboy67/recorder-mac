@@ -17,7 +17,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QSettings, Qt, QUrl
+from PySide6.QtCore import Qt, QUrl
 from PySide6.QtGui import QAction, QActionGroup, QDesktopServices, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
@@ -36,6 +36,7 @@ from PySide6.QtWidgets import (
 from core.i18n import current_language, set_language, t, ui_language_choices
 from core.paths import default_output_root
 from gui import theme
+from gui.settings import app_settings
 from gui.widgets.home_screen import HomeScreen
 from gui.widgets.processing_screen import ProcessingScreen, STEP_LABELS
 from gui.widgets.recording_screen import RecordingScreen
@@ -75,7 +76,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self._worker: PipelineWorker | None = None
         self._last_output_dir: str | None = None   # for the diagnostics bundle
-        self._prefs = QSettings("LucasLab", "Recorder")
+        self._prefs = app_settings()
         self._status_key: str | None = None
         self._status_args: dict = {}
         self._state_key: str = ""
