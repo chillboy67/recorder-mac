@@ -15,7 +15,7 @@ from __future__ import annotations
 import platform
 from pathlib import Path
 
-from PySide6.QtCore import QSettings, QSize, Qt, Signal
+from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtGui import QCursor, QDragEnterEvent, QDropEvent, QFont, QFontMetrics
 from PySide6.QtMultimedia import QMediaDevices
 from PySide6.QtWidgets import (
@@ -35,6 +35,7 @@ from core.i18n import mic_display_name, t
 from core.languages import AUTO, PICKER_LANGUAGES
 from core.modes import GENERAL, CLASSROOM, IELTS
 from gui import theme
+from gui.settings import app_settings
 from gui.widgets.common import ChipButton, NoScrollComboBox
 from gui.widgets.visuals import WaveGlyph
 
@@ -153,7 +154,7 @@ class HomeScreen(QWidget):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self._prefs = QSettings("LucasLab", "Recorder")
+        self._prefs = app_settings()
         self._selected_path: str | None = None
         self.setAcceptDrops(True)
         self._build_ui()

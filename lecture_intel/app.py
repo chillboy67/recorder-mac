@@ -66,10 +66,10 @@ def main() -> None:
     from core import APP_VERSION
     app.setApplicationVersion(APP_VERSION)
 
-    from PySide6.QtCore import QSettings
     from core.i18n import detect_system_language, set_language, t
+    from gui.settings import app_settings
     from gui.theme import apply as apply_theme
-    prefs = QSettings("LucasLab", "Recorder")
+    prefs = app_settings()
     # Apply the UI language before anything is drawn (or any dialog is shown),
     # defaulting to the system locale on first launch.
     lang_pref = prefs.value("ui_language")

@@ -41,7 +41,8 @@ pytest.importorskip("PySide6.QtWidgets")
 from PySide6.QtCore import QSettings  # noqa: E402
 from PySide6.QtWidgets import QApplication, QLabel  # noqa: E402
 
-from gui import theme  # noqa: E402
+from gui import settings as settings_mod, theme  # noqa: E402
+from gui.settings import app_settings  # noqa: E402
 from gui.widgets.results_screen import ResultsScreen  # noqa: E402
 from gui.widgets.home_screen import HomeScreen  # noqa: E402
 
@@ -89,10 +90,38 @@ def _result(mode: str, **over) -> dict:
     return res
 
 
+@pytest.fixture(autouse=True)
+def isolated_prefs(tmp_path, monkeypatch):
+    """Keep every test out of the user's real preferences.
+
+    QSettings.setPath() cannot do this: on macOS the native format is
+    CFPreferences and ignores it, so the tests used to write the real
+    ~/Library/Preferences/com.lucaslab.Recorder.plist. Point the app's one
+    settings helper at a fresh INI file instead."""
+    monkeypatch.setattr(settings_mod, "SETTINGS_FILE", str(tmp_path / "prefs.ini"))
+    yield
+
+
+def test_prefs_go_to_the_test_file_not_the_native_store(tmp_path):
+    prefs = app_settings()
+    assert prefs.format() == QSettings.IniFormat
+    assert Path(prefs.fileName()) == tmp_path / "prefs.ini"
+
+
+def test_app_opens_preferences_only_through_the_settings_helper():
+    """A QSettings built anywhere else would bypass the isolation above."""
+    helper = ROOT / "gui" / "settings.py"
+    sources = [ROOT / "app.py", *(ROOT / "gui").rglob("*.py"),
+               *(ROOT / "core").rglob("*.py"), *(ROOT / "modules").rglob("*.py")]
+    offenders = [str(path.relative_to(ROOT)) for path in sources
+                 if path != helper and "QSettings(" in path.read_text(encoding="utf-8")]
+    assert offenders == []
+
+
 # ── engine selection ─────────────────────────────────────────────────
 
 def test_home_screen_exposes_persistent_engine_setting(qapp):
-    settings = QSettings("LucasLab", "Recorder")
+    settings = app_settings()
     settings.remove("engine")
     home = HomeScreen()
     try:
@@ -110,7 +139,7 @@ def test_home_screen_exposes_persistent_engine_setting(qapp):
 
 def test_mlx_backend_is_offered_only_on_apple_silicon(qapp, monkeypatch):
     from gui.widgets import home_screen
-    settings = QSettings("LucasLab", "Recorder")
+    settings = app_settings()
     try:
         for apple, enabled, current in ((False, False, "auto"),
                                         (True, True, "mlx-whisper")):
@@ -478,14 +507,6 @@ def test_retranslate_uses_the_active_language(qapp):
 
 
 # ── main window ─────────────────────────────────────────────────────
-
-@pytest.fixture
-def isolated_prefs(tmp_path, monkeypatch):
-    """Keep QSettings out of the user's real preferences."""
-    for scope in (QSettings.UserScope, QSettings.SystemScope):
-        QSettings.setPath(QSettings.NativeFormat, scope, str(tmp_path))
-    yield
-
 
 def test_main_window_builds_every_screen_and_switches_language(qapp, isolated_prefs):
     from gui.main_window import MainWindow
