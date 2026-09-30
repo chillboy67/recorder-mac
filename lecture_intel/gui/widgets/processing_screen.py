@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import time
 
-from PySide6.QtCore import Qt, QTimer, Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -34,24 +34,6 @@ STEP_LABELS: dict[str, str] = {
 }
 STATUS_ICONS = {"waiting": "○", "running": "●", "done": "✓", "error": "✗"}
 
-# Nothing under the ring may sit still: a line shown for ROTATE_TICKS seconds
-# makes way for encouraging ones, and when real progress pauses the number
-# creeps toward — never past — the percent the running step ends at.
-TICK_MS = 1000
-ROTATE_TICKS = 7
-CREEP_AFTER_TICKS = 3        # seconds without real progress before creeping
-CREEP_SHARE = 0.006          # share of the remaining gap covered per second
-STEP_CEILING = {"load": 8, "denoise": 16, "asr": 75, "diarize": 85,
-                "analyze": 94, "export": 100}
-
-
-def _cheers(percent: float) -> tuple[str, ...]:
-    if percent >= 67:
-        return ("cheer_nearly",)
-    if percent >= 50:
-        return ("cheer_half", "cheer_slow")
-    return ("cheer_sip", "cheer_slow")
-
 
 class ProcessingScreen(QWidget):
     cancel_requested = Signal()
@@ -60,14 +42,6 @@ class ProcessingScreen(QWidget):
         super().__init__(parent)
         self._step_widgets: dict[str, dict] = {}
         self._step_start: dict[str, float] = {}
-        self._shown = 0.0            # percent on the ring (real or crept)
-        self._ceiling = 0.0          # where the running step ends
-        self._idle = 0               # ticks since real progress last moved
-        self._line = ""              # latest real message
-        self._line_age = 0           # ticks the latest message has been up
-        self._timer = QTimer(self)
-        self._timer.setInterval(TICK_MS)
-        self._timer.timeout.connect(self._tick)
         self._build_ui()
 
     def _build_ui(self) -> None:
@@ -123,11 +97,7 @@ class ProcessingScreen(QWidget):
             w["row"].deleteLater()
         self._step_widgets.clear()
         self._step_start.clear()
-        self._timer.stop()
-        self._shown = self._ceiling = 0.0
-        self._idle = self._line_age = 0
-        self._line = t("proc_preparing")
-        self._ring.set_progress(0, self._line)
+        self._ring.set_progress(0, t("proc_preparing"))
         self._file_lbl.setText(filename)
         self._meta_lbl.setText(meta)
 
@@ -158,18 +128,7 @@ class ProcessingScreen(QWidget):
         message = info.get("message", "")
         percent = info.get("percent", 0)
         status = info.get("status", "running")
-        if percent > self._shown:
-            self._shown = float(percent)
-            self._idle = 0
-        self._ceiling = STEP_CEILING.get(step, self._shown)
-        if message != self._line:
-            self._line = message
-            self._line_age = 0
-        if self._shown >= 100 or status == "error":
-            self._timer.stop()
-        elif not self._timer.isActive():
-            self._timer.start()
-        self._paint_ring()
+        self._ring.set_progress(int(percent), message[:22])
 
         if step not in self._step_widgets:
             return
@@ -194,23 +153,6 @@ class ProcessingScreen(QWidget):
         elif status == "error":
             w["name"].setStyleSheet(f"color: {c['danger']}; font-size: 13px;")
             w["time"].setText("")
-
-    def _tick(self) -> None:
-        self._line_age += 1
-        self._idle += 1
-        gap = self._ceiling - 1 - self._shown
-        if self._idle >= CREEP_AFTER_TICKS and gap > 0:
-            self._shown += gap * CREEP_SHARE
-        self._paint_ring()
-
-    def _paint_ring(self) -> None:
-        lines = (self._line, *(t(k) for k in _cheers(self._shown)))
-        label = lines[(self._line_age // ROTATE_TICKS) % len(lines)]
-        self._ring.set_progress(int(self._shown), label[:22])
-
-    def hideEvent(self, event) -> None:
-        self._timer.stop()
-        super().hideEvent(event)
 
     def retranslate(self) -> None:
         """Re-apply static text in the newly selected language."""
