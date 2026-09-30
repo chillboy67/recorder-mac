@@ -303,6 +303,40 @@ def test_processing_screen_resets_and_reports_progress(qapp):
     screen.retranslate()
 
 
+def test_processing_screen_never_sits_still(qapp):
+    """Lines rotate every 7s; a stalled number creeps, but never past its step."""
+    from core import i18n
+    from gui.widgets import processing_screen as P
+    i18n.set_language("zh")
+    screen = P.ProcessingScreen()
+    screen.reset(["asr"])
+    screen.update_progress({"step": "asr", "percent": 20, "status": "running",
+                            "message": "叫醒识别小助手"})
+    assert screen._timer.isActive()
+    labels = []
+    for _ in range(3 * P.ROTATE_TICKS):
+        screen._tick()
+        labels.append(screen._ring._label)
+    assert {"叫醒识别小助手", "喝口水，不着急", "慢工出细活"} <= set(labels)
+    assert screen._ring._percent > 20                 # crept while stalled
+
+    for _ in range(3000):
+        screen._tick()
+    assert screen._ring._percent < 75                 # asr ends at 75
+
+    # a real update below the crept number never pulls the ring backwards
+    crept = screen._ring._percent
+    screen.update_progress({"step": "asr", "percent": 40, "status": "running",
+                            "message": "一字一句记下来"})
+    assert screen._ring._percent == crept
+    assert screen._ring._label == "一字一句记下来"      # new line shows at once
+
+    screen.update_progress({"step": "export", "percent": 100, "status": "done",
+                            "message": "好啦！"})
+    assert not screen._timer.isActive()
+    assert screen._ring._percent == 100
+
+
 # ── results screen ──────────────────────────────────────────────────
 
 @pytest.mark.parametrize("mode", ["general", "classroom", "ielts"])
