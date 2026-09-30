@@ -1,0 +1,53 @@
+name: Commit policy
+
+# Every commit must be authored by the repository owner, and no commit,
+# committer or branch name may carry AI attribution.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  commits:
+    name: Authors and messages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check authors, committers, messages and branch name
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          set -euo pipefail
+          owner_emails='^(201542366\+chillboy67@users\.noreply\.github\.com|coolguy67@stu\.ahmu\.edu\.cn)$'
+          # GitHub itself commits web merges and edits as noreply@github.com.
+          committer_emails='^(201542366\+chillboy67@users\.noreply\.github\.com|coolguy67@stu\.ahmu\.edu\.cn|noreply@github\.com)$'
+          forbidden='claude|anthropic|copilot|chatgpt|openai|gemini|co-authored-by|generated (with|by)'
+          fail=0
+          if [[ -n "$HEAD_REF" ]] && grep -qiE "$forbidden" <<< "$HEAD_REF"; then
+            echo "::error::branch name '$HEAD_REF' names an AI tool"; fail=1
+          fi
+          if [[ -z "$BASE" || "$BASE" =~ ^0+$ ]]; then range="$HEAD^!"; else range="$BASE..$HEAD"; fi
+          for sha in $(git rev-list "$range"); do
+            an=$(git log -1 --format=%an "$sha"); ae=$(git log -1 --format=%ae "$sha")
+            cn=$(git log -1 --format=%cn "$sha"); ce=$(git log -1 --format=%ce "$sha")
+            short=$(git log -1 --format='%h %s' "$sha")
+            if ! grep -qE "$owner_emails" <<< "$ae"; then
+              echo "::error::$short: author $an <$ae> is not the owner"; fail=1
+            fi
+            if ! grep -qE "$committer_emails" <<< "$ce"; then
+              echo "::error::$short: committer $cn <$ce> is not the owner"; fail=1
+            fi
+            if printf '%s\n%s\n' "$an $ae $cn $ce" "$(git log -1 --format=%B "$sha")" | grep -qiE "$forbidden"; then
+              echo "::error::$short: AI attribution in the author, committer or message"; fail=1
+            fi
+          done
+          [[ $fail -eq 0 ]] && echo "All commits in $range pass."
+          exit $fail

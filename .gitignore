@@ -45,3 +45,6 @@ backend/.pytest_cache/
 
 # 本地交接记录，仅保存在开发者工作区，永不提交
 /HANDOVER.md
+
+# Local assistant instructions: never committed
+CLAUDE.md
