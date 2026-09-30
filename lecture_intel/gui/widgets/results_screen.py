@@ -7,11 +7,10 @@ Signal: new_requested — user wants to start another transcription.
 """
 from __future__ import annotations
 
-import subprocess
 from pathlib import Path
 
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QFont, QGuiApplication
+from PySide6.QtCore import Qt, Signal, QUrl
+from PySide6.QtGui import QDesktopServices, QFont, QGuiApplication
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -353,7 +352,7 @@ class ResultsScreen(QWidget):
 
     def _open_folder(self) -> None:
         if self._output_dir:
-            subprocess.run(["open", self._output_dir])
+            QDesktopServices.openUrl(QUrl.fromLocalFile(self._output_dir))
 
     def _copy_current(self) -> None:
         current = self._tabs.currentWidget()
