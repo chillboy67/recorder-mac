@@ -22,6 +22,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 
 from modules import ASRResult, ASRSegment
+from core.i18n import t
 
 # Emphasis cues — Chinese and English.
 _EMPHASIS = re.compile(
@@ -87,10 +88,10 @@ def summarize(asr: ASRResult) -> ClassroomReport:
 def _emphasis_points(segs: list[ASRSegment]) -> list[str]:
     out = []
     for s in segs:
-        t = s.text.strip()
-        if _EMPHASIS.search(t) and len(t) >= 4:
+        text = s.text.strip()
+        if _EMPHASIS.search(text) and len(text) >= 4:
             ts = _mmss(s.start)
-            out.append(f"[{ts}] {t}")
+            out.append(f"[{ts}] {text}")
     # dedupe consecutive near-duplicates, cap
     seen, uniq = set(), []
     for x in out:
@@ -127,7 +128,7 @@ def _frequent_terms(full: str) -> list[tuple[str, int]]:
                 continue
             counts[bi] += 1
     # keep terms that recur a lot (the lecture's backbone)
-    common = [(t, c) for t, c in counts.most_common(40) if c >= 4]
+    common = [(term, c) for term, c in counts.most_common(40) if c >= 4]
     return common[:15]
 
 
@@ -148,46 +149,50 @@ def _long_stretches(segs: list[ASRSegment], min_sec: float = 25.0) -> list[str]:
     for b in blocks[:5]:
         dur = b[-1].end - b[0].start
         head = " ".join(x.text.strip() for x in b)[:60]
-        out.append(f"[{_mmss(b[0].start)}–{_mmss(b[-1].end)}，约{dur:.0f}s] {head}…")
+        span = t("cls_span", start=_mmss(b[0].start), end=_mmss(b[-1].end),
+                 seconds=f"{dur:.0f}")
+        out.append(f"{span} {head}…")
     return out
 
 
 def _render(r: ClassroomReport) -> str:
-    L = ["# 课堂重点总结", ""]
-    L.append("> 自动提取，供复习参考。完整内容见转写原文。")
+    """The summary in the active UI language; quoted lecture text stays verbatim."""
+    L = [f"# {t('cls_title')}", ""]
+    L.append(f"> {t('cls_intro')}")
     L.append("")
 
-    L.append("## 老师强调的重点")
+    L.append(f"## {t('cls_emphasis')}")
     if r.emphasis_points:
         L += [f"- {p}" for p in r.emphasis_points]
     else:
-        L.append("- 未检测到明显的「重点/注意/常考」等强调用语。")
+        L.append(f"- {t('cls_emphasis_none')}")
     L.append("")
 
-    L.append("## 重要定义")
+    L.append(f"## {t('cls_definitions')}")
     if r.definitions:
         L += [f"- {d}" for d in r.definitions]
     else:
-        L.append("- 未检测到明显的定义句。")
+        L.append(f"- {t('cls_definitions_none')}")
     L.append("")
 
-    L.append("## 高频主题（反复出现，可能是核心）")
+    L.append(f"## {t('cls_terms')}")
     if r.frequent_terms:
-        L.append("、".join(f"{t}（{c}次）" for t, c in r.frequent_terms))
+        L.append(t("cls_terms_sep").join(t("cls_term_count", term=term, count=c)
+                                          for term, c in r.frequent_terms))
     else:
-        L.append("（无）")
+        L.append(t("rep_none"))
     L.append("")
 
-    L.append("## 讲解篇幅最长的部分")
+    L.append(f"## {t('cls_longest')}")
     if r.long_stretches:
         L += [f"- {s}" for s in r.long_stretches]
     else:
-        L.append("（无）")
+        L.append(t("rep_none"))
     L.append("")
 
-    L.append("## 全文转写")
+    L.append(f"## {t('cls_transcript')}")
     L.append("")
-    L.append(r.transcript or "（无）")
+    L.append(r.transcript or t("rep_none"))
     L.append("")
     return "\n".join(L)
 

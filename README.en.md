@@ -341,7 +341,8 @@ attributed by script, each verified on a real recording in that language. French
 per-chunk language carried on each segment and are **not reliable yet** — that signal only suffices when a
 silence-bounded chunk holds a single language (real 60s coaching chunks mix two); the acoustic path's role
 decision weighs segment language, but that language also comes from the chunk. Per-segment language detection is
-tracked as a follow-up. The IELTS report's notes are currently Chinese only (candidates always answer in English) and LanguageTool stays
+tracked as a follow-up. The IELTS report, the classroom summary and the labels in exported files follow the UI language (中文 / English),
+while quoted speech is always copied verbatim; LanguageTool stays
 on `en-US` (it diagnoses the candidate's English). The zh/en thresholds and attribution rules are
 unchanged. The one optional item from the plan — coach-side translation — is not implemented;
 revisit if wanted.
