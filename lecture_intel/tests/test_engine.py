@@ -20,6 +20,7 @@ sys.path.insert(0, str(ROOT))
 from modules import ASRResult, ASRSegment, ASRWord  # noqa: E402
 from core import engine, export as E  # noqa: E402
 from core import repeat_arbitration as ra  # noqa: E402
+from core.i18n import t  # noqa: E402
 
 
 # ── _ielts_summary ──────────────────────────────────────────────────
@@ -118,6 +119,7 @@ def test_run_writes_provenance_outputs_and_a_fidelity_summary(tmp_path, monkeypa
 
         def transcribe(self, path, **kwargs):
             kwargs["progress"](0.5, "halfway")      # exercise the progress bridge
+            kwargs["progress"](0.6, t("tr_writing"))
             return ASRResult(segments=[_seg(0, "今天讲算法", 0.0),
                                        _seg(1, "接着说", 3.0)],
                              full_text="今天讲算法 接着说", language="zh",
@@ -128,8 +130,15 @@ def test_run_writes_provenance_outputs_and_a_fidelity_summary(tmp_path, monkeypa
     monkeypatch.setattr(ra, "arbitrate", lambda *a, **kw: [])   # no audio probes
 
     steps: list[str] = []
+    asr_infos: list[dict] = []
+
+    def on_progress(info):
+        steps.append(info["step"])
+        if info["step"] == "asr":
+            asr_infos.append(info)
+
     summary = engine.run(str(src), str(out_dir), mode_key="general",
-                         model="fake", progress=lambda i: steps.append(i["step"]))
+                         model="fake", progress=on_progress)
 
     # provenance: the archived original plus a step for every transformation
     assert (out_dir / "original.wav").read_bytes() == src.read_bytes()
@@ -147,6 +156,9 @@ def test_run_writes_provenance_outputs_and_a_fidelity_summary(tmp_path, monkeypa
 
     # the report reached the progress callback
     assert {"load", "asr", "export"} <= set(steps)
+    # only the model's writing phase asks the GUI to rotate encouraging lines
+    cheers = {i["message"]: bool(i.get("cheer")) for i in asr_infos}
+    assert cheers["halfway"] is False and cheers[t("tr_writing")] is True
 
     # exports exist and keep the transcript verbatim
     txt = Path(summary["output_files"]["txt"]).read_text(encoding="utf-8")

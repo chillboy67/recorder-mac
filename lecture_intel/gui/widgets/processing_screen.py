@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import time
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -34,6 +34,13 @@ STEP_LABELS: dict[str, str] = {
 }
 STATUS_ICONS = {"waiting": "○", "running": "●", "done": "✓", "error": "✗"}
 
+# Transcription is the long wait, so the line under the ring rotates through
+# these instead of repeating one message; the pool shifts as the ring fills.
+CHEER_INTERVAL_MS = 7000
+CHEER_EARLY = ("tr_writing", "cheer_sip", "cheer_slow")
+CHEER_HALF = ("cheer_half", "tr_writing", "cheer_slow")      # ring ≥ 50%
+CHEER_NEARLY = ("cheer_nearly", "tr_writing")                # ring ≥ 67%
+
 
 class ProcessingScreen(QWidget):
     cancel_requested = Signal()
@@ -42,6 +49,11 @@ class ProcessingScreen(QWidget):
         super().__init__(parent)
         self._step_widgets: dict[str, dict] = {}
         self._step_start: dict[str, float] = {}
+        self._cheer_tick = 0
+        self._cheer_percent = 0
+        self._cheer_timer = QTimer(self)
+        self._cheer_timer.setInterval(CHEER_INTERVAL_MS)
+        self._cheer_timer.timeout.connect(self._next_cheer)
         self._build_ui()
 
     def _build_ui(self) -> None:
@@ -97,6 +109,7 @@ class ProcessingScreen(QWidget):
             w["row"].deleteLater()
         self._step_widgets.clear()
         self._step_start.clear()
+        self._cheer_timer.stop()
         self._ring.set_progress(0, t("proc_preparing"))
         self._file_lbl.setText(filename)
         self._meta_lbl.setText(meta)
@@ -128,6 +141,14 @@ class ProcessingScreen(QWidget):
         message = info.get("message", "")
         percent = info.get("percent", 0)
         status = info.get("status", "running")
+        if info.get("cheer"):
+            self._cheer_percent = int(percent)
+            if not self._cheer_timer.isActive():
+                self._cheer_tick = 0
+                self._cheer_timer.start()
+            message = self._cheer_line()
+        else:
+            self._cheer_timer.stop()
         self._ring.set_progress(int(percent), message[:22])
 
         if step not in self._step_widgets:
@@ -153,6 +174,23 @@ class ProcessingScreen(QWidget):
         elif status == "error":
             w["name"].setStyleSheet(f"color: {c['danger']}; font-size: 13px;")
             w["time"].setText("")
+
+    def _cheer_line(self) -> str:
+        if self._cheer_percent >= 67:
+            pool = CHEER_NEARLY
+        elif self._cheer_percent >= 50:
+            pool = CHEER_HALF
+        else:
+            pool = CHEER_EARLY
+        return t(pool[self._cheer_tick % len(pool)])
+
+    def _next_cheer(self) -> None:
+        self._cheer_tick += 1
+        self._ring.set_progress(self._cheer_percent, self._cheer_line()[:22])
+
+    def hideEvent(self, event) -> None:
+        self._cheer_timer.stop()
+        super().hideEvent(event)
 
     def retranslate(self) -> None:
         """Re-apply static text in the newly selected language."""

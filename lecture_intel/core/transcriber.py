@@ -128,7 +128,7 @@ class Transcriber:
         self.model = self._resolved_model(engine)
         logger.info("Transcribing with %s (model=%s, chunked=%s)", engine, self.model, chunked)
         if progress:
-            progress(0.0, t("tr_load_model", model=self.model, engine=engine))
+            progress(0.0, t("tr_load_model"))
 
         warnings: list[str] = []
         if engine == "faster-whisper" and self.requested_engine != "faster-whisper":
@@ -329,7 +329,7 @@ class Transcriber:
         warnings.append(t("tr_warn_fallback", backend=backend, exc=cause))
         self._engine = "faster-whisper"
         if progress:
-            progress(0.05, t("tr_backend_fallback", backend=backend, model=self.model))
+            progress(0.05, t("tr_backend_fallback"))
         return self._transcribe_faster(
             audio_path, language, initial_prompt, condition_on_previous,
             progress, temperature,
@@ -367,11 +367,10 @@ class Transcriber:
                 return
             if total:
                 progress(0.04 * done / total, t(
-                    "tr_download_progress", model=self.model, done=f"{done / 1e9:.2f}",
-                    total=f"{total / 1e9:.2f}", pct=int(done * 100 / total)))
+                    "tr_download_progress", done=f"{done / 1e9:.1f}",
+                    total=f"{total / 1e9:.1f}"))
             else:
-                progress(0.0, t("tr_download_bytes", model=self.model,
-                                done=f"{done / 1e9:.2f}"))
+                progress(0.0, t("tr_download_bytes", done=f"{done / 1e9:.1f}"))
         return report
 
     def _prefetch_mlx(self, progress) -> None:
@@ -441,7 +440,7 @@ class Transcriber:
 
         self._prefetch_mlx(progress)
         if progress:
-            progress(0.05, t("tr_mlx"))
+            progress(0.05, t("tr_writing"))
         result = mlx_whisper.transcribe(
             str(audio_path),
             path_or_hf_repo=self._mlx_repo(),
@@ -528,7 +527,7 @@ class Transcriber:
             if chunk_lang:
                 langs.append(chunk_lang)
             if progress:
-                progress(0.05 + 0.9 * (i + 1) / len(chunks), t("tr_gpu_chunk"))
+                progress(0.05 + 0.9 * (i + 1) / len(chunks), t("tr_writing"))
 
         # overall language label = most common per-chunk detection
         lang = max(set(langs), key=langs.count) if langs else "en"
@@ -601,7 +600,7 @@ class Transcriber:
     ):
         model = self._load_faster(progress)
         if progress:
-            progress(0.05, t("tr_cpu"))
+            progress(0.05, t("tr_writing"))
         seg_iter, info = model.transcribe(
             str(audio_path),
             language=language,
@@ -630,7 +629,7 @@ class Transcriber:
                 ],
             })
             if progress and total:
-                progress(min(0.95, 0.05 + 0.9 * (s.end / total)), t("tr_cpu"))
+                progress(min(0.95, 0.05 + 0.9 * (s.end / total)), t("tr_writing"))
         return segs, info.language
 
     # ------------------------------------------------------------------

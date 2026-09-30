@@ -303,6 +303,27 @@ def test_processing_screen_resets_and_reports_progress(qapp):
     screen.retranslate()
 
 
+def test_processing_screen_rotates_lines_while_the_model_writes(qapp):
+    from core import i18n
+    from gui.widgets.processing_screen import ProcessingScreen
+    i18n.set_language("zh")
+    screen = ProcessingScreen()
+    screen.reset(["asr"])
+    screen.update_progress({"step": "asr", "percent": 30, "status": "running",
+                            "message": "一字一句记下来", "cheer": True})
+    assert screen._cheer_timer.isActive()
+    assert screen._ring._label == "一字一句记下来"
+    screen._next_cheer()
+    assert screen._ring._label == "喝口水，不着急"
+    screen.update_progress({"step": "asr", "percent": 55, "status": "running",
+                            "message": "一字一句记下来", "cheer": True})
+    assert screen._ring._label in {"已经过半啦", "一字一句记下来", "慢工出细活"}
+    screen.update_progress({"step": "asr", "percent": 76, "status": "done",
+                            "message": "记好啦，共 3 段"})
+    assert not screen._cheer_timer.isActive()
+    assert screen._ring._label == "记好啦，共 3 段"
+
+
 # ── results screen ──────────────────────────────────────────────────
 
 @pytest.mark.parametrize("mode", ["general", "classroom", "ielts"])

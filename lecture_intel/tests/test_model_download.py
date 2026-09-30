@@ -151,9 +151,8 @@ def test_cpu_model_first_run_reports_download_percent(monkeypatch, tmp_path, eng
     T.Transcriber(model="small", engine="faster-whisper")._prefetch_faster(progress)
 
     assert calls == [("small", str(cache))]
-    assert messages[-1] == (0.04, "First use: downloading the small model, "
-                                  "0.00 / 0.00 GB (100%)")
-    assert any("(25%)" in m or "(50%)" in m or "(75%)" in m for _, m in messages)
+    assert messages[-1] == (0.04, "First run 0.0/0.0GB")
+    assert any(0 < frac < 0.04 for frac, _ in messages)
 
 
 def test_cpu_model_already_cached_is_not_downloaded(monkeypatch):
