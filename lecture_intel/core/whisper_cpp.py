@@ -10,6 +10,7 @@ import math
 import re
 import subprocess
 import tempfile
+import threading
 from pathlib import Path
 from typing import Any, Callable, Optional, Sequence
 
@@ -18,12 +19,38 @@ class WhisperCppError(RuntimeError):
     """Raised when whisper.cpp fails, emits invalid output, or misses its GPU."""
 
 
+# `--print-progress` writes lines like "cb_progress: progress =  35%" to stderr
+# (older builds name the callback whisper_print_progress_callback).
+_PROGRESS_RE = re.compile(r"progress\s*=\s*(\d+)\s*%")
+
+
+def run_streaming(command: Sequence[str], *,
+                  on_stderr_line: Optional[Callable[[str], None]] = None,
+                  **_ignored: Any) -> subprocess.CompletedProcess:
+    """``subprocess.run(capture_output=True, text=True)``, except each stderr
+    line reaches ``on_stderr_line`` while the process is still running."""
+    proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                            text=True, encoding="utf-8", errors="replace")
+    stdout: list[str] = []
+    reader = threading.Thread(target=lambda: stdout.append(proc.stdout.read()),
+                              daemon=True)
+    reader.start()
+    stderr: list[str] = []
+    for line in proc.stderr:
+        stderr.append(line)
+        if on_stderr_line:
+            on_stderr_line(line)
+    reader.join()
+    return subprocess.CompletedProcess(command, proc.wait(), "".join(stdout),
+                                       "".join(stderr))
+
+
 class WhisperCppTranscriber:
     """Run whisper.cpp with a requested Vulkan or OpenVINO GPU backend.
 
     ``binary``, ``backend`` and ``model`` are injectable to make invocation
     behavior independently testable. The subprocess runner can also be
-    replaced with ``runner`` (normally ``subprocess.run``).
+    replaced with ``runner`` (normally ``run_streaming``).
     """
 
     def __init__(
@@ -34,7 +61,7 @@ class WhisperCppTranscriber:
         *,
         beam_size: int = 5,
         threads: int = 4,
-        runner: Callable[..., Any] = subprocess.run,
+        runner: Callable[..., Any] = run_streaming,
     ) -> None:
         if backend not in {"vulkan", "openvino"}:
             raise ValueError("backend must be 'vulkan' or 'openvino'")
@@ -53,14 +80,18 @@ class WhisperCppTranscriber:
         language: Optional[str] = None,
         prompt: str = "",
         condition_on_previous: bool = False,
+        progress: Optional[Callable[[float], None]] = None,
     ) -> list[dict[str, Any]]:
         """Transcribe audio and return ``start/end/text/avg_logprob/words`` dicts.
 
-        ``condition_on_previous=False`` adds whisper.cpp's ``--no-context``.
+        ``condition_on_previous=False`` passes ``-mc 0`` (no text carried between
+        windows); whisper-cli has no ``--no-context`` flag and would print its
+        help instead of transcribing.
         Word boundaries are approximated from whitespace-prefixed token text;
         for CJK, where tokens often do not correspond to orthographic words,
         each token/group is only a token-level approximation, not true word
         segmentation. Token probabilities are used as word probabilities.
+        ``progress`` receives the fraction done (0–1) as whisper.cpp reports it.
         """
         audio_path = Path(audio)
         if not audio_path.is_file():
@@ -76,13 +107,17 @@ class WhisperCppTranscriber:
             if prompt:
                 command.extend(["--prompt", prompt])
             if not condition_on_previous:
-                command.append("--no-context")
+                command.extend(["-mc", "0"])
             if self.backend == "openvino":
                 command.extend(["-oved", "GPU"])
+            run_kwargs: dict[str, Any] = {"capture_output": True, "text": True,
+                                          "check": False}
+            if progress is not None:
+                command.append("--print-progress")
+                run_kwargs["on_stderr_line"] = lambda line: self._report_progress(
+                    line, progress)
             try:
-                completed = self.runner(
-                    command, capture_output=True, text=True, check=False
-                )
+                completed = self.runner(command, **run_kwargs)
             except OSError as exc:
                 raise WhisperCppError(f"Could not execute whisper.cpp: {exc}") from exc
             stdout = completed.stdout or ""
@@ -107,6 +142,12 @@ class WhisperCppTranscriber:
             self.detected_language = (result.get("language")
                                       if isinstance(result, dict) else None)
             return self._normalize(payload, language=self.detected_language)
+
+    @staticmethod
+    def _report_progress(line: str, progress: Callable[[float], None]) -> None:
+        match = _PROGRESS_RE.search(line)
+        if match:
+            progress(min(100, int(match.group(1))) / 100)
 
     def _verify_backend(self, logs: str) -> None:
         lower = logs.lower()

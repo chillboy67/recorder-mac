@@ -381,6 +381,16 @@ revisit if wanted.
 python -m pytest          # run from the repo root; tests don't need the model
 ```
 
+To run just the tests in a fresh environment without the full stack (torch, faster-whisper …),
+these light packages are enough:
+
+```bash
+python -m pip install pytest "numpy>=1.24.0" "soundfile>=0.12.1" "python-docx>=1.1.0"
+```
+
+GUI tests (`RECORDER_GUI_TESTS=1`, also needs PySide6) and real-model tests
+(`RECORDER_REAL_MODEL_TESTS=1`) are opt-in; the few tests that need ffmpeg skip without it.
+
 After changing code, re-run `lecture_intel/make_app.sh` to sync the installed app.
 
 Full requirements and design trade-offs are documented in [REQUIREMENTS.md](REQUIREMENTS.md).
