@@ -91,3 +91,95 @@ jobs:
         run: |
           python native/SystemAudioRecorderLinux.py --capabilities
           python -c "import sys; sys.path.insert(0, '.'); from core import sysaudio; assert sysaudio.available(), sysaudio.binary_path(); print('available:', sysaudio.binary_path())"
+
+  linux-desktop:
+    # What a Linux user actually runs: the installer, a live sound server,
+    # real speech through the real model, and the app on an X display.
+    name: Linux desktop / installer, live capture, real speech
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install system packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg espeak-ng xvfb dbus-x11 \
+            pipewire pipewire-bin pipewire-pulse wireplumber pulseaudio-utils \
+            libegl1 libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1 \
+            libxcb-image0 libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 libxcb-randr0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Run the Linux installer
+        working-directory: lecture_intel
+        run: bash install_linux.sh --download-cpu-model
+      - name: Check the installed app
+        working-directory: lecture_intel
+        run: |
+          test -f "$HOME/.local/share/applications/recorder.desktop"
+          .venv/bin/python -c "import torch; assert torch.version.cuda is None, torch.__version__; print('torch', torch.__version__)"
+          if .venv/bin/python -m pip list | grep -i '^nvidia-'; then echo 'CUDA libraries were installed'; exit 1; fi
+          du -sh .venv
+          .venv/bin/python -m pip install pytest
+      - name: Start a PipeWire session with a virtual speaker
+        run: |
+          # Short on purpose: socket paths must stay under 108 bytes.
+          export XDG_RUNTIME_DIR=/tmp/recorder-xdg
+          mkdir -p -m 700 "$XDG_RUNTIME_DIR"
+          eval "$(dbus-launch --sh-syntax)"
+          nohup pipewire > "$RUNNER_TEMP/pipewire.log" 2>&1 &
+          sleep 1
+          nohup wireplumber > "$RUNNER_TEMP/wireplumber.log" 2>&1 &
+          nohup pipewire-pulse > "$RUNNER_TEMP/pipewire-pulse.log" 2>&1 &
+          for _ in $(seq 40); do pactl info > /dev/null 2>&1 && break; sleep 0.5; done
+          pactl info > /dev/null || { tail -n 20 "$RUNNER_TEMP"/pipewire*.log "$RUNNER_TEMP"/wireplumber.log; exit 1; }
+          pactl load-module module-null-sink sink_name=speakers
+          pactl set-default-sink speakers
+          pactl info
+          echo "XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR" >> "$GITHUB_ENV"
+          echo "DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS" >> "$GITHUB_ENV"
+      - name: Capture system audio through the live sound server
+        working-directory: lecture_intel
+        env:
+          RECORDER_LIVE_AUDIO_TESTS: "1"
+        run: |
+          .venv/bin/python -m pytest -q -rs tests/test_live_linux_audio.py | tee live.log
+          if grep -q SKIPPED live.log; then echo 'live capture was skipped'; exit 1; fi
+      - name: Transcribe real speech in every mode
+        working-directory: lecture_intel
+        run: |
+          espeak-ng -v en-us -s 140 -w speech.wav \
+            "The quick brown fox jumps over the lazy dog. Please call Stella and ask her to bring these things from the store."
+          for mode in general classroom ielts; do
+            .venv/bin/python transcribe.py speech.wav -m "$mode" --engine faster-whisper --model small -f txt -f json -o "out-$mode"
+          done
+          .venv/bin/python - <<'PY'
+          import json
+          from pathlib import Path
+          for mode in ("general", "classroom", "ielts"):
+              out = Path(f"out-{mode}")
+              text = (out / "speech.txt").read_text(encoding="utf-8")
+              json.loads((out / "speech.json").read_text(encoding="utf-8"))
+              words = text.lower()
+              print(f"{mode}: {text.strip()[:200]!r}")
+              for word in ("quick", "fox", "lazy", "dog"):
+                  assert word in words, (mode, word, text)
+          PY
+      - name: Run the core and GUI tests in the installed venv
+        working-directory: lecture_intel
+        env:
+          RECORDER_GUI_TESTS: "1"
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          .venv/bin/python -m pytest -q tests --ignore=tests/test_gui.py
+          .venv/bin/python -m pytest -q tests/test_gui.py
+      - name: Launch the app on an X display
+        working-directory: lecture_intel
+        run: |
+          set +e
+          timeout 25 xvfb-run -a ./run_linux.sh > app.log 2>&1
+          code=$?
+          cat app.log
+          # 124: still running when the timeout stopped it, i.e. it came up.
+          test "$code" -eq 124 || { echo "app exited with $code"; exit 1; }
+          if grep -q Traceback app.log; then exit 1; fi
